@@ -1,10 +1,9 @@
 """The rules every file of the repository keeps, and the facts other
 files promise: the manifest's permissions and events as README.md lists
-them, and the vendored code unchanged from the copy vendor/README.md names."""
+them. The vendored copy of sdlc-protocol and its record app/vendor/VENDORED
+are tests/test_vendor.py's."""
 
-import hashlib
 import json
-import re
 import unittest
 from pathlib import Path
 
@@ -46,18 +45,6 @@ class ManifestTest(unittest.TestCase):
                                                            "metadata": "read"})
         self.assertEqual(manifest["default_events"], ["issues", "issue_comment", "pull_request", "push",
                                                       "check_suite"])
-
-
-class VendorTest(unittest.TestCase):
-    def test_the_vendored_files_are_the_copies_the_readme_names(self):
-        vendor = ROOT / "app" / "vendor"
-        listed = dict(re.findall(r"`([a-z_]+\.py)`: ([0-9a-f]{64})", (vendor / "README.md").read_text()))
-        self.assertEqual(set(listed), {"claims.py", "protocol_check.py"})
-        for name, digest in listed.items():
-            with self.subTest(file=name):
-                data = (vendor / "sdlc_protocol" / name).read_bytes()
-                self.assertEqual(hashlib.sha256(data).hexdigest(), digest,
-                                 "edit sdlc-protocol and copy it in again, never the copy here")
 
 
 if __name__ == "__main__":

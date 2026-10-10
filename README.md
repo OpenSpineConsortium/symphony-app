@@ -6,6 +6,22 @@ The backend of the GitHub App "OpenSpine SDLC" (slug openspine-sdlc), which serv
 library and the openssl binary are all it needs: no package is installed,
 here or in the image.
 
+## Where this repository fits
+
+sdlc-app is one of the repositories around the claim protocol of
+OpenSpineConsortium/sdlc-protocol. That repository's ECOSYSTEM.md,
+https://github.com/OpenSpineConsortium/sdlc-protocol/blob/main/ECOSYSTEM.md,
+draws all of them, says which modules each one takes and how a change to
+the protocol reaches each. Here the App takes two of them,
+protocol_check.py and claims.py, into app/vendor, for the check run
+`sdlc/protocol`. The copy is never edited here: a pull request in
+sdlc-protocol already runs this repository's check on its change (the job
+`downstream (sdlc-app)`, which reads this private repository with the
+App's token), and once it merges, that repository's sync workflow opens
+the pull request `sdlc-protocol/sync` here. The owner merges it, since
+GitHub Free offers auto-merge only on public repositories.
+app/vendor/README.md says the rest.
+
 ## What the App does
 
 Now, in two stages:
@@ -45,7 +61,7 @@ installations may use the App.
 | app/webhook.py | The server: `POST /webhook`, `GET /health`, one JSON log line per delivery |
 | app/handlers.py | What each event does: the `sdlc/protocol` check run on a pull request |
 | app/envfile.py | The env file register.py writes and the server reads |
-| app/vendor/ | protocol_check.py and claims.py from sdlc-protocol, unchanged (vendor/README.md) |
+| app/vendor/ | protocol_check.py and claims.py from sdlc-protocol, with its `__init__.py` and vendoring.py, and VENDORED, the record they are held to (vendor/README.md) |
 | manifest.json | The App's manifest: name, permissions, events |
 | scripts/register.py | Registers the App for an organization by GitHub's manifest flow |
 | scripts/check.sh | The checks; CI's job `check` runs it |
@@ -218,12 +234,15 @@ when the commit already has the same verdict (a redelivery, a title edit),
 
     bash scripts/check.sh
 
-runs the tests under tests/ with python3.12 (set `PYTHON` for another),
-including the text rules every file keeps (ASCII, LF, a newline at the
-end) and the check that the vendored files are the copies
-app/vendor/README.md names. The JWT tests make an RSA key with
-`openssl genrsa` and verify each signature with `openssl dgst -verify`.
-CI runs the same script as the job `check`.
+holds the vendored copy of sdlc-protocol to app/vendor/VENDORED with the
+copy's own `vendoring.py verify`, so a hand edit fails before any test,
+then runs the tests under tests/ with python3.12 (set `PYTHON` for
+another), including the text rules every file keeps (ASCII, LF, a newline
+at the end) and tests/test_vendor.py, which holds the record to a release
+and, where a clone of sdlc-protocol sits beside this repository, the copy
+to the library's files at the recorded commit. The JWT tests make an RSA
+key with `openssl genrsa` and verify each signature with
+`openssl dgst -verify`. CI runs the same script as the job `check`.
 
 ## What was not verified live
 

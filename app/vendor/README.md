@@ -1,24 +1,45 @@
-# Vendored code
+# app/vendor
 
-The App installs nothing, so the code it shares with other repositories is
-copied in here and kept unchanged. Edit it at its source, never here, and
-copy it in again.
+The App installs nothing, here or in the image, so the code it shares with
+other repositories is copied in here.
 
 ## sdlc_protocol
 
-- Source: the repository OpenSpineConsortium/sdlc-protocol, directory
-  `sdlc_protocol/`, copied on 2026-10-10 from its working tree on top of
-  commit bb0cff312dcda84f6304f28af9de98f207fa64de ("WIP: protocol library
-  snapshot"). claims.py carried changes not yet committed there: the
-  `prefix` arguments and `isdecimal()` in `number_of`.
-- Files: `protocol_check.py` and `claims.py`, the two the App's handler
-  needs (`problems_for` and the claim conventions it imports). The rest of
-  the library (the board, the guard, team mode) stays in Actions for now
-  and is not copied. `__init__.py` is this repository's own.
-- SHA-256 of the copies, to tell a re-vendor what moved:
-  - `claims.py`: bccf2aef303b719a26af5829f3f8131eb95f66c7bb9a52d995b9a5d67d03a8ec
-  - `protocol_check.py`: 40e47f170ebc30632394f461ac015747fb3bf5bd421241b4eea89323b99cc13e
-- Later: re-vendored from the sdlc-protocol 0.1.0 release once it is
-  tagged, replacing this snapshot of a library still being written; the
-  tests under tests/test_handlers.py hold the App to the behaviour it
-  relies on, so a re-vendor that changes it fails the check.
+sdlc_protocol here is a partial copy of the claim protocol's library,
+OpenSpineConsortium/sdlc-protocol: the two modules the App's handler
+needs, `protocol_check.py` (`problems_for`, which app/handlers.py records
+as the check run `sdlc/protocol`) and `claims.py` (the claim conventions
+it imports), with the two files every copy takes, the package's own
+`__init__.py` and `vendoring.py`. Which modules the App takes is said in
+the library's ecosystem.json, not here; the rest of the library (the
+board, the guard, team mode) stays in Actions for now and is not copied.
+VENDORED beside it records the copy: its first line names the version and
+the commit the copy was made from, and each line after it the sha256 of
+one file and the file's path inside the copy.
+
+Never edit the copy by hand. scripts/check.sh, the check CI runs on every
+pull request, starts with
+
+    python3.12 app/vendor/sdlc_protocol/vendoring.py verify app/vendor
+
+which fails on a file that differs from VENDORED, a file missing or a
+file added. A change to the protocol is made in sdlc-protocol, by pull
+request there, whose job `downstream (sdlc-app)` already runs this
+repository's check on it, with the App's token where that repository has
+it. Once it merges, that repository's sync workflow vendors it into this
+one and opens the pull request `sdlc-protocol/sync` here, or updates the
+one already open, with the App's token, so this repository's CI runs on
+it. This repository is private, and GitHub Free offers auto-merge only on
+public repositories, so that pull request waits for the owner to merge it
+once `check` is green. tests/test_handlers.py holds the App to the
+behaviour it relies on from the copy, so a sync that changes that
+behaviour fails there rather than in production.
+
+To vendor by hand, from a clone of sdlc-protocol at the commit wanted:
+
+    python3 scripts/vendor.py <this repository>
+
+It replaces sdlc_protocol here and rewrites VENDORED; land the result by
+pull request. sdlc-protocol's ECOSYSTEM.md,
+https://github.com/OpenSpineConsortium/sdlc-protocol/blob/main/ECOSYSTEM.md,
+says how a change travels through every repository that takes a copy.
