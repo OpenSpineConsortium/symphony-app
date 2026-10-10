@@ -117,6 +117,14 @@ class TokenCacheTest(unittest.TestCase):
         self.assertEqual(self.tokens.token(99), "token-2")
         self.assertEqual(self.granted, 2)
 
+    def test_a_token_carries_the_whole_grant_unless_permissions_name_less(self):
+        self.tokens.token(99)
+        self.assertEqual(self.transport.calls[0]["body"], {})
+        narrowed = github.InstallationTokens(lambda: "app-jwt-for-tests", self.transport, API,
+                                             clock=lambda: self.now, permissions={"contents": "read"})
+        narrowed.token(42)
+        self.assertEqual(self.transport.calls[1]["body"], {"permissions": {"contents": "read"}})
+
     def test_each_installation_has_its_own_token(self):
         self.assertEqual(self.tokens.token(99), "token-1")
         self.assertEqual(self.tokens.token(42), "token-2")
