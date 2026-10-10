@@ -1,12 +1,24 @@
 name: Checks
 
 # The repository's checks on every pull request and every push to the
-# default branch: bash scripts/check.sh, the unit tests on Python 3.12,
-# the version the Docker image runs. The job is named "check" so a ruleset
+# default branch: bash scripts/check.sh, which holds the vendored copy of
+# sdlc-protocol to app/vendor/VENDORED and runs the unit tests on Python
+# 3.12, the version the Docker image runs. sdlc-protocol's sync opens its
+# pull request sdlc-protocol/sync here with the App's token, so this check
+# runs on it like on any other. The job is named "check" so a ruleset
 # can require it by that name. setup-python pins the interpreter, so the
 # runner image moving to a newer Python changes nothing here; openssl,
 # which the JWT tests sign with, is on the runner already. A newer push to
 # the same branch cancels the run still going.
+# Before the checks the job clones OpenSpineConsortium/sdlc-protocol, which
+# is public, so the clone needs no token even here, and names the clone to
+# them in SDLC_PROTOCOL. check.sh's vendoring.py verify holds the copy to
+# app/vendor/VENDORED, but both sit in this tree, and a pull request that
+# edits the copy can rewrite its line in VENDORED as easily; with the clone
+# named, tests/test_vendor.py compares every file of the copy with the
+# library's at the commit VENDORED names, and fails, rather than skips,
+# when the clone is missing or has no such commit, so neither edit passes
+# the check.
 
 on:
   pull_request:
@@ -30,5 +42,10 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Clone sdlc-protocol, the library the copy is held to
+        run: git clone --quiet https://github.com/OpenSpineConsortium/sdlc-protocol "$RUNNER_TEMP/sdlc-protocol"
+
       - name: Run the checks
+        env:
+          SDLC_PROTOCOL: ${{ runner.temp }}/sdlc-protocol
         run: bash scripts/check.sh
