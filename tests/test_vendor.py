@@ -1,16 +1,24 @@
-"""app/vendor/sdlc_protocol is a copy of two modules of the claim protocol's
-library, OpenSpineConsortium/sdlc-protocol: protocol_check.py, whose
-problems_for the handler turns into the check run sdlc/protocol, and
-claims.py, which it imports, with the package's __init__.py and
-vendoring.py, which every copy takes. The library's scripts/vendor.py makes
-the copy, and its sync workflow lands each new one here as the pull
-request sdlc-protocol/sync; app/vendor/VENDORED records it, the version and
-the commit on its first line and then the sha256 of every copied file.
+"""app/vendor/sdlc_protocol is a partial copy of the claim protocol's
+library, OpenSpineConsortium/sdlc-protocol, holding at least
+protocol_check.py, whose problems_for the handler turns into the check run
+sdlc/protocol, claims.py, which the handler imports too, and vendoring.py,
+the copy's own check. The library's scripts/vendor.py makes the copy, and
+its sync workflow lands each new one here as the pull request
+sdlc-protocol/sync; app/vendor/VENDORED records it, the version and the
+commit on its first line and then the sha256 of every copied file.
 scripts/check.sh holds the copy to that record with the copy's own
 vendoring.py before any test runs.
 
+Which files the copy holds beyond those is the library's ecosystem.json to
+say, never a list here: the sync brings the new copy and its new record in
+one pull request, so a second list on this repository's main would fail
+that pull request whenever the library changed what the App takes, and
+could not be changed first either, since main's copy is still the old one.
+The exact set is held by verify, which compares the copy with its record,
+and by the comparison with ecosystem.json at the recorded commit.
+
 These tests hold the record to a release and a whole commit and to the
-files it lists, the copy to the library itself where a clone of it is at
+copy's files, the copy to the library itself where a clone of it is at
 hand, and the App to running the copy. tests/test_handlers.py holds the
 copy to the behaviour the App relies on, so a sync that changes it fails
 there.
@@ -40,8 +48,9 @@ VENDORED = VENDOR / "VENDORED"
 PACKAGE = VENDOR / "sdlc_protocol"
 LIBRARY = Path(os.environ.get("SDLC_PROTOCOL") or ROOT.parent / "sdlc-protocol")
 THIS_REPOSITORY = "OpenSpineConsortium/sdlc-app"
-# The two modules the handler needs, and the two files every copy takes.
-TAKEN = ["__init__.py", "claims.py", "protocol_check.py", "vendoring.py"]
+# What the App itself runs from the copy: the two modules app/handlers.py
+# imports and the check scripts/check.sh runs.
+NEEDED = {"claims.py", "protocol_check.py", "vendoring.py"}
 VERIFY = "app/vendor/sdlc_protocol/vendoring.py verify app/vendor"
 
 # Read here with patterns of this repository's own rather than with the
@@ -74,6 +83,10 @@ def recorded_digests():
     return found
 
 
+def recorded_paths():
+    return [path for path, _ in recorded_digests()]
+
+
 def package_files():
     """The copy's files, relative to it, without Python's caches, which
     running the tests writes there and git ignores."""
@@ -97,20 +110,34 @@ def module_file(function):
     return Path(sys.modules[function.__module__].__file__).resolve()
 
 
+def files_the_library_names(ecosystem, consumer, commit):
+    """The files ecosystem.json has the consumer take, as the library's
+    vendor.py chooses them: every file of the package at that commit for
+    "all", else the consumer's modules and the files every copy takes."""
+    if consumer["modules"] == "all":
+        listed = library("ls-tree", "-r", "--name-only", commit, "--", "sdlc_protocol/")
+        return sorted(name.removeprefix("sdlc_protocol/") for name in listed.stdout.decode("ascii").splitlines())
+    return sorted(set(consumer["modules"]) | set(ecosystem["always_copied"]))
+
+
 class TheRecordTest(unittest.TestCase):
     def test_the_record_names_a_release_and_the_copy_is_that_release(self):
         version, _ = recorded_release()
         self.assertEqual(app.vendor.sdlc_protocol.__version__, version)
 
-    def test_the_record_lists_the_files_the_app_takes_each_with_its_sha256(self):
+    def test_the_record_lists_every_file_of_the_copy_each_with_its_sha256(self):
         listed = recorded_digests()
         self.assertTrue(listed, "VENDORED lists no files: it is the old record of one line; re-vendor")
-        self.assertEqual([path for path, _ in listed], TAKEN)
-        self.assertEqual(package_files(), TAKEN)
+        self.assertEqual(recorded_paths(), sorted(recorded_paths()), "VENDORED lists its files sorted by path")
+        self.assertEqual(recorded_paths(), package_files())
         for path, digest in listed:
             with self.subTest(file=path):
                 self.assertEqual(hashlib.sha256((PACKAGE / path).read_bytes()).hexdigest(), digest,
                                  "change it in sdlc-protocol and let the sync bring it, never the copy here")
+
+    def test_the_record_holds_what_the_app_runs(self):
+        self.assertLessEqual(NEEDED, set(recorded_paths()),
+                             "the library's ecosystem.json must give the App the modules app/handlers.py imports")
 
 
 class TheVerificationTest(unittest.TestCase):
@@ -130,7 +157,7 @@ class TheVerificationTest(unittest.TestCase):
         done = verify(VENDOR)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertEqual(done.stdout, f"vendored sdlc-protocol {version} at {commit[:7]}: "
-                                      f"{len(TAKEN)} files match VENDORED\n")
+                                      f"{len(recorded_paths())} files match VENDORED\n")
 
     def test_a_hand_edit_of_the_copy_fails(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -169,7 +196,7 @@ class TheCopyIsTheLibrarysTest(unittest.TestCase):
         ours = [consumer for consumer in ecosystem["consumers"] if consumer["repository"] == THIS_REPOSITORY]
         self.assertEqual(len(ours), 1)
         self.assertEqual(ours[0]["vendor_dir"], "app/vendor")
-        self.assertEqual(sorted(set(ours[0]["modules"]) | set(ecosystem["always_copied"])), TAKEN)
+        self.assertEqual(files_the_library_names(ecosystem, ours[0], commit), recorded_paths())
 
 
 class TheAppRunsTheCopyTest(unittest.TestCase):
