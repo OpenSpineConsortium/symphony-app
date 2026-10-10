@@ -53,7 +53,7 @@ FORBIDDEN = (["alice-co", "bob-labs", "github.com", "mill wheel", str(ALICE), st
 def metrics(**changes):
     document = {
         "schema": "sdlc-metrics/1", "generated_at": "2026-10-10T04:00:00Z", "window_days": 30, "sharing": "on",
-        "protocol_version": "0.2.0",
+        "protocol_version": "0.2.0 f530a66",
         "counts": {"claims": 9, "pull_requests_opened": 8, "merged": 6, "closed_unmerged": 1, "reviews": 11,
                    "changes_requested": 2, "check_runs_passed": 30, "check_runs_failed": 4, "conflicts_seen": 1,
                    "released_claims": 1, "contributors": 3},
@@ -137,6 +137,11 @@ def file_response(full_name, name, document):
     return json_response({"type": "file", "encoding": "base64", "name": name, "path": name,
                           "content": base64.encodebytes(json.dumps(document).encode("utf-8")).decode("ascii"),
                           "html_url": f"https://github.com/{full_name}/blob/metrics/{name}"})
+
+
+def raw_file(data):
+    """The contents API's answer for a file of these bytes, whatever they are."""
+    return json_response({"type": "file", "encoding": "base64", "content": base64.b64encode(data).decode("ascii")})
 
 
 class World:
@@ -323,18 +328,63 @@ class FailureTest(unittest.TestCase):
                 self.assertEqual(run(world).tally["refused"], 1)
 
     def test_a_file_too_large_to_be_inline_or_not_json_is_refused(self):
+        # The oversized file and the one in another encoding are a good
+        # METRICS.json otherwise, so only the size check and the encoding
+        # check can refuse them.
         world = World()
         path = f"/repos/{ORCHARD[0]}/contents/METRICS.json"
-        for answer in ({"type": "file", "encoding": "none", "content": ""},
+        good = json.dumps(metrics()).encode("utf-8")
+        for answer in ({"type": "file", "encoding": "none", "content": base64.b64encode(good).decode()},
                        {"type": "file", "encoding": "base64", "content": base64.b64encode(b"not json").decode()},
                        {"type": "file", "encoding": "base64",
-                        "content": base64.b64encode(b" " * (collect.MAX_FILE_BYTES + 1)).decode()},
+                        "content": base64.b64encode(good + b" " * collect.MAX_FILE_BYTES).decode()},
                        [{"type": "file"}]):
             with self.subTest(answer=str(answer)[:40]):
                 world.transport.routes[("GET", path)] = json_response(answer)
                 collected = run(world)
                 self.assertEqual(collected.tally["refused"], 3)
                 self.assertNotIn(hash_of(ORCHARD[1]), by_repo(collected.metrics))
+
+    def test_a_file_nested_too_deep_to_parse_is_refused_and_the_rest_collected(self):
+        # Both fit under MAX_FILE_BYTES, and json.loads raises
+        # RecursionError on them, which is no ValueError.
+        deep = b"[" * 30000 + b"]" * 30000
+        inside = json.dumps(metrics()).encode("utf-8")[:-1] + b', "deep": ' + deep + b"}"
+        for data in (b"[" * 60000, inside):
+            with self.subTest(size=len(data)):
+                self.assertLess(len(data), collect.MAX_FILE_BYTES)
+                world = World()
+                world.transport.routes[("GET", f"/repos/{ORCHARD[0]}/contents/METRICS.json")] = raw_file(data)
+                collected = run(world)
+                self.assertEqual(collected.tally["refused"], 3)
+                self.assertNotIn(hash_of(ORCHARD[1]), by_repo(collected.metrics))
+                self.assertEqual(sorted(by_repo(collected.metrics)), sorted([hash_of(NOISY[1]), hash_of(LANTERN[1])]))
+
+    def test_a_judge_nested_too_deep_to_parse_is_refused_and_the_metrics_kept(self):
+        data = b'{"counts": ' + b"[" * 50000
+        self.assertLess(len(data), collect.MAX_FILE_BYTES)
+        world = World()
+        world.transport.routes[("GET", f"/repos/{ORCHARD[0]}/contents/JUDGE.json")] = raw_file(data)
+        collected = run(world)
+        self.assertEqual(collected.tally["refused"], 3)
+        self.assertIn(hash_of(ORCHARD[1]), by_repo(collected.metrics))
+        self.assertNotIn(hash_of(ORCHARD[1]), by_repo(collected.judges))
+        self.assertIn(hash_of(NOISY[1]), by_repo(collected.judges))
+
+    def test_a_number_too_large_for_a_float_is_left_out_and_the_rest_collected(self):
+        # A 401-digit integer is valid JSON and under Python's limit on
+        # digits, but math.isfinite cannot take it.
+        huge = 10 ** 400
+        held = files()
+        held[(ORCHARD[0], "METRICS.json")] = metrics(
+            durations_seconds={"open_to_merge": {"median": huge, "p90": 60}, "first_review_median": huge},
+            rates={"merge_rate": huge, "first_check_pass_rate": 0.5})
+        collected = run(World(held))
+        kept = by_repo(collected.metrics)[hash_of(ORCHARD[1])]
+        self.assertEqual(kept["durations_seconds"], {"open_to_merge": {"p90": 60}})
+        self.assertEqual(kept["rates"], {"first_check_pass_rate": 0.5})
+        self.assertEqual(collected.tally["shared"], 3)
+        self.assertEqual(collect.summary(collected.tally), SUMMARY)
 
 
 class ValuesTest(unittest.TestCase):
@@ -348,10 +398,21 @@ class ValuesTest(unittest.TestCase):
         self.assertEqual(collect.duration(14400.5), 14400.5)
         self.assertEqual(collect.rate(0), 0)
         self.assertEqual(collect.rate(1), 1)
-        for value in (-1, float("inf"), float("nan"), True, "60"):
+        self.assertEqual(collect.duration(10 ** 300), 10 ** 300)
+        for value in (-1, float("inf"), float("nan"), True, "60", 10 ** 400, -10 ** 400):
             self.assertIsNone(collect.duration(value), value)
-        for value in (1.01, -0.1, float("nan"), True, "0.5"):
+        for value in (1.01, -0.1, float("nan"), True, "0.5", 10 ** 400):
             self.assertIsNone(collect.rate(value), value)
+
+    def test_a_protocol_version_is_a_release_with_or_without_its_commit(self):
+        # tools/metrics.py in the template writes the release and the short
+        # commit from tools/VENDORED's first line.
+        clean = collect.matching(collect.VERSION)
+        for value in ("0.2.0", "0.2.0 f530a66", "0.2.0 " + "f530a66" * 5 + "abcde"):
+            self.assertEqual(clean(value), value)
+        for value in ("0.2.0 on bob-labs/noisy-river", "0.2.0 F530A66", "0.2.0 f530a6", "0.2.0  f530a66",
+                      "0.2.0 f530a66 ", "v0.2.0", "0.2", "0.2.0 " + "f" * 41, 20):
+            self.assertIsNone(clean(value), value)
 
     def test_a_time_is_written_again_in_utc(self):
         self.assertEqual(collect.timestamp("2026-10-10T06:17:00.123+02:00"), "2026-10-10T04:17:00Z")

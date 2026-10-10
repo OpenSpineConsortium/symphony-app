@@ -97,7 +97,9 @@ RATES = ("merge_rate", "first_check_pass_rate")
 CATEGORIES = ("C1a", "C1b", "C2", "C3a", "C3b", "C4a", "C4b")
 GROUPS = ("unresponsiveness", "hallucination", "repetition")
 
-VERSION = re.compile(r"[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}")
+# The vendored protocol's release and, as the template writes it from
+# tools/VENDORED's first line, its short commit: "0.2.0 f530a66".
+VERSION = re.compile(r"[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}( [0-9a-f]{7,40})?")
 IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}(\[[a-z0-9]{1,8}\])?")
 
 
@@ -111,8 +113,16 @@ class Dropped(Exception):
 
 
 def is_number(value):
-    """An int or a finite float; Python's bool is an int, but no count."""
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    """An int or a finite float; Python's bool is an int, but no count.
+    An int too large for a float is none either: JSON allows one of
+    hundreds of digits, and math.isfinite raises on it instead of
+    answering, which would stop the whole run on one project's file."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 def count(value):
@@ -253,7 +263,10 @@ def read_document(client, full_name, name):
         if len(data) > MAX_FILE_BYTES:
             raise Dropped("refused")
         return json.loads(data.decode("utf-8"))
-    except ValueError:
+    except (ValueError, RecursionError):
+        # A file nested some thousands deep fits well under MAX_FILE_BYTES
+        # and makes json.loads recurse past Python's limit; it is refused
+        # like any other file that is not one, and the run goes on.
         raise Dropped("refused") from None
 
 

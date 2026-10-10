@@ -89,7 +89,8 @@ printed commands are for.
 
 By hand, at `https://github.com/organizations/<org>/settings/apps/new`:
 
-- GitHub App name `sdlc`; homepage URL
+- GitHub App name `OpenSpine SDLC`, as manifest.json has it (`sdlc` is
+  held by the account @sdlc); homepage URL
   https://github.com/OpenSpineConsortium/sdlc-template.
 - Webhook: untick Active (stage 2 turns it on).
 - Repository permissions: Contents read and write, Issues read and write,
@@ -249,12 +250,20 @@ path. A repository without the branch has nothing to collect.
 What is stored: a METRICS.json only when its `"sharing"` is exactly
 `"on"`, and only then its JUDGE.json; of each, only the keys the format
 names (scripts/collect.py lists them), a count, a duration or a rate only
-when it is such a number, and a time as the collector writes it again,
-so no text a project wrote reaches the dataset. The repository becomes
-the HMAC-SHA256 of its node id under the secret SDLC_METRICS_SALT: its
-lines can be followed from day to day, but without the salt nobody can
-tell whose they are. No name, owner, login, installation or URL is
-stored, and the log says counts only.
+when it is such a number, a time as the collector writes it again, and
+protocol_version only as a release with or without its short commit
+(`0.2.0 f530a66`). Two strings a project wrote can reach the dataset
+besides: JUDGE.json's model and prompt_variant, each kept only when it is
+one identifier of letters, digits, `.`, `_` and `-`, at most 64
+characters, with an optional suffix such as `[1m]`, which is what the
+template's judge writes there (`claude-opus-5-5`, `appF-7`). A shape is
+all the collector can check, and a login has the same one: a project
+that wrote its own name into those two, or into a number, would have it
+stored. The repository becomes the HMAC-SHA256 of its node id under the
+secret SDLC_METRICS_SALT: its lines can be followed from day to day, but
+without the salt nobody can tell whose they are. Nothing GitHub tells
+the collector about a repository, its name, owner, installation or URL,
+is stored, and the log says counts only.
 
 Where: one JSON line per repository and day, `{"repo": <hash>,
 "collected_at": <UTC date>, ...}`, in data/metrics.jsonl and
@@ -289,7 +298,7 @@ SDLC_METRICS=off. Both are read by the project's own workflow, which then
 writes `{"schema": "sdlc-metrics/1", "sharing": "off"}` and nothing else,
 so the collector only ever sees `"sharing": "off"` and stores nothing of
 that project. The collector has run only against the fake GitHub in
-tests/test_collect.py so far.
+tests/test_collect.py so far (What was not verified live).
 
 ## Checks
 
@@ -310,20 +319,32 @@ key with `openssl genrsa` and verify each signature with
 
 ## What was not verified live
 
-No App is registered yet, so these have run only against the fakes in
-tests/: the manifest flow and its conversion call, the installation token
-exchange, the reads of a pull request and a claim file, and the creation of
-the check run. What did run for real: the JWT signed by openssl and
-verified with it; the image built from python:3.12-slim (openssl present)
-and run with an env file as register.py writes it, answering `ping` with
-`202` and `/health` with `200`, signing a JWT inside the container as its
-non-root user with no key file left behind, and stopping on `docker stop`
-in well under a second.
+The App is registered, as OpenSpine SDLC (slug openspine-sdlc, id
+5258276), through register.py's manifest flow, so that flow and its
+conversion call have run for real; GitHub refused the name `sdlc`, which
+the account @sdlc holds, hence the manifest's name and `--name`. As far
+as this repository records, the rest has run only against the fakes in
+tests/:
 
-Open until the first registration:
+- the installation token exchange, and the narrowed request the collector
+  makes, `{"permissions": {"contents": "read", "metadata": "read"}}`;
+- the reads of a pull request and a claim file, and the creation of the
+  check run;
+- the collector's calls: `/app/installations` with the App's JWT, and
+  on the narrowed token `/installation/repositories` and the contents API
+  at the ref `metrics`;
+- collect.yml's worktree of the branch `data`, started with no history
+  on its first run, and its push there with GITHUB_TOKEN.
 
-- GitHub App names are unique across GitHub, and `sdlc` may be taken; the
-  form then asks for another, and the slug in the env file follows it.
+What did run for real besides the registration: the JWT signed by
+openssl and verified with it; the image built from python:3.12-slim
+(openssl present) and run with an env file as register.py writes it,
+answering `ping` with `202` and `/health` with `200`, signing a JWT inside
+the container as its non-root user with no key file left behind, and
+stopping on `docker stop` in well under a second.
+
+Still open:
+
 - Whether the conversion returns a webhook secret for a manifest whose
   webhook is off; register.py makes one when it does not.
 - Whether the "new App" form shows the events while the webhook is off.
