@@ -1,0 +1,99 @@
+name: Collect field metrics
+
+# Once a day, the field metrics that projects using the App share:
+# scripts/collect.py lists the App's installations with the App's JWT,
+# reads METRICS.json and JUDGE.json at the ref metrics of each repository
+# an installation lets it see, and nothing else, on a token that can only
+# read, and keeps a project's files only when its METRICS.json says
+# "sharing": "on". What it keeps is aggregates under a salted hash of the
+# repository's node id; it never writes or logs a repository's name, owner
+# or URL, and its log lines are counts (README.md, Field metrics).
+#
+# The dataset lives on this repository's branch data, apart from main, so
+# a day's collection is a commit of data/metrics.jsonl and data/judge.jsonl
+# there and never a pull request; the branch is made with no history on
+# the first run that has something to write. Its commits are pushed with
+# this run's GITHUB_TOKEN, whose push starts no workflow, and only when a
+# file changed: the script replaces a repository's line of the same day
+# instead of adding one, so a second run on a day with nothing new commits
+# nothing. The App's id, its key and the salt are the owner's to set
+# (README.md, Field metrics); until all three are, as on a fork, the run
+# says so in a notice and ends green, so the schedule never turns red
+# before the setup. The secrets reach the script through env: alone, and
+# the salt is never printed. The minute is off the hour, where fewer
+# scheduled runs queue; one run at a time, so two never push to data at
+# once.
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stop until the App and the salt are set
+        id: gate
+        env:
+          SDLC_APP_ID: ${{ vars.SDLC_APP_ID }}
+          SDLC_APP_PRIVATE_KEY: ${{ secrets.SDLC_APP_PRIVATE_KEY }}
+          SDLC_METRICS_SALT: ${{ secrets.SDLC_METRICS_SALT }}
+        run: |
+          if [ -z "$SDLC_APP_ID" ] || [ -z "$SDLC_APP_PRIVATE_KEY" ] || [ -z "$SDLC_METRICS_SALT" ]; then
+            echo "::notice::the variable SDLC_APP_ID and the secrets SDLC_APP_PRIVATE_KEY and SDLC_METRICS_SALT are not all set on this repository; nothing is collected (README.md, Field metrics)"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v7
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          python-version: "3.12"
+
+      - name: Check out the branch data beside main, or start it
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          # A worktree of this checkout, so the push below goes from the
+          # checkout itself with the credentials actions/checkout gave it.
+          if git fetch --quiet origin +refs/heads/data:refs/remotes/origin/data 2>/dev/null; then
+            git worktree add --quiet -B data "$RUNNER_TEMP/data" origin/data
+          else
+            echo "no branch data yet; starting it with no history"
+            git worktree add --quiet --orphan -b data "$RUNNER_TEMP/data"
+          fi
+
+      - name: Collect what the projects share
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          SDLC_APP_ID: ${{ vars.SDLC_APP_ID }}
+          SDLC_APP_PRIVATE_KEY: ${{ secrets.SDLC_APP_PRIVATE_KEY }}
+          SDLC_METRICS_SALT: ${{ secrets.SDLC_METRICS_SALT }}
+        run: python3 scripts/collect.py --out "$RUNNER_TEMP/data/data"
+
+      - name: Commit and push the branch data when a file changed
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          data="$RUNNER_TEMP/data"
+          git -C "$data" add -A
+          if git -C "$data" diff --cached --quiet; then
+            echo "the dataset is unchanged; nothing to commit"
+            exit 0
+          fi
+          git -C "$data" config user.name "github-actions[bot]"
+          git -C "$data" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$data" commit --quiet -m "Field metrics collected $(date -u +%Y-%m-%d)"
+          git push --quiet origin data

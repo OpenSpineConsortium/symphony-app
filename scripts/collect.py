@@ -1,0 +1,489 @@
+#!/usr/bin/env python3
+"""Collect the field metrics that projects using the App choose to share.
+
+A project made from sdlc-template, or adopted into it, writes two small
+files to its branch `metrics` with its own workflow: METRICS.json, the
+claim protocol's counts, durations and rates over the last thirty days,
+and, when a contributor runs the judge on their own machine, JUDGE.json,
+the number of each kind of communication failure the judge found. Both
+are aggregates by design, and the lists below are their format: the keys
+each file may hold and what kind of value each key takes. This script
+holds every file it reads to them.
+
+With the App's JWT this lists the App's installations, mints a token for
+each that can read contents and nothing else, lists the repositories it
+can see, and asks each for those two paths at the ref `metrics`, and for
+no other path: a 404 there means the project has nothing to collect. A
+METRICS.json is kept only when its "sharing" is exactly "on"; when it is
+anything else the project's JUDGE.json is not even read. What is kept is
+cut to the keys the format names, and a value where it says a count, a
+duration or a rate is kept only when it is such a number, so no text a
+project writes, whether by mistake or on purpose, reaches the dataset.
+The two strings it allows besides numbers, the model's name and the
+prompt variant, must look like identifiers, and a time is rewritten in
+one form of the collector's own.
+
+The repository is never named in the dataset. It becomes the HMAC-SHA256
+of its node id under SDLC_METRICS_SALT, a secret only the collector
+holds, so a line can be followed from day to day but not traced back to a
+repository by anyone without the salt. No repository name, owner, login,
+installation id or URL is written to the dataset or to the log, whose
+lines say counts only; an error on one repository is counted, not shown,
+since GitHub's message would carry the repository's path.
+
+Each kept file becomes one JSON line, {"repo": <hash>, "collected_at":
+<the UTC date>, ...the file as kept...}, in metrics.jsonl or judge.jsonl
+under --out. A repository has one line a day: a second run on the same
+day replaces that line instead of adding one, so the file changes only
+when what the projects share did.
+
+    SDLC_APP_ID=... SDLC_APP_PRIVATE_KEY=... SDLC_METRICS_SALT=... python3 scripts/collect.py --out data
+    python3 scripts/collect.py --env-file .sdlc-app.env --dry-run
+
+The workflow .github/workflows/collect.yml runs it once a day and commits
+what changed to this repository's branch `data`.
+"""
+
+import argparse
+import base64
+import hashlib
+import hmac
+import http.client
+import json
+import math
+import os
+import re
+import sys
+import tempfile
+from collections import Counter
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+# scripts/ is no package; the repository root on the path makes app importable.
+sys.path.insert(0, str(ROOT))
+
+from app import envfile
+from app.github import API, Api, Client, GitHubError, InstallationTokens, urllib_transport
+from app.jwt import APP_ID_VARIABLE, AppKey, SigningError, app_jwt
+
+SALT_VARIABLE = "SDLC_METRICS_SALT"
+# Below this the hashes could be found by trying salts; the README makes
+# one of 64 hex digits.
+SALT_MINIMUM = 32
+METRICS_REF = "metrics"
+METRICS_FILE = "METRICS.json"
+JUDGE_FILE = "JUDGE.json"
+METRICS_LINES = "metrics.jsonl"
+JUDGE_LINES = "judge.jsonl"
+METRICS_SCHEMA = "sdlc-metrics/1"
+JUDGE_SCHEMA = "sdlc-judge/1"
+# Both files are a few hundred bytes; anything far larger is not one.
+MAX_FILE_BYTES = 64 * 1024
+# Read access to contents is all the collector needs of an installation.
+READ_ONLY = {"contents": "read", "metadata": "read"}
+# What can go wrong reading one installation or repository: GitHub's
+# refusal, the network, or a reply that is not JSON. Each is counted and
+# the run goes on with the next.
+READ_ERRORS = (GitHubError, OSError, http.client.HTTPException, ValueError)
+
+COUNTS = ("claims", "pull_requests_opened", "merged", "closed_unmerged", "reviews", "changes_requested",
+          "check_runs_passed", "check_runs_failed", "conflicts_seen", "released_claims", "contributors")
+DURATIONS = ("claim_to_first_pull_request", "open_to_merge", "first_review")
+STATISTICS = ("median", "p90")
+RATES = ("merge_rate", "first_check_pass_rate")
+# The seven codes of the CooperBench paper's App F and its three groups.
+CATEGORIES = ("C1a", "C1b", "C2", "C3a", "C3b", "C4a", "C4b")
+GROUPS = ("unresponsiveness", "hallucination", "repetition")
+
+VERSION = re.compile(r"[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}")
+IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}(\[[a-z0-9]{1,8}\])?")
+
+
+class Dropped(Exception):
+    """A file left out of the dataset. The reason is a key of the tally,
+    never anything the file said."""
+
+    def __init__(self, reason):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def is_number(value):
+    """An int or a finite float; Python's bool is an int, but no count."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def count(value):
+    """A whole number, zero or more."""
+    if isinstance(value, float) and math.isfinite(value) and value.is_integer():
+        value = int(value)
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def duration(value):
+    """Seconds, zero or more."""
+    return value if is_number(value) and value >= 0 else None
+
+
+def rate(value):
+    """A fraction from 0 to 1."""
+    return value if is_number(value) and 0 <= value <= 1 else None
+
+
+def timestamp(value):
+    """An ISO 8601 time, written again in UTC in one form, so the text
+    that reaches the dataset is the collector's own and not the file's.
+    A time without a zone is taken to be UTC, as the format has it."""
+    if not isinstance(value, str) or len(value) > 40:
+        return None
+    try:
+        moment = datetime.fromisoformat(value)
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        return moment.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    except (ValueError, OverflowError):
+        return None
+
+
+def matching(pattern):
+    def clean(value):
+        return value if isinstance(value, str) and pattern.fullmatch(value) else None
+    return clean
+
+
+def exactly(expected):
+    def clean(value):
+        return value if isinstance(value, str) and value == expected else None
+    return clean
+
+
+def kept(document, fields):
+    """The keys of document that fields names, each as its cleaner leaves
+    it, in the order of fields; a key the cleaner refuses is left out."""
+    cleaned = {}
+    for key, clean in fields.items():
+        value = clean(document[key]) if key in document else None
+        if value is not None:
+            cleaned[key] = value
+    return cleaned
+
+
+def section(names, clean):
+    """A cleaner for an object of named numbers, such as counts."""
+    def clean_section(value):
+        return kept(value, dict.fromkeys(names, clean)) if isinstance(value, dict) else None
+    return clean_section
+
+
+def durations(value):
+    """Each measure's median and p90, whether the file nests them
+    ({"open_to_merge": {"median": s, "p90": s}}) or writes them flat
+    ({"open_to_merge_median": s}); the format names the statistics but
+    not their shape, so both shapes are read and the nested one written."""
+    if not isinstance(value, dict):
+        return None
+    cleaned = {}
+    for measure in DURATIONS:
+        given = value.get(measure)
+        if not isinstance(given, dict):
+            given = {name: value[f"{measure}_{name}"] for name in STATISTICS if f"{measure}_{name}" in value}
+        statistics = kept(given, dict.fromkeys(STATISTICS, duration))
+        if statistics:
+            cleaned[measure] = statistics
+    return cleaned
+
+
+METRICS_FIELDS = {
+    "schema": exactly(METRICS_SCHEMA),
+    "generated_at": timestamp,
+    "window_days": count,
+    "sharing": exactly("on"),
+    "protocol_version": matching(VERSION),
+    "counts": section(COUNTS, count),
+    "durations_seconds": durations,
+    "rates": section(RATES, rate),
+}
+
+JUDGE_FIELDS = {
+    "schema": exactly(JUDGE_SCHEMA),
+    "generated_at": timestamp,
+    "model": matching(IDENTIFIER),
+    "prompt_variant": matching(IDENTIFIER),
+    "conversations": count,
+    "counts": section(CATEGORIES, count),
+    "groups": section(GROUPS, count),
+}
+
+
+def shared_metrics(document):
+    """A METRICS.json as the dataset keeps it. The switch is read before
+    anything else is kept: "sharing" must be exactly "on"."""
+    if not isinstance(document, dict) or document.get("schema") != METRICS_SCHEMA:
+        raise Dropped("refused")
+    if document.get("sharing") != "on":
+        raise Dropped("not_shared")
+    return kept(document, METRICS_FIELDS)
+
+
+def shared_judge(document):
+    """A JUDGE.json as the dataset keeps it: category counts and no text."""
+    if not isinstance(document, dict) or document.get("schema") != JUDGE_SCHEMA:
+        raise Dropped("refused")
+    return kept(document, JUDGE_FIELDS)
+
+
+def read_document(client, full_name, name):
+    """The JSON of one of the two files at the ref metrics, or None when
+    GitHub has none there: no branch metrics, or no such file on it. The
+    path is one of two constants, so nothing else is ever asked for."""
+    if name not in (METRICS_FILE, JUDGE_FILE):
+        # Not one of READ_ERRORS, so a mistake here stops the run rather
+        # than being counted as a repository that could not be read.
+        raise RuntimeError(f"the collector reads {METRICS_FILE} and {JUDGE_FILE} only")
+    found = client.request("GET", f"/repos/{full_name}/contents/{name}", params={"ref": METRICS_REF},
+                           allow=(404,))
+    if found is None:
+        return None
+    if not isinstance(found, dict) or found.get("type") != "file" or found.get("encoding") != "base64":
+        raise Dropped("refused")
+    try:
+        data = base64.b64decode(found.get("content") or "")
+        if len(data) > MAX_FILE_BYTES:
+            raise Dropped("refused")
+        return json.loads(data.decode("utf-8"))
+    except ValueError:
+        raise Dropped("refused") from None
+
+
+def repository_hash(salt, node_id):
+    """The repository as the dataset names it: HMAC-SHA256 of its node id
+    under the salt, in hex. The node id stays the same when a repository
+    is renamed or moves to another owner, so its line does too."""
+    return hmac.new(salt.encode("utf-8"), node_id.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def record(repo, day, kept_file):
+    return {"repo": repo, "collected_at": day, **kept_file}
+
+
+@dataclass
+class Collected:
+    metrics: list = field(default_factory=list)
+    judges: list = field(default_factory=list)
+    tally: Counter = field(default_factory=Counter)
+
+
+def counted(read, tally):
+    """read(), or None with the reason counted when it drops the file or
+    GitHub could not be read."""
+    try:
+        return read()
+    except Dropped as dropped:
+        tally[dropped.reason] += 1
+    except READ_ERRORS:
+        tally["unreadable"] += 1
+    return None
+
+
+def collect_repository(client, repository, salt, day, collected):
+    """Add what one repository shares to collected. Its JUDGE.json is
+    read only after a METRICS.json that shares, since the switch lives in
+    METRICS.json and a project without one has said nothing."""
+    tally = collected.tally
+    node_id = repository.get("node_id")
+    if not isinstance(node_id, str) or not node_id:
+        tally["unreadable"] += 1
+        return
+    full_name = repository["full_name"]
+    document = counted(lambda: read_document(client, full_name, METRICS_FILE), tally)
+    metrics = None if document is None else counted(lambda: shared_metrics(document), tally)
+    if metrics is None:
+        return
+    repo = repository_hash(salt, node_id)
+    collected.metrics.append(record(repo, day, metrics))
+    tally["shared"] += 1
+    document = counted(lambda: read_document(client, full_name, JUDGE_FILE), tally)
+    judge = None if document is None else counted(lambda: shared_judge(document), tally)
+    if judge is not None:
+        collected.judges.append(record(repo, day, judge))
+        tally["judges"] += 1
+
+
+def collect_installation(installation, tokens, salt, day, collected, transport, api):
+    """Every repository one installation lets the App see."""
+    client = Client(tokens, installation["id"], transport, api)
+    try:
+        repositories = client.get_all("/installation/repositories", key="repositories")
+    except READ_ERRORS:
+        collected.tally["unreadable"] += 1
+        return
+    for repository in repositories:
+        collected.tally["repositories"] += 1
+        collect_repository(client, repository, salt, day, collected)
+
+
+def collect(app_jwt_source, salt, day, transport=urllib_transport, api=API):
+    """What every installation shares today. app_jwt_source gives the
+    App's JWT for each call that needs it; a failure to list the
+    installations raises, since nothing can be collected without them."""
+    collected = Collected()
+    tokens = InstallationTokens(app_jwt_source, transport, api, permissions=READ_ONLY)
+    for installation in Api(app_jwt_source, transport, api).get_all("/app/installations"):
+        if installation.get("suspended_at"):
+            collected.tally["suspended"] += 1
+            continue
+        collected.tally["installations"] += 1
+        collect_installation(installation, tokens, salt, day, collected, transport, api)
+    return collected
+
+
+def plural(number, noun, nouns=None):
+    return f"{number} {noun if number == 1 else nouns or noun + 's'}"
+
+
+# How a file or an installation can fail to reach the dataset, as the log counts them.
+OTHER_OUTCOMES = ("not_shared", "refused", "unreadable", "suspended")
+
+
+def summary(tally):
+    """The run in one line of counts, which is all a log line here says."""
+    line = ", ".join([plural(tally["installations"], "installation"),
+                      plural(tally["repositories"], "repository", "repositories"),
+                      f"{tally['shared']} shared metrics", plural(tally["judges"], "judge")])
+    others = [f"{tally[name]} {name.replace('_', ' ')}" for name in OTHER_OUTCOMES if tally[name]]
+    return line + ("; " + ", ".join(others) if others else "")
+
+
+def line_of(found):
+    return json.dumps(found, ensure_ascii=True)
+
+
+def key_of(found):
+    """The repository and the day a line is for, or None for a line that
+    is not one of this script's, which is kept as it is."""
+    if not isinstance(found, dict):
+        return None
+    return found.get("repo"), found.get("collected_at")
+
+
+def key_of_line(line):
+    try:
+        return key_of(json.loads(line))
+    except ValueError:
+        return None
+
+
+def merged(lines, records):
+    """The file's lines with records in, and how many replaced a line: a
+    record takes the place of the line for the same repository and day,
+    and goes at the end when there is none, so a run repeated on one day
+    adds nothing and leaves every other line as it was."""
+    waiting = {key_of(found): line_of(found) for found in records}
+    result, replaced = [], 0
+    for line in lines:
+        key = key_of_line(line)
+        if key in waiting:
+            result.append(waiting.pop(key))
+            replaced += 1
+        else:
+            result.append(line)
+    return result + list(waiting.values()), replaced
+
+
+def existing_lines(path):
+    return path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+
+
+def write_lines(path, lines):
+    """Replace path with lines in one step, so a run stopped halfway
+    never leaves half a file for the workflow to commit."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(descriptor, "w", encoding="ascii", newline="\n") as handle:
+            handle.write("".join(f"{line}\n" for line in lines))
+        os.replace(temporary, path)
+    except BaseException:
+        os.unlink(temporary)
+        raise
+
+
+def store(path, records, dry_run=False):
+    """Merge records into the file at path, or with dry_run only say what
+    would be written; either way the report is counts and the lines."""
+    if not records:
+        return [f"{path.name}: nothing to write"]
+    before = existing_lines(path)
+    after, replaced = merged(before, records)
+    lines = plural(len(records), "line")
+    if dry_run:
+        return ([f"{path.name}: {lines} would be written, {replaced} replacing today's"]
+                + [line_of(found) for found in records])
+    if after == before:
+        return [f"{path.name}: {lines}, the same as today's already there"]
+    write_lines(path, after)
+    return [f"{path.name}: {lines} written, {replaced} replacing today's"]
+
+
+@dataclass(frozen=True)
+class Settings:
+    app_id: str
+    key: AppKey
+    salt: str = field(repr=False)
+
+    @classmethod
+    def from_environment(cls, environ):
+        """The settings, or SystemExit naming (never showing) what is missing."""
+        problems = [] if environ.get(APP_ID_VARIABLE) else [f"{APP_ID_VARIABLE} is not set"]
+        try:
+            key = AppKey.from_environment(environ)
+        except SigningError as error:
+            problems.append(str(error))
+        salt = (environ.get(SALT_VARIABLE) or "").strip()
+        if not salt:
+            problems.append(f"{SALT_VARIABLE} is not set, and no repository is hashed without it")
+        elif len(salt) < SALT_MINIMUM:
+            problems.append(f"{SALT_VARIABLE} is shorter than {SALT_MINIMUM} characters; make one with "
+                            "python3 -c \"import secrets; print(secrets.token_hex(32))\"")
+        if problems:
+            raise SystemExit("collect: cannot run: " + "; ".join(problems))
+        return cls(app_id=environ[APP_ID_VARIABLE], key=key, salt=salt)
+
+
+def arguments(argv):
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--out", default="data", help="the directory of metrics.jsonl and judge.jsonl "
+                                                      "(default: data)")
+    parser.add_argument("--env-file", help="read the settings from this file as well, as scripts/register.py "
+                                           "writes it; the environment wins over it")
+    parser.add_argument("--dry-run", action="store_true", help="print the counts and the lines, write nothing")
+    return parser.parse_args(argv)
+
+
+def main(argv=None, environ=None, transport=urllib_transport, today=None):
+    args = arguments(argv)
+    environ = os.environ if environ is None else environ
+    if args.env_file:
+        envfile.load_into_environment(args.env_file, environ)
+    settings = Settings.from_environment(environ)
+    day = today or datetime.now(timezone.utc).date().isoformat()
+    try:
+        collected = collect(lambda: app_jwt(settings.app_id, settings.key), settings.salt, day, transport)
+    except (GitHubError, SigningError, OSError, http.client.HTTPException) as error:
+        # Only the App's own calls get here, the list of its installations
+        # and the signature of its JWT, and neither names a repository; a
+        # repository's errors are counted where they happen, never shown.
+        print(f"collect: {error}", file=sys.stderr)
+        return 1
+    print(summary(collected.tally))
+    out = Path(args.out)
+    for name, records in ((METRICS_LINES, collected.metrics), (JUDGE_LINES, collected.judges)):
+        for line in store(out / name, records, args.dry_run):
+            print(line)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

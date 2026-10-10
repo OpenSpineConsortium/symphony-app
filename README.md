@@ -64,6 +64,7 @@ installations may use the App.
 | app/vendor/ | protocol_check.py and claims.py from sdlc-protocol, with its `__init__.py` and vendoring.py, and VENDORED, the record they are held to (vendor/README.md) |
 | manifest.json | The App's manifest: name, permissions, events |
 | scripts/register.py | Registers the App for an organization by GitHub's manifest flow |
+| scripts/collect.py | Collects the field metrics projects share, daily from .github/workflows/collect.yml (Field metrics) |
 | scripts/check.sh | The checks; CI's job `check` runs it |
 | Dockerfile | python:3.12-slim, a non-root user, the server as entrypoint |
 
@@ -229,6 +230,66 @@ when the commit already has the same verdict (a redelivery, a title edit),
 `ignored: ...` for the events this stage leaves to Actions, `pong`,
 `refused: ...` for a bad signature, a missing length or a body that is no event, and
 `error: <type>: <message>` when a call to GitHub failed.
+
+## Field metrics
+
+Projects that use the App can share how the claim protocol fares in them,
+as coordbench measures it on CooperBench, without their code or text
+leaving them. A project's own workflow writes two files to its branch
+`metrics`: METRICS.json, counts, durations and rates over thirty days,
+and, when a contributor runs the judge on their own machine, JUDGE.json,
+how often each kind of communication failure was found.
+scripts/collect.py, run daily by .github/workflows/collect.yml, gathers
+them.
+
+What is read: those two files at the ref `metrics` of every repository
+the App is installed on, with a token that can only read, and no other
+path. A repository without the branch has nothing to collect.
+
+What is stored: a METRICS.json only when its `"sharing"` is exactly
+`"on"`, and only then its JUDGE.json; of each, only the keys the format
+names (scripts/collect.py lists them), a count, a duration or a rate only
+when it is such a number, and a time as the collector writes it again,
+so no text a project wrote reaches the dataset. The repository becomes
+the HMAC-SHA256 of its node id under the secret SDLC_METRICS_SALT: its
+lines can be followed from day to day, but without the salt nobody can
+tell whose they are. No name, owner, login, installation or URL is
+stored, and the log says counts only.
+
+Where: one JSON line per repository and day, `{"repo": <hash>,
+"collected_at": <UTC date>, ...}`, in data/metrics.jsonl and
+data/judge.jsonl on this repository's branch `data`, committed with the
+workflow's own GITHUB_TOKEN when a file changed; a second run on one day
+replaces that day's lines.
+
+The owner's steps, once. The salt, a long random value that goes from
+the generator into the secret without being shown:
+
+    python3 -c "import secrets; print(secrets.token_hex(32))" | gh secret set SDLC_METRICS_SALT --repo OpenSpineConsortium/sdlc-app
+
+Keep it as it is: a new salt gives every repository a new hash, and the
+days before and after no longer join up. Then the App's id and key on
+this repository, unless they are there already, as for any repository
+whose workflows use the App:
+
+    gh variable set SDLC_APP_ID --repo OpenSpineConsortium/sdlc-app --body <App ID>
+    python3 scripts/register.py --print-key | gh secret set SDLC_APP_PRIVATE_KEY --repo OpenSpineConsortium/sdlc-app
+
+Until the variable and both secrets are set, the workflow ends with a
+notice and collects nothing. Last, make the App public, so that other
+accounts can install it: "Make public" at
+https://github.com/organizations/OpenSpineConsortium/settings/apps/openspine-sdlc/advanced.
+To see a run without writing, `python3 scripts/collect.py --env-file
+.sdlc-app.env --dry-run`, with SDLC_METRICS_SALT in the environment,
+prints the counts and the lines it would write.
+
+A project turns sharing off with the file .github/sdlc-metrics holding
+`off` on its default branch, or with the repository variable
+SDLC_METRICS=off. Both are read by the project's own workflow, which then
+writes `{"schema": "sdlc-metrics/1", "sharing": "off"}` and nothing else,
+so the collector only ever sees `"sharing": "off"` and stores nothing of
+that project. The collector has run only against the fake GitHub in
+tests/test_collect.py so far.
 
 ## Checks
 
