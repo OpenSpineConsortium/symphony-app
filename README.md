@@ -1,6 +1,6 @@
 # sdlc-app
 
-The backend of the GitHub App "sdlc", which serves the claim protocol of
+The backend of the GitHub App "OpenSpine SDLC" (slug openspine-sdlc), which serves the claim protocol of
 [OpenSpineConsortium/sdlc-template](https://github.com/OpenSpineConsortium/sdlc-template)
 (its docs/agents/PROTOCOL.md says what a claim is). Python 3.12's standard
 library and the openssl binary are all it needs: no package is installed,

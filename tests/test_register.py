@@ -228,5 +228,13 @@ class FlowTest(unittest.TestCase):
         self.assertFalse(registration.done)
 
 
+
+class NameTest(unittest.TestCase):
+    def test_a_name_given_replaces_the_manifests_and_none_keeps_it(self):
+        """A name an account already holds is refused by GitHub, so the
+        registration takes another without editing the manifest."""
+        self.assertEqual(register.manifest_for(name="Another Name")["name"], "Another Name")
+        self.assertEqual(register.manifest_for()["name"], "OpenSpine SDLC")
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Register the GitHub App "sdlc" for an organization, by GitHub's manifest flow.
+"""Register the GitHub App (by default "OpenSpine SDLC") for an organization, by GitHub's manifest flow.
 
 GitHub makes an App from a manifest (manifest.json) in three steps: a
 form POSTs the manifest to the organization's "new App" page, the owner
@@ -47,10 +47,15 @@ MANIFEST = ROOT / "manifest.json"
 ENV_FILE = ROOT / ".sdlc-app.env"
 
 
-def manifest_for(webhook_url=None, port=PORT, path=MANIFEST):
+def manifest_for(webhook_url=None, port=PORT, path=MANIFEST, name=None):
     """The manifest to send: the file's, with the webhook on at the URL
-    given or left off, and the return address on this script's port."""
+    given or left off, the return address on this script's port, and the
+    name given, if one is. App names are global across GitHub and a name
+    an account already holds is refused ("Name is reserved for the
+    account @sdlc"), so the name is an option, not a constant."""
     manifest = json.loads(Path(path).read_text(encoding="utf-8"))
+    if name:
+        manifest["name"] = name
     if webhook_url:
         manifest["hook_attributes"] = {"url": webhook_url, "active": True}
     manifest["redirect_url"] = f"http://localhost:{port}/registered"
@@ -236,6 +241,7 @@ def print_key(env_path):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--org", help="the organization that owns the App")
+    parser.add_argument("--name", help="the App's name, unique across GitHub (default: the manifest's)")
     parser.add_argument("--webhook-url", help="the webhook's URL; without it the webhook stays off")
     parser.add_argument("--repo", action="append", dest="repos", metavar="OWNER/NAME",
                         help="a repository to print the stage 1 commands for (repeatable; "
@@ -254,7 +260,7 @@ def main(argv=None):
         return 1
     registration = Registration(args.org, args.env_file, args.repos or [f"{args.org}/sdlc-template"])
     try:
-        serve(registration, manifest_for(args.webhook_url, args.port), args.port)
+        serve(registration, manifest_for(args.webhook_url, args.port, name=args.name), args.port)
     except KeyboardInterrupt:
         print("\nStopped; nothing was registered.", file=sys.stderr)
         return 130

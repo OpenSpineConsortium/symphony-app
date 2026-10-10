@@ -1,5 +1,5 @@
 {
-  "name": "sdlc",
+  "name": "OpenSpine SDLC",
   "url": "https://github.com/OpenSpineConsortium/sdlc-template",
   "description": "The claim protocol of sdlc-template: tokens for its workflows, and the sdlc/protocol check on every pull request.",
   "hook_attributes": {
