@@ -18,8 +18,9 @@ protocol_check.py and claims.py, into app/vendor, for the check run
 sdlc-protocol already runs this repository's check on its change (the job
 `downstream (sdlc-app)`, which reads this private repository with the
 App's token), and once it merges, that repository's sync workflow opens
-the pull request `sdlc-protocol/sync` here. The owner merges it, since
-GitHub Free offers auto-merge only on public repositories.
+the pull request `sdlc-protocol/sync` here. The owner merges it: the
+sync arms auto-merge only where ecosystem.json says so, and for this
+repository it says `"auto_merge": false`.
 app/vendor/README.md says the rest.
 
 ## What the App does
@@ -64,6 +65,7 @@ installations may use the App.
 | app/vendor/ | protocol_check.py and claims.py from sdlc-protocol, with its `__init__.py` and vendoring.py, and VENDORED, the record they are held to (vendor/README.md) |
 | manifest.json | The App's manifest: name, permissions, events |
 | scripts/register.py | Registers the App for an organization by GitHub's manifest flow |
+| scripts/collect.py | Collects the field metrics projects share, daily from .github/workflows/collect.yml (Field metrics) |
 | scripts/check.sh | The checks; CI's job `check` runs it |
 | Dockerfile | python:3.12-slim, a non-root user, the server as entrypoint |
 
@@ -88,7 +90,8 @@ printed commands are for.
 
 By hand, at `https://github.com/organizations/<org>/settings/apps/new`:
 
-- GitHub App name `sdlc`; homepage URL
+- GitHub App name `OpenSpine SDLC`, as manifest.json has it (`sdlc` is
+  held by the account @sdlc); homepage URL
   https://github.com/OpenSpineConsortium/sdlc-template.
 - Webhook: untick Active (stage 2 turns it on).
 - Repository permissions: Contents read and write, Issues read and write,
@@ -118,10 +121,24 @@ For each repository whose workflows use the App:
 or, with a key downloaded by hand,
 `gh secret set SDLC_APP_PRIVATE_KEY --repo OWNER/NAME < path/to/key.pem`.
 `--print-key` writes the key only into a pipe and refuses a terminal, so it
-never lands on screen. A copy made from the template runs template-init on
-its first push, before anyone can set a repository variable; for copies to
-have the App from that first run, set both at the organization instead,
-with `--org <org> --visibility all` in place of `--repo OWNER/NAME`.
+never lands on screen.
+
+The two can be set once at the organization for several repositories,
+with `--org <org> --visibility selected --repos NAME,NAME` in place of
+`--repo OWNER/NAME`, but only for selected repositories that the owner
+alone writes to, never `--visibility all` or `private`. A secret visible
+to all repositories, or to all private ones, reaches every repository
+made in the organization afterwards, and the admin of such a copy, which
+is whoever made it, can print it with a workflow of their own. The list
+names repositories that exist, so a copy made from the template, which
+runs template-init on its first push, runs it on GITHUB_TOKEN whoever made
+it, and, as sdlc-template's template-init.yml says, "a push, an issue or
+a label made with GITHUB_TOKEN starts no workflow, so without the App
+below the first Checks run comes with the first pull request, and the
+first Board run at the next six-hourly fallback or the first issue or
+pull request a person opens". Set the two on the copy, or add it to the
+list, after that first push; the workflows that use the App have them
+from their next run.
 
 ### Change the workflows in sdlc-template
 
@@ -230,6 +247,86 @@ when the commit already has the same verdict (a redelivery, a title edit),
 `refused: ...` for a bad signature, a missing length or a body that is no event, and
 `error: <type>: <message>` when a call to GitHub failed.
 
+## Field metrics
+
+Projects that use the App can share how the claim protocol fares in them,
+as coordbench measures it on CooperBench, without their code or text
+leaving them. A project's own workflow writes two files to its branch
+`metrics`: METRICS.json, counts, durations and rates over thirty days,
+and, when a contributor runs the judge on their own machine, JUDGE.json,
+how often each kind of communication failure was found.
+scripts/collect.py, run daily by .github/workflows/collect.yml, gathers
+them.
+
+What is read: those two files at the ref `metrics` of every repository
+the App is installed on, with a token that can only read, and no other
+path. A repository without the branch has nothing to collect. A fork is
+skipped unread: `gh repo fork` and the API copy every branch unless
+told otherwise, `metrics` included, and in a fork, where Actions are
+off until its owner turns them on, that branch is upstream's files
+frozen on the day of the fork, which the collector would store a second
+time under the fork's own hash. An archived repository is skipped too,
+its files as frozen. Both are counted in the run's summary line as
+forks and archived.
+
+What is stored: a METRICS.json only when its `"sharing"` is exactly
+`"on"`, and only then its JUDGE.json; of each, only the keys the format
+names (scripts/collect.py lists them), a count, a duration or a rate only
+when it is such a number, a time as the collector writes it again, and
+protocol_version only as a release with or without its short commit
+(`0.2.0 f530a66`). Two strings a project wrote can reach the dataset
+besides: JUDGE.json's model and prompt_variant, each kept only when it is
+one identifier of letters, digits, `.`, `_` and `-`, at most 64
+characters, with an optional suffix such as `[1m]`, which is what the
+template's judge writes there (`claude-opus-5-5`, `appF-7`). A shape is
+all the collector can check, and a login has the same one: a project
+that wrote its own name into those two, or into a number, would have it
+stored. The repository becomes the HMAC-SHA256 of its node id under a
+salt only the collector holds: its lines can be followed from day to
+day, but without the salt nobody can tell whose they are. The salt
+comes from the App's private key, which the collector has already:
+HMAC-SHA256 of the PEM under the fixed label `sdlc-metrics-salt`, the
+extract step of HKDF, so nothing of the key can be recovered from a hash
+and the same key always gives the same salt, as a path, as text or with
+its newlines escaped. It is the PEM's text that is hashed: a key
+re-encoded, say from the PKCS#1 form GitHub downloads to PKCS#8, counts
+as a new one. The secret SDLC_METRICS_SALT, when set and at least 32
+characters, is used instead; set and shorter, it is refused and nothing
+is collected. Rotating the App's private key, or setting or changing the
+override, gives every repository a new hash, and the lines before and
+after cannot be joined.
+Nothing GitHub tells the collector about a repository, its name, owner,
+installation or URL, is stored, and the log says counts only.
+
+Where: one JSON line per repository and day, `{"repo": <hash>,
+"collected_at": <UTC date>, ...}`, in data/metrics.jsonl and
+data/judge.jsonl on this repository's branch `data`, committed with the
+workflow's own GITHUB_TOKEN when a file changed; a second run on one day
+replaces that day's lines.
+
+The owner's steps, once. The App's id and key on this repository, unless
+they are there already, as for any repository whose workflows use the
+App:
+
+    gh variable set SDLC_APP_ID --repo OpenSpineConsortium/sdlc-app --body <App ID>
+    python3 scripts/register.py --print-key | gh secret set SDLC_APP_PRIVATE_KEY --repo OpenSpineConsortium/sdlc-app
+
+There is no salt to make: the key gives it. Until the variable and the
+secret are set, the workflow ends with a notice and collects nothing.
+Last, make the App public, so that other accounts can install it: "Make
+public" at
+https://github.com/organizations/OpenSpineConsortium/settings/apps/openspine-sdlc/advanced.
+To see a run without writing, `python3 scripts/collect.py --env-file
+.sdlc-app.env --dry-run` prints the counts and the lines it would write.
+
+A project turns sharing off with the file .github/sdlc-metrics holding
+`off` on its default branch, or with the repository variable
+SDLC_METRICS=off. Both are read by the project's own workflow, which then
+writes `{"schema": "sdlc-metrics/1", "sharing": "off"}` and nothing else,
+so the collector only ever sees `"sharing": "off"` and stores nothing of
+that project. The collector has run only against the fake GitHub in
+tests/test_collect.py so far (What was not verified live).
+
 ## Checks
 
     bash scripts/check.sh
@@ -249,20 +346,32 @@ key with `openssl genrsa` and verify each signature with
 
 ## What was not verified live
 
-No App is registered yet, so these have run only against the fakes in
-tests/: the manifest flow and its conversion call, the installation token
-exchange, the reads of a pull request and a claim file, and the creation of
-the check run. What did run for real: the JWT signed by openssl and
-verified with it; the image built from python:3.12-slim (openssl present)
-and run with an env file as register.py writes it, answering `ping` with
-`202` and `/health` with `200`, signing a JWT inside the container as its
-non-root user with no key file left behind, and stopping on `docker stop`
-in well under a second.
+The App is registered, as OpenSpine SDLC (slug openspine-sdlc, id
+5258276), through register.py's manifest flow, so that flow and its
+conversion call have run for real; GitHub refused the name `sdlc`, which
+the account @sdlc holds, hence the manifest's name and `--name`. As far
+as this repository records, the rest has run only against the fakes in
+tests/:
 
-Open until the first registration:
+- the installation token exchange, and the narrowed request the collector
+  makes, `{"permissions": {"contents": "read", "metadata": "read"}}`;
+- the reads of a pull request and a claim file, and the creation of the
+  check run;
+- the collector's calls: `/app/installations` with the App's JWT, and
+  on the narrowed token `/installation/repositories` and the contents API
+  at the ref `metrics`;
+- collect.yml's worktree of the branch `data`, started with no history
+  on its first run, and its push there with GITHUB_TOKEN.
 
-- GitHub App names are unique across GitHub, and `sdlc` may be taken; the
-  form then asks for another, and the slug in the env file follows it.
+What did run for real besides the registration: the JWT signed by
+openssl and verified with it; the image built from python:3.12-slim
+(openssl present) and run with an env file as register.py writes it,
+answering `ping` with `202` and `/health` with `200`, signing a JWT inside
+the container as its non-root user with no key file left behind, and
+stopping on `docker stop` in well under a second.
+
+Still open:
+
 - Whether the conversion returns a webhook secret for a manifest whose
   webhook is off; register.py makes one when it does not.
 - Whether the "new App" form shows the events while the webhook is off.

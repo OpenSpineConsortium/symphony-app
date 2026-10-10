@@ -155,13 +155,18 @@ def expiry_of(text):
 class InstallationTokens:
     """Installation tokens, one per installation, each kept until five
     minutes before it expires. A lock makes the cache safe for the
-    server's threads: two events for one installation ask GitHub once."""
+    server's threads: two events for one installation ask GitHub once.
 
-    def __init__(self, app_jwt, transport=urllib_transport, api=API, clock=time.time):
+    A token carries every permission the installation granted the App,
+    unless permissions names fewer: a caller that only reads, such as
+    scripts/collect.py, asks for a token that can do nothing else."""
+
+    def __init__(self, app_jwt, transport=urllib_transport, api=API, clock=time.time, permissions=None):
         self.app_jwt = app_jwt
         self.transport = transport
         self.api = api
         self.clock = clock
+        self.permissions = permissions
         self.cache = {}
         self.lock = threading.Lock()
 
@@ -170,8 +175,9 @@ class InstallationTokens:
             cached = self.cache.get(installation_id)
             if cached and self.clock() < cached[1] - TOKEN_MARGIN_SECONDS:
                 return cached[0]
+            body = {"permissions": self.permissions} if self.permissions else {}
             granted = Api(self.app_jwt, self.transport, self.api).post(
-                f"/app/installations/{int(installation_id)}/access_tokens", {})
+                f"/app/installations/{int(installation_id)}/access_tokens", body)
             self.cache[installation_id] = (granted["token"], expiry_of(granted["expires_at"]))
             return granted["token"]
 
