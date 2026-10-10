@@ -23,10 +23,16 @@ hand, and the App to running the copy. tests/test_handlers.py holds the
 copy to the behaviour the App relies on, so a sync that changes it fails
 there.
 
-The comparison with the library reads a clone of it beside this
+The record sits in this tree beside the copy, so a pull request that
+edits the copy can rewrite the file's line in VENDORED too, and verify
+passes; the comparison with the library is what fails it. It reads the
+clone SDLC_PROTOCOL names, which this repository's CI makes and names
+(.github/workflows/ci.yml), and fails there when the clone is missing or
+has no commit of the one VENDORED names, so a made-up commit does not
+pass as skipped. With SDLC_PROTOCOL unset it reads a clone beside this
 repository, as the clones sit on a developer's machine and in the
-library's downstream job, or the one SDLC_PROTOCOL names, and skips when
-there is none, as on this repository's own CI."""
+library's downstream job, and skips when there is none or when it is
+behind."""
 
 import hashlib
 import json
@@ -47,6 +53,14 @@ VENDOR = ROOT / "app" / "vendor"
 VENDORED = VENDOR / "VENDORED"
 PACKAGE = VENDOR / "sdlc_protocol"
 LIBRARY = Path(os.environ.get("SDLC_PROTOCOL") or ROOT.parent / "sdlc-protocol")
+# A clone named on purpose, as CI names its own, is one the comparison must
+# have; a clone that only happens to sit beside this one may be absent or
+# behind, and then the comparison is skipped.
+LIBRARY_NAMED = bool(os.environ.get("SDLC_PROTOCOL"))
+CI = ROOT / ".github" / "workflows" / "ci.yml"
+CLONE = 'git clone --quiet https://github.com/OpenSpineConsortium/sdlc-protocol "$RUNNER_TEMP/sdlc-protocol"'
+NAMED_IN_CI = "SDLC_PROTOCOL: ${{ runner.temp }}/sdlc-protocol"
+COMPARISON = "tests.test_vendor.TheCopyIsTheLibrarysTest.test_every_file_is_the_librarys_at_the_recorded_commit"
 THIS_REPOSITORY = "OpenSpineConsortium/sdlc-app"
 # What the App itself runs from the copy: the two modules app/handlers.py
 # imports and the check scripts/check.sh runs.
@@ -106,6 +120,40 @@ def library(*args):
     return subprocess.run(["git", "-C", str(LIBRARY), *args], capture_output=True)
 
 
+def why_the_library_cannot_compare(commit):
+    """What stands in the way of comparing the copy with the library at
+    commit, or "" when nothing does."""
+    if not (LIBRARY / ".git").exists():
+        return f"no clone of sdlc-protocol at {LIBRARY}"
+    if library("cat-file", "-e", f"{commit}^{{commit}}").returncode != 0:
+        return (f"the clone at {LIBRARY} does not have {commit}, the commit VENDORED names: "
+                "vendor a commit of sdlc-protocol's, never write one into the record by hand")
+    return ""
+
+
+def ci_steps():
+    """The steps of ci.yml's one job, each as its lines with the indent
+    stripped. The workflow is read as text, the standard library having no
+    YAML parser; each step starts with a dash six spaces in."""
+    steps = CI.read_text(encoding="utf-8").split("\n    steps:\n", 1)[1]
+    return [[line.strip() for line in step.splitlines()] for step in re.split(r"\n(?=      - )", steps)]
+
+
+def without_git_variables():
+    """The environment without git's own variables, which would point a
+    git the tests start at another repository than the one they name."""
+    return {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
+
+
+def compare_with(clone):
+    """The comparison with the library run on its own, in a process of its
+    own, with SDLC_PROTOCOL naming clone, as CI names its own; run from the
+    root, as scripts/check.sh runs the tests, so app imports."""
+    env = dict(without_git_variables(), SDLC_PROTOCOL=str(clone))
+    return subprocess.run([sys.executable, "-B", "-m", "unittest", COMPARISON],
+                          cwd=ROOT, env=env, capture_output=True, text=True)
+
+
 def module_file(function):
     return Path(sys.modules[function.__module__].__file__).resolve()
 
@@ -142,9 +190,10 @@ class TheRecordTest(unittest.TestCase):
 
 class TheVerificationTest(unittest.TestCase):
     """scripts/check.sh holds the copy to its record before the tests run,
-    so a pull request that edits app/vendor/sdlc_protocol by hand fails
-    the required check, offline; the library's own tests cover each
-    problem the check can name."""
+    so a pull request that edits app/vendor/sdlc_protocol and leaves the
+    record as it was fails the required check, offline; one that rewrites
+    the record to match fails the comparison with the library below. The
+    library's own tests cover each problem the check can name."""
 
     def test_check_sh_verifies_the_copy_before_the_tests(self):
         lines = [line.strip() for line in (ROOT / "scripts" / "check.sh").read_text(encoding="ascii").splitlines()]
@@ -173,10 +222,11 @@ class TheVerificationTest(unittest.TestCase):
 class TheCopyIsTheLibrarysTest(unittest.TestCase):
     def recorded_commit_in_the_library(self):
         _, commit = recorded_release()
-        if not (LIBRARY / ".git").exists():
-            self.skipTest(f"no clone of sdlc-protocol at {LIBRARY}")
-        if library("cat-file", "-e", f"{commit}^{{commit}}").returncode != 0:
-            self.skipTest(f"the clone at {LIBRARY} does not have {commit}")
+        missing = why_the_library_cannot_compare(commit)
+        if missing and LIBRARY_NAMED:
+            self.fail(f"{missing} (SDLC_PROTOCOL names it)")
+        if missing:
+            self.skipTest(missing)
         return commit
 
     def test_every_file_is_the_librarys_at_the_recorded_commit(self):
@@ -197,6 +247,36 @@ class TheCopyIsTheLibrarysTest(unittest.TestCase):
         self.assertEqual(len(ours), 1)
         self.assertEqual(ours[0]["vendor_dir"], "app/vendor")
         self.assertEqual(files_the_library_names(ecosystem, ours[0], commit), recorded_paths())
+
+
+class TheComparisonOnCITest(unittest.TestCase):
+    """CI clones sdlc-protocol and names the clone to the checks, so the
+    comparison with the library runs on every pull request; where the clone
+    it names is missing, or has no commit of the one VENDORED names, the
+    comparison fails rather than skips."""
+
+    def test_ci_clones_the_library_and_names_the_clone_to_the_checks(self):
+        steps = ci_steps()
+        clone = next(number for number, step in enumerate(steps) if f"run: {CLONE}" in step)
+        checks = next(number for number, step in enumerate(steps) if "run: bash scripts/check.sh" in step)
+        self.assertLess(clone, checks)
+        self.assertIn(NAMED_IN_CI, steps[checks])
+
+    def test_a_named_clone_that_is_not_there_fails_the_comparison(self):
+        with tempfile.TemporaryDirectory() as folder:
+            done = compare_with(Path(folder) / "sdlc-protocol")
+        self.assertEqual(done.returncode, 1, done.stderr)
+        self.assertIn("no clone of sdlc-protocol at", done.stderr)
+        self.assertNotIn("skipped", done.stderr)
+
+    def test_a_named_clone_without_the_recorded_commit_fails_the_comparison(self):
+        with tempfile.TemporaryDirectory() as folder:
+            subprocess.run(["git", "init", "--quiet", folder], check=True, capture_output=True,
+                           env=without_git_variables())
+            done = compare_with(folder)
+        self.assertEqual(done.returncode, 1, done.stderr)
+        self.assertIn("the commit VENDORED names", done.stderr)
+        self.assertNotIn("skipped", done.stderr)
 
 
 class TheAppRunsTheCopyTest(unittest.TestCase):

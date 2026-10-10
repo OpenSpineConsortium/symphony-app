@@ -18,6 +18,9 @@ fi
 # app/vendor/VENDORED records. A change to it is made in
 # OpenSpineConsortium/sdlc-protocol and arrives here by that repository's
 # sync pull request, so a hand edit fails here, offline, before any test.
+# One that rewrote VENDORED to match passes this line and fails
+# tests/test_vendor.py, which compares the copy with the library itself in
+# the clone SDLC_PROTOCOL names, which CI makes (.github/workflows/ci.yml).
 "$PYTHON" app/vendor/sdlc_protocol/vendoring.py verify app/vendor
 
 "$PYTHON" -m unittest discover -s tests -t . -v

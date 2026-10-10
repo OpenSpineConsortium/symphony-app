@@ -239,8 +239,11 @@ copy's own `vendoring.py verify`, so a hand edit fails before any test,
 then runs the tests under tests/ with python3.12 (set `PYTHON` for
 another), including the text rules every file keeps (ASCII, LF, a newline
 at the end) and tests/test_vendor.py, which holds the record to a release
-and, where a clone of sdlc-protocol sits beside this repository, the copy
-to the library's files at the recorded commit. The JWT tests make an RSA
+and the copy to the library's files at the recorded commit, in the clone
+of sdlc-protocol that SDLC_PROTOCOL names or else one beside this
+repository. CI clones the library and names the clone, so there an edit
+that rewrote VENDORED to match fails too, as does a commit the library
+does not have. The JWT tests make an RSA
 key with `openssl genrsa` and verify each signature with
 `openssl dgst -verify`. CI runs the same script as the job `check`.
 

@@ -23,7 +23,12 @@ pull request, starts with
     python3.12 app/vendor/sdlc_protocol/vendoring.py verify app/vendor
 
 which fails on a file that differs from VENDORED, a file missing or a
-file added. A change to the protocol is made in sdlc-protocol, by pull
+file added. VENDORED sits in the same tree, so a pull request that edits
+the copy could rewrite it to match; CI therefore clones sdlc-protocol,
+which is public and needs no token, and names the clone in SDLC_PROTOCOL,
+and tests/test_vendor.py compares every file of the copy with the
+library's at the commit VENDORED names, failing when they differ or when
+the clone has no such commit. A change to the protocol is made in sdlc-protocol, by pull
 request there, whose job `downstream (sdlc-app)` already runs this
 repository's check on it, with the App's token where that repository has
 it. Once it merges, that repository's sync workflow vendors it into this
