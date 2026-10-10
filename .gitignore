@@ -1,0 +1,7 @@
+# The App's credentials, written by scripts/register.py: never committed.
+.sdlc-app.env
+*.pem
+
+# Python caches
+__pycache__/
+*.pyc

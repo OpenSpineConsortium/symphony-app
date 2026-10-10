@@ -1,0 +1,25 @@
+{
+  "name": "sdlc",
+  "url": "https://github.com/OpenSpineConsortium/sdlc-template",
+  "description": "The claim protocol of sdlc-template: tokens for its workflows, and the sdlc/protocol check on every pull request.",
+  "hook_attributes": {
+    "url": "https://example.invalid/webhook",
+    "active": false
+  },
+  "redirect_url": "http://localhost:3010/registered",
+  "public": false,
+  "default_permissions": {
+    "contents": "write",
+    "issues": "write",
+    "pull_requests": "write",
+    "checks": "write",
+    "metadata": "read"
+  },
+  "default_events": [
+    "issues",
+    "issue_comment",
+    "pull_request",
+    "push",
+    "check_suite"
+  ]
+}

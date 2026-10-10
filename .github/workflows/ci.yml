@@ -1,0 +1,34 @@
+name: Checks
+
+# The repository's checks on every pull request and every push to the
+# default branch: bash scripts/check.sh, the unit tests on Python 3.12,
+# the version the Docker image runs. The job is named "check" so a ruleset
+# can require it by that name. setup-python pins the interpreter, so the
+# runner image moving to a newer Python changes nothing here; openssl,
+# which the JWT tests sign with, is on the runner already. A newer push to
+# the same branch cancels the run still going.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Run the checks
+        run: bash scripts/check.sh
