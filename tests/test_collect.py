@@ -3,10 +3,13 @@ whose repositories hold, on the branch metrics, every case the collector
 must answer: a project that shares its metrics and its judge, one that
 switched sharing off, one with no branch metrics, one whose files carry
 keys and text the format does not allow, one with the wrong schema, and one
-whose judge has the wrong schema. Besides what the dataset holds, the
-tests hold the collector to what it must never do: read any path but the
-two files, or write a repository's name, owner, node id, installation or
-URL anywhere."""
+whose judge has the wrong schema; and, marked on the listing, a fork and
+an archived repository, which are skipped unread. Besides what the dataset
+holds, the tests hold the collector to what it must never do: read any
+path but the two files, or write a repository's name, owner, node id,
+installation or URL anywhere. The salt the hashes take comes from the
+App's key, made by openssl for the run, unless SDLC_METRICS_SALT is set;
+the tests of the collection itself pass a salt of their own."""
 
 import base64
 import contextlib
@@ -118,12 +121,15 @@ def files():
     }
 
 
-def repository(full_name, node_id, number):
-    """A repository as GET /installation/repositories lists it, names, URLs and all."""
+def repository(full_name, node_id, number, **marks):
+    """A repository as GET /installation/repositories lists it, names, URLs
+    and all, "fork" and "archived" false as GitHub lists them unless marks
+    says otherwise."""
     owner, name = full_name.split("/")
     return {"id": 900 + number, "node_id": node_id, "name": name, "full_name": full_name, "private": True,
+            "fork": False, "archived": False,
             "owner": {"login": owner, "html_url": f"https://github.com/{owner}"},
-            "html_url": f"https://github.com/{full_name}", "url": f"{API}/repos/{full_name}"}
+            "html_url": f"https://github.com/{full_name}", "url": f"{API}/repos/{full_name}", **marks}
 
 
 def installation(number, login, suspended=False):
@@ -147,12 +153,15 @@ def raw_file(data):
 class World:
     """GitHub as the App sees it: installations listed over two pages, each
     with its token, each token seeing only its own repositories (Bob's over
-    two pages), and the files above at the ref metrics only."""
+    two pages), and the files above at the ref metrics only. marked gives
+    the listing's fields of a repository that differ from repository()'s,
+    such as a fork's "fork": True."""
 
-    def __init__(self, held=None, installations=None, failing=()):
+    def __init__(self, held=None, installations=None, failing=(), marked=None):
         self.files = files() if held is None else dict(held)
         self.installations = installations or [installation(ALICE, "alice-co"), installation(BOB, "bob-labs")]
         self.failing = set(failing)
+        self.marked = marked or {}
         self.owners = {full_name: number for number, listed in REPOSITORIES.items() for full_name, _ in listed}
         routes = {("GET", "/app/installations"): self.list_installations,
                   ("GET", "/installation/repositories"): self.list_repositories}
@@ -180,7 +189,7 @@ class World:
 
     def list_repositories(self, call):
         number = self.token_owner(call)
-        listed = [repository(full_name, node_id, index)
+        listed = [repository(full_name, node_id, index, **self.marked.get(full_name, {}))
                   for index, (full_name, node_id) in enumerate(REPOSITORIES[number])]
         if number != BOB:
             return json_response({"total_count": len(listed), "repositories": listed})
@@ -321,6 +330,41 @@ class FailureTest(unittest.TestCase):
         self.assertEqual(collected.tally["suspended"], 1)
         self.assertEqual(collected.tally["installations"], 1)
 
+    def test_a_fork_and_an_archived_repository_are_skipped_unread_and_counted(self):
+        # A fork's branch metrics is upstream's files frozen on the day of
+        # the fork; stored, they would be one project's numbers twice.
+        world = World(marked={ORCHARD[0]: {"fork": True}, NOISY[0]: {"archived": True}})
+        collected = run(world)
+        for full_name, node_id in (ORCHARD, NOISY):
+            with self.subTest(repository=full_name):
+                self.assertNotIn(hash_of(node_id), by_repo(collected.metrics))
+                self.assertNotIn(hash_of(node_id), by_repo(collected.judges))
+                self.assertNotIn(f"/repos/{full_name}/contents/METRICS.json", world.transport.paths())
+                self.assertNotIn(f"/repos/{full_name}/contents/JUDGE.json", world.transport.paths())
+        self.assertIn(hash_of(LANTERN[1]), by_repo(collected.metrics), "the rest is collected")
+        self.assertEqual(collected.tally["repositories"], 6, "a skipped repository is still one listed")
+        self.assertEqual((collected.tally["forks"], collected.tally["archived"]), (1, 1))
+        self.assertEqual(collect.summary(collected.tally), "2 installations, 6 repositories, 1 shared metrics, "
+                                                           "0 judges; 1 not shared, 2 refused, 1 fork, 1 archived")
+
+    def test_forks_are_counted_in_the_plural_and_an_archived_fork_once(self):
+        world = World(marked={ORCHARD[0]: {"fork": True}, LANTERN[0]: {"fork": True, "archived": True}})
+        collected = run(world)
+        self.assertEqual((collected.tally["forks"], collected.tally["archived"]), (2, 0))
+        self.assertTrue(collect.summary(collected.tally).endswith("; 1 not shared, 1 refused, 2 forks"))
+
+    def test_only_githubs_own_true_skips_a_repository(self):
+        # GitHub lists both fields as booleans; a field that is missing or
+        # holds anything else does not skip a repository that may share.
+        for marks in ({"fork": "true"}, {"archived": 1}, {"fork": None}, {"fork": False, "archived": False}):
+            with self.subTest(marks=marks):
+                collected = run(World(marked={ORCHARD[0]: marks}))
+                self.assertIn(hash_of(ORCHARD[1]), by_repo(collected.metrics))
+                self.assertEqual((collected.tally["forks"], collected.tally["archived"]), (0, 0))
+        unmarked = repository(*ORCHARD, 0)
+        del unmarked["fork"], unmarked["archived"]
+        self.assertIsNone(collect.left_out(unmarked))
+
     def test_a_file_that_is_not_one_is_refused(self):
         for document in ([metrics()], "sdlc-metrics/1", 5):
             with self.subTest(document=document):
@@ -439,6 +483,82 @@ class ValuesTest(unittest.TestCase):
         self.assertNotEqual(hashed, collect.repository_hash(SALT + "x", ORCHARD[1]))
 
 
+class SaltTest(unittest.TestCase):
+    """The salt the App's key gives, and the override SDLC_METRICS_SALT.
+    Two keys made by openssl for the run; no real key is anywhere here."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.key = OpensslKey()
+        cls.other = OpensslKey()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.key.close()
+        cls.other.close()
+
+    def environment(self, **more):
+        return {"SDLC_APP_ID": "123456", "SDLC_APP_PRIVATE_KEY": self.key.text(), **more}
+
+    def test_the_salt_is_hmac_sha256_of_the_pem_under_the_label_and_the_same_every_time(self):
+        key = collect.AppKey(text=self.key.text())
+        salt = collect.derived_salt(key)
+        self.assertEqual(salt, hmac.new(b"sdlc-metrics-salt", self.key.text().encode("ascii"),
+                                        hashlib.sha256).hexdigest())
+        self.assertRegex(salt, r"^[0-9a-f]{64}$")
+        self.assertGreaterEqual(len(salt), collect.SALT_MINIMUM, "the derived salt stands where an override must")
+        self.assertEqual(collect.derived_salt(key), salt)
+        self.assertEqual(collect.derived_salt(collect.AppKey(text=self.key.text())), salt)
+
+    def test_every_form_of_one_key_gives_the_same_salt(self):
+        # The key arrives as a path, as text with real newlines, as the one
+        # line with escaped newlines an env file holds, or pasted with the
+        # \r\n a Windows editor leaves.
+        text = self.key.text()
+        salt = collect.derived_salt(collect.AppKey(text=text))
+        self.assertEqual(collect.derived_salt(collect.AppKey(path=str(self.key.private))), salt)
+        self.assertEqual(collect.derived_salt(collect.AppKey(text=text.strip().replace("\n", "\\n"))), salt)
+        self.assertEqual(collect.derived_salt(collect.AppKey(text="\n" + text + "\n")), salt)
+        self.assertEqual(collect.derived_salt(collect.AppKey(text=text.replace("\n", "\r\n"))), salt)
+
+    def test_two_keys_give_two_salts(self):
+        self.assertNotEqual(collect.derived_salt(collect.AppKey(text=self.key.text())),
+                            collect.derived_salt(collect.AppKey(text=self.other.text())))
+
+    def test_the_settings_read_without_the_variable_and_derive_the_salt(self):
+        for environ in (self.environment(), self.environment(SDLC_METRICS_SALT=""),
+                        self.environment(SDLC_METRICS_SALT="  \n")):
+            with self.subTest(given=environ.get("SDLC_METRICS_SALT")):
+                settings = collect.Settings.from_environment(environ)
+                self.assertEqual(settings.salt, collect.derived_salt(collect.AppKey(text=self.key.text())))
+                self.assertEqual(settings.app_id, "123456")
+                self.assertNotIn(settings.salt, repr(settings), "the salt stays out of repr, like the key")
+                self.assertNotIn("BEGIN", repr(settings))
+
+    def test_the_override_wins(self):
+        settings = collect.Settings.from_environment(self.environment(SDLC_METRICS_SALT=f" {SALT}\n"))
+        self.assertEqual(settings.salt, SALT)
+        self.assertEqual(collect.Settings.from_environment(self.environment(SDLC_METRICS_SALT="y" * 32)).salt,
+                         "y" * 32, "an override of exactly the minimum stands")
+
+    def test_a_short_override_is_refused_and_never_shown(self):
+        for short in ("a-short-salt", "x" * (collect.SALT_MINIMUM - 1)):
+            with self.subTest(short=short):
+                with self.assertRaises(SystemExit) as refused:
+                    collect.Settings.from_environment(self.environment(SDLC_METRICS_SALT=short))
+                message = str(refused.exception.code)
+                self.assertIn("SDLC_METRICS_SALT is shorter than 32 characters", message)
+                self.assertNotIn(short, message)
+
+    def test_a_key_that_cannot_be_read_is_named_and_not_shown(self):
+        missing = str(Path(self.key.directory.name) / "no-such-key.pem")
+        with self.assertRaises(SystemExit) as refused:
+            collect.Settings.from_environment({"SDLC_APP_ID": "123456", "SDLC_APP_PRIVATE_KEY_PATH": missing})
+        message = str(refused.exception.code)
+        self.assertIn("the App's private key could not be read", message)
+        self.assertNotIn(missing, message)
+
+
 class MainTest(unittest.TestCase):
     """The script as the workflow runs it: the App's JWT signed by openssl
     from the key in the environment, the files written under --out."""
@@ -465,8 +585,8 @@ class MainTest(unittest.TestCase):
     def main(self, world, *flags, day=TODAY, environ=None):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            status = collect.main(["--out", str(self.out), *flags], environ or self.environment(),
-                                  world.transport, today=day)
+            status = collect.main(["--out", str(self.out), *flags],
+                                  self.environment() if environ is None else environ, world.transport, today=day)
         return status, out.getvalue()
 
     def test_the_lines_are_written_and_stdout_says_counts_only(self):
@@ -541,26 +661,40 @@ class MainTest(unittest.TestCase):
         self.assertEqual(lines[5], "judge.jsonl: 2 lines would be written, 0 replacing today's")
         self.assertEqual(len(lines), 8)
 
-    def test_without_the_salt_nothing_is_asked_or_written(self):
-        for salt, reason in ((None, "SDLC_METRICS_SALT is not set"), ("", "SDLC_METRICS_SALT is not set"),
-                             ("a-short-salt", "shorter than 32 characters")):
+    def test_without_the_variable_the_lines_are_under_the_salt_the_key_gives(self):
+        derived = collect.derived_salt(collect.AppKey(text=self.key.text()))
+        for salt in (None, ""):
             with self.subTest(salt=salt):
-                world = World()
-                with self.assertRaises(SystemExit) as refused:
-                    self.main(world, environ=self.environment(salt))
-                self.assertIn(reason, str(refused.exception.code))
-                if salt:
-                    self.assertNotIn(salt, str(refused.exception.code))
-                self.assertEqual(world.transport.calls, [])
-                self.assertFalse(self.out.exists())
+                status, stdout = self.main(World(), environ=self.environment(salt))
+                self.assertEqual(status, 0)
+                repos = {line["repo"] for line in read_lines(self.out / "metrics.jsonl")}
+                self.assertEqual(repos, {hash_of(node_id, derived) for _, node_id in (ORCHARD, NOISY, LANTERN)})
+                self.assertNotIn(hash_of(ORCHARD[1]), repos, "the override, unset, plays no part")
+                written = "".join(path.read_text(encoding="ascii") for path in self.out.iterdir())
+                for secret in (derived, "PRIVATE KEY"):
+                    self.assertNotIn(secret, stdout)
+                    self.assertNotIn(secret, written)
 
-    def test_without_the_app_id_or_key_nothing_is_asked(self):
+    def test_a_short_override_stops_the_run_before_anything_is_asked(self):
         world = World()
         with self.assertRaises(SystemExit) as refused:
-            self.main(world, environ={"SDLC_METRICS_SALT": SALT})
-        self.assertIn("SDLC_APP_ID is not set", str(refused.exception.code))
-        self.assertIn("SDLC_APP_PRIVATE_KEY", str(refused.exception.code))
+            self.main(world, environ=self.environment("a-short-salt"))
+        self.assertIn("shorter than 32 characters", str(refused.exception.code))
+        self.assertNotIn("a-short-salt", str(refused.exception.code))
         self.assertEqual(world.transport.calls, [])
+        self.assertFalse(self.out.exists())
+
+    def test_without_the_app_id_or_key_nothing_is_asked(self):
+        for environ in ({"SDLC_METRICS_SALT": SALT}, {}):
+            with self.subTest(environ=environ):
+                world = World()
+                with self.assertRaises(SystemExit) as refused:
+                    self.main(world, environ=environ)
+                self.assertIn("SDLC_APP_ID is not set", str(refused.exception.code))
+                self.assertIn("SDLC_APP_PRIVATE_KEY", str(refused.exception.code))
+                self.assertNotIn("could not be read", str(refused.exception.code),
+                                 "no key, so nothing to derive from")
+                self.assertEqual(world.transport.calls, [])
 
     def test_an_app_github_refuses_stops_the_run_with_its_status(self):
         world = World()

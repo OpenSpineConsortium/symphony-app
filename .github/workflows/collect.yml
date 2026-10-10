@@ -5,9 +5,12 @@ name: Collect field metrics
 # reads METRICS.json and JUDGE.json at the ref metrics of each repository
 # an installation lets it see, and nothing else, on a token that can only
 # read, and keeps a project's files only when its METRICS.json says
-# "sharing": "on". What it keeps is aggregates under a salted hash of the
-# repository's node id; it never writes or logs a repository's name, owner
-# or URL, and its log lines are counts (README.md, Field metrics).
+# "sharing": "on". A fork is skipped unread, since its branch metrics is
+# a frozen copy of its upstream's and would put one project in the
+# dataset twice; an archived repository is skipped too. What it keeps is
+# aggregates under a salted hash of the repository's node id; it never
+# writes or logs a repository's name, owner or URL, and its log lines are
+# counts (README.md, Field metrics).
 #
 # The dataset lives on this repository's branch data, apart from main, so
 # a day's collection is a commit of data/metrics.jsonl and data/judge.jsonl
@@ -16,13 +19,15 @@ name: Collect field metrics
 # this run's GITHUB_TOKEN, whose push starts no workflow, and only when a
 # file changed: the script replaces a repository's line of the same day
 # instead of adding one, so a second run on a day with nothing new commits
-# nothing. The App's id, its key and the salt are the owner's to set
-# (README.md, Field metrics); until all three are, as on a fork, the run
-# says so in a notice and ends green, so the schedule never turns red
-# before the setup. The secrets reach the script through env: alone, and
-# the salt is never printed. The minute is off the hour, where fewer
-# scheduled runs queue; one run at a time, so two never push to data at
-# once.
+# nothing. The App's id and its key are the owner's to set (README.md,
+# Field metrics); until both are, as on a fork, the run says so in a
+# notice and ends green, so the schedule never turns red before the
+# setup. The salt the hashes take is derived from the key, so there is no
+# third setting; the secret SDLC_METRICS_SALT, when the owner sets one,
+# is used instead. The secrets reach the script through env: alone, and
+# the salt, derived or set, is never printed. The minute is off the hour,
+# where fewer scheduled runs queue; one run at a time, so two never push
+# to data at once.
 
 on:
   schedule:
@@ -40,15 +45,14 @@ jobs:
   collect:
     runs-on: ubuntu-latest
     steps:
-      - name: Stop until the App and the salt are set
+      - name: Stop until the App is set
         id: gate
         env:
           SDLC_APP_ID: ${{ vars.SDLC_APP_ID }}
           SDLC_APP_PRIVATE_KEY: ${{ secrets.SDLC_APP_PRIVATE_KEY }}
-          SDLC_METRICS_SALT: ${{ secrets.SDLC_METRICS_SALT }}
         run: |
-          if [ -z "$SDLC_APP_ID" ] || [ -z "$SDLC_APP_PRIVATE_KEY" ] || [ -z "$SDLC_METRICS_SALT" ]; then
-            echo "::notice::the variable SDLC_APP_ID and the secrets SDLC_APP_PRIVATE_KEY and SDLC_METRICS_SALT are not all set on this repository; nothing is collected (README.md, Field metrics)"
+          if [ -z "$SDLC_APP_ID" ] || [ -z "$SDLC_APP_PRIVATE_KEY" ]; then
+            echo "::notice::the variable SDLC_APP_ID and the secret SDLC_APP_PRIVATE_KEY are not both set on this repository; nothing is collected (README.md, Field metrics)"
             echo "ready=false" >> "$GITHUB_OUTPUT"
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
@@ -81,6 +85,8 @@ jobs:
         env:
           SDLC_APP_ID: ${{ vars.SDLC_APP_ID }}
           SDLC_APP_PRIVATE_KEY: ${{ secrets.SDLC_APP_PRIVATE_KEY }}
+          # Empty where the owner set no override, and the script then
+          # derives the salt from the key; set, it is the salt.
           SDLC_METRICS_SALT: ${{ secrets.SDLC_METRICS_SALT }}
         run: python3 scripts/collect.py --out "$RUNNER_TEMP/data/data"
 

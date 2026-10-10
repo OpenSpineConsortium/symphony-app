@@ -18,8 +18,9 @@ protocol_check.py and claims.py, into app/vendor, for the check run
 sdlc-protocol already runs this repository's check on its change (the job
 `downstream (sdlc-app)`, which reads this private repository with the
 App's token), and once it merges, that repository's sync workflow opens
-the pull request `sdlc-protocol/sync` here. The owner merges it, since
-GitHub Free offers auto-merge only on public repositories.
+the pull request `sdlc-protocol/sync` here. The owner merges it: the
+sync arms auto-merge only where ecosystem.json says so, and for this
+repository it says `"auto_merge": false`.
 app/vendor/README.md says the rest.
 
 ## What the App does
@@ -120,10 +121,24 @@ For each repository whose workflows use the App:
 or, with a key downloaded by hand,
 `gh secret set SDLC_APP_PRIVATE_KEY --repo OWNER/NAME < path/to/key.pem`.
 `--print-key` writes the key only into a pipe and refuses a terminal, so it
-never lands on screen. A copy made from the template runs template-init on
-its first push, before anyone can set a repository variable; for copies to
-have the App from that first run, set both at the organization instead,
-with `--org <org> --visibility all` in place of `--repo OWNER/NAME`.
+never lands on screen.
+
+The two can be set once at the organization for several repositories,
+with `--org <org> --visibility selected --repos NAME,NAME` in place of
+`--repo OWNER/NAME`, but only for selected repositories that the owner
+alone writes to, never `--visibility all` or `private`. A secret visible
+to all repositories, or to all private ones, reaches every repository
+made in the organization afterwards, and the admin of such a copy, which
+is whoever made it, can print it with a workflow of their own. The list
+names repositories that exist, so a copy made from the template, which
+runs template-init on its first push, runs it on GITHUB_TOKEN whoever made
+it, and, as sdlc-template's template-init.yml says, "a push, an issue or
+a label made with GITHUB_TOKEN starts no workflow, so without the App
+below the first Checks run comes with the first pull request, and the
+first Board run at the next six-hourly fallback or the first issue or
+pull request a person opens". Set the two on the copy, or add it to the
+list, after that first push; the workflows that use the App have them
+from their next run.
 
 ### Change the workflows in sdlc-template
 
@@ -245,7 +260,14 @@ them.
 
 What is read: those two files at the ref `metrics` of every repository
 the App is installed on, with a token that can only read, and no other
-path. A repository without the branch has nothing to collect.
+path. A repository without the branch has nothing to collect. A fork is
+skipped unread: `gh repo fork` and the API copy every branch unless
+told otherwise, `metrics` included, and in a fork, where Actions are
+off until its owner turns them on, that branch is upstream's files
+frozen on the day of the fork, which the collector would store a second
+time under the fork's own hash. An archived repository is skipped too,
+its files as frozen. Both are counted in the run's summary line as
+forks and archived.
 
 What is stored: a METRICS.json only when its `"sharing"` is exactly
 `"on"`, and only then its JUDGE.json; of each, only the keys the format
@@ -259,11 +281,22 @@ characters, with an optional suffix such as `[1m]`, which is what the
 template's judge writes there (`claude-opus-5-5`, `appF-7`). A shape is
 all the collector can check, and a login has the same one: a project
 that wrote its own name into those two, or into a number, would have it
-stored. The repository becomes the HMAC-SHA256 of its node id under the
-secret SDLC_METRICS_SALT: its lines can be followed from day to day, but
-without the salt nobody can tell whose they are. Nothing GitHub tells
-the collector about a repository, its name, owner, installation or URL,
-is stored, and the log says counts only.
+stored. The repository becomes the HMAC-SHA256 of its node id under a
+salt only the collector holds: its lines can be followed from day to
+day, but without the salt nobody can tell whose they are. The salt
+comes from the App's private key, which the collector has already:
+HMAC-SHA256 of the PEM under the fixed label `sdlc-metrics-salt`, the
+extract step of HKDF, so nothing of the key can be recovered from a hash
+and the same key always gives the same salt, as a path, as text or with
+its newlines escaped. It is the PEM's text that is hashed: a key
+re-encoded, say from the PKCS#1 form GitHub downloads to PKCS#8, counts
+as a new one. The secret SDLC_METRICS_SALT, when set and at least 32
+characters, is used instead; set and shorter, it is refused and nothing
+is collected. Rotating the App's private key, or setting or changing the
+override, gives every repository a new hash, and the lines before and
+after cannot be joined.
+Nothing GitHub tells the collector about a repository, its name, owner,
+installation or URL, is stored, and the log says counts only.
 
 Where: one JSON line per repository and day, `{"repo": <hash>,
 "collected_at": <UTC date>, ...}`, in data/metrics.jsonl and
@@ -271,26 +304,20 @@ data/judge.jsonl on this repository's branch `data`, committed with the
 workflow's own GITHUB_TOKEN when a file changed; a second run on one day
 replaces that day's lines.
 
-The owner's steps, once. The salt, a long random value that goes from
-the generator into the secret without being shown:
-
-    python3 -c "import secrets; print(secrets.token_hex(32))" | gh secret set SDLC_METRICS_SALT --repo OpenSpineConsortium/sdlc-app
-
-Keep it as it is: a new salt gives every repository a new hash, and the
-days before and after no longer join up. Then the App's id and key on
-this repository, unless they are there already, as for any repository
-whose workflows use the App:
+The owner's steps, once. The App's id and key on this repository, unless
+they are there already, as for any repository whose workflows use the
+App:
 
     gh variable set SDLC_APP_ID --repo OpenSpineConsortium/sdlc-app --body <App ID>
     python3 scripts/register.py --print-key | gh secret set SDLC_APP_PRIVATE_KEY --repo OpenSpineConsortium/sdlc-app
 
-Until the variable and both secrets are set, the workflow ends with a
-notice and collects nothing. Last, make the App public, so that other
-accounts can install it: "Make public" at
+There is no salt to make: the key gives it. Until the variable and the
+secret are set, the workflow ends with a notice and collects nothing.
+Last, make the App public, so that other accounts can install it: "Make
+public" at
 https://github.com/organizations/OpenSpineConsortium/settings/apps/openspine-sdlc/advanced.
 To see a run without writing, `python3 scripts/collect.py --env-file
-.sdlc-app.env --dry-run`, with SDLC_METRICS_SALT in the environment,
-prints the counts and the lines it would write.
+.sdlc-app.env --dry-run` prints the counts and the lines it would write.
 
 A project turns sharing off with the file .github/sdlc-metrics holding
 `off` on its default branch, or with the repository variable

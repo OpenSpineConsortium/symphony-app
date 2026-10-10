@@ -14,22 +14,35 @@ With the App's JWT this lists the App's installations, mints a token for
 each that can read contents and nothing else, lists the repositories it
 can see, and asks each for those two paths at the ref `metrics`, and for
 no other path: a 404 there means the project has nothing to collect. A
-METRICS.json is kept only when its "sharing" is exactly "on"; when it is
-anything else the project's JUDGE.json is not even read. What is kept is
-cut to the keys the format names, and a value where it says a count, a
-duration or a rate is kept only when it is such a number, so no text a
-project writes, whether by mistake or on purpose, reaches the dataset.
-The two strings it allows besides numbers, the model's name and the
-prompt variant, must look like identifiers, and a time is rewritten in
-one form of the collector's own.
+fork is skipped unread, since its branch `metrics` is a copy of its
+upstream's, frozen on the day of the fork, which would put one project's
+numbers in the dataset twice; an archived repository is skipped too, its
+files frozen as well. A METRICS.json is kept only when its "sharing" is
+exactly "on"; when it is anything else the project's JUDGE.json is not
+even read. What is kept is cut to the keys the format names, and a value
+where it says a count, a duration or a rate is kept only when it is such
+a number, so no text a project writes, whether by mistake or on purpose,
+reaches the dataset. The two strings it allows besides numbers, the
+model's name and the prompt variant, must look like identifiers, and a
+time is rewritten in one form of the collector's own.
 
 The repository is never named in the dataset. It becomes the HMAC-SHA256
-of its node id under SDLC_METRICS_SALT, a secret only the collector
-holds, so a line can be followed from day to day but not traced back to a
-repository by anyone without the salt. No repository name, owner, login,
-installation id or URL is written to the dataset or to the log, whose
-lines say counts only; an error on one repository is counted, not shown,
-since GitHub's message would carry the repository's path.
+of its node id under a salt only the collector holds, so a line can be
+followed from day to day but not traced back to a repository by anyone
+without the salt. The salt is derived from the App's private key, the
+secret the collector has already: HMAC-SHA256 of the PEM under the fixed
+label "sdlc-metrics-salt", which is the extract step of HKDF (RFC 5869),
+so nothing of the key can be recovered from a hash and the same key
+always gives the same salt, in whichever form the key arrives. It is the
+PEM's text that is hashed, so a key re-encoded, say from the PKCS#1 form
+GitHub downloads to PKCS#8, counts as a new one. The owner sets no second
+secret for it; SDLC_METRICS_SALT, when set, is used instead. Rotating the
+key, or setting or changing the override, gives every repository a new
+hash, and the lines before and after cannot be joined. No repository
+name, owner, login, installation id or URL is written to the dataset or
+to the log, whose lines say counts only; an error on one repository is
+counted, not shown, since GitHub's message would carry the repository's
+path.
 
 Each kept file becomes one JSON line, {"repo": <hash>, "collected_at":
 <the UTC date>, ...the file as kept...}, in metrics.jsonl or judge.jsonl
@@ -37,7 +50,7 @@ under --out. A repository has one line a day: a second run on the same
 day replaces that line instead of adding one, so the file changes only
 when what the projects share did.
 
-    SDLC_APP_ID=... SDLC_APP_PRIVATE_KEY=... SDLC_METRICS_SALT=... python3 scripts/collect.py --out data
+    SDLC_APP_ID=... SDLC_APP_PRIVATE_KEY=... python3 scripts/collect.py --out data
     python3 scripts/collect.py --env-file .sdlc-app.env --dry-run
 
 The workflow .github/workflows/collect.yml runs it once a day and commits
@@ -66,11 +79,14 @@ sys.path.insert(0, str(ROOT))
 
 from app import envfile
 from app.github import API, Api, Client, GitHubError, InstallationTokens, urllib_transport
-from app.jwt import APP_ID_VARIABLE, AppKey, SigningError, app_jwt
+from app.jwt import APP_ID_VARIABLE, AppKey, SigningError, app_jwt, pem_text
 
 SALT_VARIABLE = "SDLC_METRICS_SALT"
-# Below this the hashes could be found by trying salts; the README makes
-# one of 64 hex digits.
+# The label the salt is derived from the App's key under. Changing it
+# would change every hash, like rotating the key.
+SALT_LABEL = b"sdlc-metrics-salt"
+# Below this an override could be found by trying salts; the derived salt
+# is 64 hex digits.
 SALT_MINIMUM = 32
 METRICS_REF = "metrics"
 METRICS_FILE = "METRICS.json"
@@ -270,6 +286,26 @@ def read_document(client, full_name, name):
         raise Dropped("refused") from None
 
 
+def pem_bytes(key):
+    """The App's key as one PEM, whether it came as a path or as text
+    with real, escaped or Windows newlines, so every form of one key
+    derives the same salt. An unreadable path raises OSError, which the
+    settings name without showing."""
+    text = Path(key.path).read_text(encoding="ascii") if key.path else key.text
+    # read_text turns a file's \r\n into \n; a secret pasted with \r\n
+    # must lose it too, or one key would give two salts.
+    return pem_text(text.replace("\r\n", "\n").replace("\r", "\n")).encode("ascii")
+
+
+def derived_salt(key):
+    """The salt the App's key gives: HMAC-SHA256 of the PEM under
+    SALT_LABEL, in hex, which is HKDF's extract step with the label as
+    its salt. SHA-256 cannot be run backwards, so the 64 hex digits say
+    nothing of the key, and the same key gives the same digits every
+    time."""
+    return hmac.new(SALT_LABEL, pem_bytes(key), hashlib.sha256).hexdigest()
+
+
 def repository_hash(salt, node_id):
     """The repository as the dataset names it: HMAC-SHA256 of its node id
     under the salt, in hex. The node id stays the same when a repository
@@ -300,11 +336,30 @@ def counted(read, tally):
     return None
 
 
+def left_out(repository):
+    """Why a listed repository is not read, as the tally counts it, or
+    None. A fork's branch metrics is its upstream's, frozen on the day of
+    the fork: read, it would enter the dataset a second time under the
+    fork's own hash, and the salt would hide the double afterwards. An
+    archived repository's files are frozen too, and its project is over.
+    Only GitHub's own true counts; a field that is missing, or holds
+    anything else, leaves the repository in."""
+    if repository.get("fork") is True:
+        return "forks"
+    if repository.get("archived") is True:
+        return "archived"
+    return None
+
+
 def collect_repository(client, repository, salt, day, collected):
     """Add what one repository shares to collected. Its JUDGE.json is
     read only after a METRICS.json that shares, since the switch lives in
     METRICS.json and a project without one has said nothing."""
     tally = collected.tally
+    skipped = left_out(repository)
+    if skipped:
+        tally[skipped] += 1
+        return
     node_id = repository.get("node_id")
     if not isinstance(node_id, str) or not node_id:
         tally["unreadable"] += 1
@@ -356,8 +411,16 @@ def plural(number, noun, nouns=None):
     return f"{number} {noun if number == 1 else nouns or noun + 's'}"
 
 
-# How a file or an installation can fail to reach the dataset, as the log counts them.
-OTHER_OUTCOMES = ("not_shared", "refused", "unreadable", "suspended")
+# How a file, a repository or an installation can fail to reach the
+# dataset, as the log counts them: the forks and the archived repositories
+# are skipped unread (left_out), the rest read and dropped.
+OTHER_OUTCOMES = ("not_shared", "refused", "unreadable", "forks", "archived", "suspended")
+
+
+def outcome(name, number):
+    """One count of the summary's second half: a fork is a noun ("2
+    forks"), the other outcomes read as states ("2 refused")."""
+    return plural(number, "fork") if name == "forks" else f"{number} {name.replace('_', ' ')}"
 
 
 def summary(tally):
@@ -365,7 +428,7 @@ def summary(tally):
     line = ", ".join([plural(tally["installations"], "installation"),
                       plural(tally["repositories"], "repository", "repositories"),
                       f"{tally['shared']} shared metrics", plural(tally["judges"], "judge")])
-    others = [f"{tally[name]} {name.replace('_', ' ')}" for name in OTHER_OUTCOMES if tally[name]]
+    others = [outcome(name, tally[name]) for name in OTHER_OUTCOMES if tally[name]]
     return line + ("; " + ", ".join(others) if others else "")
 
 
@@ -448,18 +511,31 @@ class Settings:
 
     @classmethod
     def from_environment(cls, environ):
-        """The settings, or SystemExit naming (never showing) what is missing."""
+        """The settings, or SystemExit naming (never showing) what is
+        missing. The salt is the override when it is set, and the one the
+        App's key gives otherwise; an override too short to stand is
+        refused rather than quietly replaced, since the owner who set it
+        meant it to be the salt."""
         problems = [] if environ.get(APP_ID_VARIABLE) else [f"{APP_ID_VARIABLE} is not set"]
+        key = salt = None
         try:
             key = AppKey.from_environment(environ)
         except SigningError as error:
             problems.append(str(error))
-        salt = (environ.get(SALT_VARIABLE) or "").strip()
-        if not salt:
-            problems.append(f"{SALT_VARIABLE} is not set, and no repository is hashed without it")
-        elif len(salt) < SALT_MINIMUM:
-            problems.append(f"{SALT_VARIABLE} is shorter than {SALT_MINIMUM} characters; make one with "
+        override = (environ.get(SALT_VARIABLE) or "").strip()
+        if override and len(override) < SALT_MINIMUM:
+            problems.append(f"{SALT_VARIABLE} is shorter than {SALT_MINIMUM} characters; unset it to derive "
+                            "the salt from the App's key, or make one with "
                             "python3 -c \"import secrets; print(secrets.token_hex(32))\"")
+        elif override:
+            salt = override
+        elif key is not None:
+            try:
+                salt = derived_salt(key)
+            except (OSError, UnicodeError):
+                # The path's file is missing, unreadable or no text; its
+                # name is not shown, since a message may be logged.
+                problems.append("the App's private key could not be read to derive the salt from")
         if problems:
             raise SystemExit("collect: cannot run: " + "; ".join(problems))
         return cls(app_id=environ[APP_ID_VARIABLE], key=key, salt=salt)
