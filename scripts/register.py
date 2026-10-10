@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Register the GitHub App (by default "OpenSpine SDLC") for an organization, by GitHub's manifest flow.
+"""Register one of this repository's GitHub Apps for an organization, by GitHub's manifest flow.
 
 GitHub makes an App from a manifest (manifest.json) in three steps: a
 form POSTs the manifest to the organization's "new App" page, the owner
@@ -19,9 +19,21 @@ lets the owner make a new client secret whenever one is needed.
     python3 scripts/register.py --org OpenSpineConsortium
     python3 scripts/register.py --org OpenSpineConsortium --webhook-url https://sdlc.example.org/webhook
     python3 scripts/register.py --print-key | gh secret set SDLC_APP_PRIVATE_KEY --repo OWNER/NAME
+    python3 scripts/register.py --setup --org OpenSpineConsortium
 
 Without --webhook-url the App's webhook stays off (stage 1, tokens only);
 stage 2 turns it on later in the App's settings (README.md).
+
+With --setup the same flow registers the setup App "OpenSpine SDLC Setup"
+from manifest-setup.json into .sdlc-setup-app.env, so the main App's file
+is never overwritten. That App is the one the front door,
+OpenSpineConsortium/sdlc-start, mints a token from in the run that adopts
+the template, to apply the repository settings the template's
+scripts/setup-repo.sh applies by hand. Those take Administration, which
+the main App must never hold, hence a second App, public, that an adopter
+installs for that one run and uninstalls afterwards. It has no webhook,
+so --webhook-url is refused with --setup, and its next steps are the
+front door's two settings and nothing more.
 """
 
 import argparse
@@ -44,7 +56,9 @@ from app.jwt import pem_text
 
 PORT = 3010
 MANIFEST = ROOT / "manifest.json"
+MANIFEST_SETUP = ROOT / "manifest-setup.json"
 ENV_FILE = ROOT / ".sdlc-app.env"
+ENV_FILE_SETUP = ROOT / ".sdlc-setup-app.env"
 
 
 def manifest_for(webhook_url=None, port=PORT, path=MANIFEST, name=None):
@@ -68,12 +82,14 @@ def new_app_url(org, state):
 
 
 def form_page(org, state, manifest):
-    """The page whose one button POSTs the manifest to GitHub."""
+    """The page whose one button POSTs the manifest to GitHub. It names
+    the App the manifest names, since the one page serves both Apps."""
     value = html.escape(json.dumps(manifest), quote=True)
+    name = html.escape(manifest["name"])
     return f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Register the sdlc App</title></head>
+<html lang="en"><head><meta charset="utf-8"><title>Register {name}</title></head>
 <body style="font-family: sans-serif; max-width: 40em; margin: 3em auto">
-<h1>Register the sdlc App for {html.escape(org)}</h1>
+<h1>Register {name} for {html.escape(org)}</h1>
 <p>The button sends this manifest to GitHub, which asks you to confirm the App's name, permissions and events.
 GitHub then sends you back here, and the terminal says what comes next.</p>
 <pre style="background: #f4f4f4; padding: 1em; overflow: auto">{html.escape(json.dumps(manifest, indent=2))}</pre>
@@ -98,9 +114,13 @@ def convert(code, transport=urllib_transport, api=API):
 
 
 def env_values(app):
-    """What .sdlc-app.env holds, and whether the webhook secret was made
+    """What the env file holds, and whether the webhook secret was made
     here: GitHub may leave it empty for an App whose webhook is off, and
-    the server will need one the day the webhook goes on."""
+    the server will need one the day the webhook goes on. The names are
+    the file's vocabulary, the same for both Apps: --print-key reads
+    SDLC_APP_PRIVATE_KEY from the setup App's file too, and the names the
+    front door reads (SDLC_SETUP_APP_ID, SDLC_SETUP_APP_PRIVATE_KEY) are
+    those of its repository settings, which the printed steps name."""
     secret = app.get("webhook_secret")
     made_here = not secret
     values = {
@@ -142,16 +162,50 @@ def next_steps(org, values, env_path, repos, secret_made_here):
     return "\n".join(lines)
 
 
+def next_steps_setup(org, values, env_path, repos, secret_made_here):
+    """The setup App's next steps: the front door's two settings, and the
+    install link adopters use themselves. The App has no webhook and no
+    server, so nothing of the main App's stage 2 applies; the last
+    argument is taken so both step functions are called alike, and the
+    webhook secret the env file holds anyway goes unmentioned."""
+    app_id, slug = values["SDLC_APP_ID"], values["SDLC_APP_SLUG"]
+    lines = [
+        f"Registered the setup App {slug} (id {app_id}) for {org}, public by its manifest, so any account can",
+        f"install it. Its credentials are in {env_path} (mode 0600, ignored by git and never in the image);",
+        "keep that file, it is the only copy of the key.",
+        "",
+        "1. The front door mints the App's token in the run that adopts the template, from its id and key:",
+        "   set the variable and the secret there.",
+    ]
+    for repo in repos:
+        lines += [f"   gh variable set SDLC_SETUP_APP_ID --repo {repo} --body {app_id}",
+                  f"   python3 scripts/register.py --env-file {env_path} --print-key"
+                  f" | gh secret set SDLC_SETUP_APP_PRIVATE_KEY --repo {repo}"]
+    lines += [
+        "",
+        "2. Adopters install the App themselves, on the one repository their run sets up, from the link the",
+        f"   front door's form gives, https://github.com/apps/{slug}/installations/new, and uninstall it after",
+        "   the run. Nothing here installs it, and nothing in this repository's server uses it.",
+        "",
+        "That is all: the App has no webhook and no server, so no later stage waits for it.",
+    ]
+    return "\n".join(lines)
+
+
 class Registration:
     """One run of the flow: the state it sent, and what the return does.
-    convert is an argument so the tests fake GitHub's conversion call."""
+    convert is an argument so the tests fake GitHub's conversion call;
+    steps is the function that writes what comes next once the App is
+    made, next_steps for the main App and next_steps_setup for the setup
+    App, whose settings and install link are another repository's."""
 
-    def __init__(self, org, env_path, repos, state=None, convert=convert):
+    def __init__(self, org, env_path, repos, state=None, convert=convert, steps=next_steps):
         self.org = org
         self.env_path = Path(env_path)
         self.repos = repos
         self.state = state or secrets.token_urlsafe(24)
         self.convert = convert
+        self.next_steps = steps
         self.steps = None
 
     @property
@@ -171,9 +225,10 @@ class Registration:
         if not code:
             return 400, "GitHub sent no code; nothing was registered here."
         env, made_here = env_values(self.convert(code))
-        envfile.write(self.env_path, env, header="The sdlc App's credentials, written by scripts/register.py.\n"
-                                                 "Never commit, copy or print this file.")
-        self.steps = next_steps(self.org, env, self.env_path, self.repos, made_here)
+        envfile.write(self.env_path, env,
+                      header=f"The credentials of the App {env['SDLC_APP_SLUG']}, written by scripts/register.py.\n"
+                             "Never commit, copy or print this file.")
+        self.steps = self.next_steps(self.org, env, self.env_path, self.repos, made_here)
         return 200, f"Registered the App {env['SDLC_APP_SLUG']}. The terminal says what comes next; close this tab."
 
 
@@ -241,26 +296,38 @@ def print_key(env_path):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--org", help="the organization that owns the App")
+    parser.add_argument("--setup", action="store_true",
+                        help="register the setup App the front door's run uses (manifest-setup.json, "
+                             "into .sdlc-setup-app.env) instead of the main App; it has no webhook")
     parser.add_argument("--name", help="the App's name, unique across GitHub (default: the manifest's)")
-    parser.add_argument("--webhook-url", help="the webhook's URL; without it the webhook stays off")
+    parser.add_argument("--webhook-url", help="the webhook's URL; without it the webhook stays off (not with --setup)")
     parser.add_argument("--repo", action="append", dest="repos", metavar="OWNER/NAME",
-                        help="a repository to print the stage 1 commands for (repeatable; "
-                             "default ORG/sdlc-template)")
+                        help="a repository to print the commands for (repeatable; default ORG/sdlc-template, "
+                             "or ORG/sdlc-start with --setup)")
     parser.add_argument("--port", type=int, default=PORT, help=f"the local port (default {PORT})")
-    parser.add_argument("--env-file", default=str(ENV_FILE), help="where the credentials go (default .sdlc-app.env)")
+    parser.add_argument("--env-file", help="where the credentials go (default .sdlc-app.env, "
+                                           "or .sdlc-setup-app.env with --setup)")
     parser.add_argument("--print-key", action="store_true", help="write the env file's private key to a pipe")
     args = parser.parse_args(argv)
+    if args.setup and args.webhook_url:
+        parser.error("--webhook-url has no place with --setup: the setup App has no webhook")
+    # The setup App's file has a name of its own, so registering it never
+    # overwrites the main App's only key, and --print-key reads it too.
+    env_file = args.env_file or str(ENV_FILE_SETUP if args.setup else ENV_FILE)
     if args.print_key:
-        return print_key(args.env_file)
+        return print_key(env_file)
     if not args.org:
         parser.error("--org is required to register")
-    if Path(args.env_file).exists():
-        print(f"{args.env_file} already exists and may hold another App's only key; "
+    if Path(env_file).exists():
+        print(f"{env_file} already exists and may hold another App's only key; "
               "move it away or give --env-file", file=sys.stderr)
         return 1
-    registration = Registration(args.org, args.env_file, args.repos or [f"{args.org}/sdlc-template"])
+    manifest = MANIFEST_SETUP if args.setup else MANIFEST
+    default_repo = "sdlc-start" if args.setup else "sdlc-template"
+    registration = Registration(args.org, env_file, args.repos or [f"{args.org}/{default_repo}"],
+                                steps=next_steps_setup if args.setup else next_steps)
     try:
-        serve(registration, manifest_for(args.webhook_url, args.port, name=args.name), args.port)
+        serve(registration, manifest_for(args.webhook_url, args.port, path=manifest, name=args.name), args.port)
     except KeyboardInterrupt:
         print("\nStopped; nothing was registered.", file=sys.stderr)
         return 130

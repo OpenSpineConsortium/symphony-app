@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SKIPPED_DIRECTORIES = {".git", "__pycache__"}
 # The credentials are never committed, but a working copy may hold them.
-SKIPPED_FILES = {".sdlc-app.env"}
+SKIPPED_FILES = {".sdlc-app.env", ".sdlc-setup-app.env"}
 
 
 def repository_files():

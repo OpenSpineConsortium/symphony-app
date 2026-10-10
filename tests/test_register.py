@@ -25,8 +25,8 @@ PEM = "-----BEGIN RSA PRIVATE KEY-----\nAAAA\nBBBB\n-----END RSA PRIVATE KEY----
 STATE = "state-for-tests"
 
 
-def converted(webhook_secret="webhook-secret-from-github"):
-    return {"id": 123456, "slug": "sdlc", "pem": PEM, "webhook_secret": webhook_secret,
+def converted(webhook_secret="webhook-secret-from-github", slug="sdlc"):
+    return {"id": 123456, "slug": slug, "pem": PEM, "webhook_secret": webhook_secret,
             "client_id": "client-id", "client_secret": "client-secret-never-written"}
 
 
@@ -235,6 +235,109 @@ class NameTest(unittest.TestCase):
         registration takes another without editing the manifest."""
         self.assertEqual(register.manifest_for(name="Another Name")["name"], "Another Name")
         self.assertEqual(register.manifest_for()["name"], "OpenSpine SDLC")
+
+
+class SetupAppTest(unittest.TestCase):
+    """The setup App the front door's run uses: its manifest, the steps
+    --setup prints, and the flags that keep its file apart from the main
+    App's."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.env_path = Path(self.directory.name) / ".sdlc-setup-app.env"
+
+    def registered(self):
+        """A registration of the setup App, finished against a fake conversion."""
+        registration = register.Registration("OpenSpineConsortium", self.env_path,
+                                             ["OpenSpineConsortium/sdlc-start"], state=STATE,
+                                             convert=lambda code: converted(None, slug="openspine-sdlc-setup"),
+                                             steps=register.next_steps_setup)
+        self.assertEqual(registration.finish(f"code=c1&state={STATE}")[0], 200)
+        return registration
+
+    def test_the_setup_manifest_asks_for_administration_and_nothing_else(self):
+        manifest = register.manifest_for(path=register.MANIFEST_SETUP)
+        self.assertEqual(manifest["name"], "OpenSpine SDLC Setup")
+        self.assertTrue(manifest["public"])
+        self.assertEqual(manifest["default_permissions"], {"administration": "write", "metadata": "read"})
+        self.assertEqual(manifest["default_events"], [])
+        self.assertEqual(manifest["hook_attributes"], {"url": "https://example.invalid/webhook", "active": False})
+
+    def test_both_manifests_are_json_and_the_setup_one_touches_no_code(self):
+        """Administration is all the front door's run needs; a permission
+        on contents, issues, pull requests, checks or workflows would let
+        a setup token do what only the main App's may."""
+        for path in (register.MANIFEST, register.MANIFEST_SETUP):
+            json.loads(path.read_text(encoding="ascii"))
+        permissions = json.loads(register.MANIFEST_SETUP.read_text(encoding="ascii"))["default_permissions"]
+        for name in ("contents", "issues", "pull_requests", "checks", "workflows"):
+            self.assertNotIn(name, permissions)
+
+    def test_the_setup_steps_are_the_front_doors_two_settings_and_the_install_link(self):
+        steps = self.registered().steps
+        self.assertIn("openspine-sdlc-setup (id 123456)", steps)
+        self.assertIn("gh variable set SDLC_SETUP_APP_ID --repo OpenSpineConsortium/sdlc-start --body 123456", steps)
+        self.assertIn(f"python3 scripts/register.py --env-file {self.env_path} --print-key"
+                      " | gh secret set SDLC_SETUP_APP_PRIVATE_KEY --repo OpenSpineConsortium/sdlc-start", steps)
+        self.assertIn("https://github.com/apps/openspine-sdlc-setup/installations/new", steps)
+        self.assertNotIn("AAAA", steps)
+        self.assertNotIn(envfile.read(self.env_path)["WEBHOOK_SECRET"], steps)
+
+    def test_the_setup_steps_never_send_the_reader_to_the_main_apps_settings_or_stage_2(self):
+        steps = self.registered().steps
+        self.assertNotIn("docker", steps.lower())
+        self.assertNotIn("stage 2", steps.lower())
+        self.assertNotIn("SDLC_APP_ID", steps)
+        self.assertNotIn("SDLC_APP_PRIVATE_KEY", steps)
+
+    def test_the_env_file_keeps_the_main_apps_names_so_print_key_reads_it(self):
+        self.registered()
+        values = envfile.read(self.env_path)
+        self.assertEqual(values["SDLC_APP_ID"], "123456")
+        self.assertEqual(values["SDLC_APP_SLUG"], "openspine-sdlc-setup")
+        self.assertIn("openspine-sdlc-setup", self.env_path.read_text().splitlines()[0])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(register.print_key(self.env_path), 0)
+        self.assertEqual(out.getvalue(), PEM)
+
+    def test_the_form_names_the_setup_app(self):
+        page = register.form_page("o", STATE, register.manifest_for(path=register.MANIFEST_SETUP))
+        self.assertIn("<title>Register OpenSpine SDLC Setup</title>", page)
+        self.assertIn("Register OpenSpine SDLC Setup for o", page)
+
+    def test_main_with_setup_refuses_to_overwrite_the_setup_env_file(self):
+        self.env_path.write_text("SDLC_APP_ID=1\n")
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(register.main(["--setup", "--org", "o", "--env-file", str(self.env_path)]), 1)
+        self.assertEqual(self.env_path.read_text(), "SDLC_APP_ID=1\n")
+
+    def test_main_with_setup_defaults_to_the_setup_env_file_and_leaves_the_main_apps(self):
+        """The main App's .sdlc-app.env is never the default target of
+        --setup, so registering the setup App cannot overwrite the only
+        copy of the main App's key."""
+        self.assertEqual(register.ENV_FILE_SETUP.name, ".sdlc-setup-app.env")
+        self.assertNotEqual(register.ENV_FILE_SETUP, register.ENV_FILE)
+        self.env_path.write_text("SDLC_APP_ID=1\n")
+        self.addCleanup(setattr, register, "ENV_FILE_SETUP", register.ENV_FILE_SETUP)
+        register.ENV_FILE_SETUP = self.env_path
+        error = io.StringIO()
+        with contextlib.redirect_stderr(error):
+            self.assertEqual(register.main(["--setup", "--org", "o"]), 1)
+        self.assertIn(str(self.env_path), error.getvalue())
+
+    def test_a_webhook_url_with_setup_is_a_usage_error(self):
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            register.main(["--setup", "--org", "o", "--webhook-url", "https://x.example/webhook",
+                           "--env-file", str(self.env_path)])
+        self.assertFalse(self.env_path.exists())
+
+    def test_the_setup_env_file_is_ignored_by_git_and_docker(self):
+        for ignore in (".gitignore", ".dockerignore"):
+            lines = (ROOT / ignore).read_text(encoding="ascii").splitlines()
+            self.assertIn(".sdlc-setup-app.env", lines, ignore)
+
 
 if __name__ == "__main__":
     unittest.main()

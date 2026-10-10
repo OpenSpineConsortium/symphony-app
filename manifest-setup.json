@@ -1,0 +1,16 @@
+{
+  "name": "OpenSpine SDLC Setup",
+  "url": "https://github.com/OpenSpineConsortium/sdlc-start",
+  "description": "Applies the template's repository settings (the default branch's ruleset, auto-merge and delete-on-merge, secret scanning) in the one run that adopts it; install it for that run and uninstall it afterwards.",
+  "hook_attributes": {
+    "url": "https://example.invalid/webhook",
+    "active": false
+  },
+  "redirect_url": "http://localhost:3010/registered",
+  "public": true,
+  "default_permissions": {
+    "administration": "write",
+    "metadata": "read"
+  },
+  "default_events": []
+}
