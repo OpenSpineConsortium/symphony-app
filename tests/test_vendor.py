@@ -65,7 +65,11 @@ THIS_REPOSITORY = "OpenSpineConsortium/sdlc-app"
 # What the App itself runs from the copy: the two modules app/handlers.py
 # imports and the check scripts/check.sh runs.
 NEEDED = {"claims.py", "protocol_check.py", "vendoring.py"}
-VERIFY = "app/vendor/sdlc_protocol/vendoring.py verify app/vendor"
+# A whole line of scripts/check.sh and the start of another, matched
+# against its stripped lines, so a line commented out there does not
+# count as run.
+VERIFY = '"$PYTHON" app/vendor/sdlc_protocol/vendoring.py verify app/vendor'
+TESTS = '"$PYTHON" -m unittest '
 
 # Read here with patterns of this repository's own rather than with the
 # copy's vendoring.py, so the copy is not the only judge of itself.
@@ -197,9 +201,10 @@ class TheVerificationTest(unittest.TestCase):
 
     def test_check_sh_verifies_the_copy_before_the_tests(self):
         lines = [line.strip() for line in (ROOT / "scripts" / "check.sh").read_text(encoding="ascii").splitlines()]
-        verifying = next(number for number, line in enumerate(lines) if line.endswith(VERIFY))
-        testing = next(number for number, line in enumerate(lines) if "-m unittest" in line)
-        self.assertLess(verifying, testing)
+        self.assertIn(VERIFY, lines, "scripts/check.sh must run the copy's verify on a line of its own")
+        testing = [number for number, line in enumerate(lines) if line.startswith(TESTS)]
+        self.assertTrue(testing, "scripts/check.sh must run the tests with unittest")
+        self.assertLess(lines.index(VERIFY), testing[0])
 
     def test_the_copy_matches_its_record(self):
         version, commit = recorded_release()
