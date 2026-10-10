@@ -1,5 +1,7 @@
 # The App's credentials, written by scripts/register.py: never committed.
 .sdlc-app.env
+# The setup App's credentials, written by scripts/register.py --setup: never committed either.
+.sdlc-setup-app.env
 *.pem
 
 # Python caches

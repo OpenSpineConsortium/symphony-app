@@ -1,5 +1,6 @@
 # The build needs app/ alone; the credentials must never reach the image.
 .sdlc-app.env
+.sdlc-setup-app.env
 *.pem
 .git
 __pycache__/

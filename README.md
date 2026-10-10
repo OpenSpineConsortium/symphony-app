@@ -64,7 +64,8 @@ installations may use the App.
 | app/envfile.py | The env file register.py writes and the server reads |
 | app/vendor/ | protocol_check.py and claims.py from sdlc-protocol, with its `__init__.py` and vendoring.py, and VENDORED, the record they are held to (vendor/README.md) |
 | manifest.json | The App's manifest: name, permissions, events |
-| scripts/register.py | Registers the App for an organization by GitHub's manifest flow |
+| manifest-setup.json | The setup App's manifest: Administration and Metadata, public, no webhook (The Setup App for the front door) |
+| scripts/register.py | Registers the App, or with `--setup` the setup App, for an organization by GitHub's manifest flow |
 | scripts/collect.py | Collects the field metrics projects share, daily from .github/workflows/collect.yml (Field metrics) |
 | scripts/check.sh | The checks; CI's job `check` runs it |
 | Dockerfile | python:3.12-slim, a non-root user, the server as entrypoint |
@@ -171,6 +172,46 @@ person. board.yml keeps GITHUB_TOKEN for its push to the branch `board`: that
 push starting no workflow is what keeps the Board from starting itself
 again. The App has no `workflows` permission, so, like GITHUB_TOKEN, its
 token cannot change a file under .github/workflows/.
+
+## The Setup App for the front door
+
+A second App, "OpenSpine SDLC Setup", exists for one job the main App
+must never do. The public front door,
+[OpenSpineConsortium/sdlc-start](https://github.com/OpenSpineConsortium/sdlc-start),
+adopts the template into a repository in one run of its workflow
+.github/workflows/adopt.yml, and that run applies the repository settings
+the template's scripts/setup-repo.sh applies by hand: the default
+branch's ruleset, delete-branch-on-merge, auto-merge, and secret scanning
+with push protection. Those take the Administration permission, which
+the main App, installed for good on every repository it serves, must
+never hold. So the setup App holds Administration (write) and Metadata
+(read) and nothing else, no webhook and no events, and an adopter
+installs it on the one repository for that one run and uninstalls it
+afterwards; the run mints its token for that repository alone, and the
+repository's settings need no step by hand.
+
+Register it with the same script, as an owner of the organization:
+
+    python3 scripts/register.py --setup --org OpenSpineConsortium
+
+It sends manifest-setup.json in place of manifest.json and writes the
+credentials to `.sdlc-setup-app.env`, so the main App's `.sdlc-app.env`
+is never overwritten; `--webhook-url` is refused with `--setup`, since
+the App has no webhook. The manifest makes the App public, so any
+account can install it. Its slug is `openspine-sdlc-setup` unless GitHub
+assigns another, which the script's output then shows and sdlc-start's
+form link (`https://github.com/apps/<slug>/installations/new`), README
+and tests/test_form.py (SETUP_APP_INSTALL) must then name. sdlc-start's
+README, For the owner, also has the owner install it on sdlc-start
+itself, and only there, so the workflow can probe a failed mint. The steps the script prints are the front door's
+two settings, the variable and the secret adopt.yml reads:
+
+    gh variable set SDLC_SETUP_APP_ID --repo OpenSpineConsortium/sdlc-start --body <App ID>
+    python3 scripts/register.py --env-file .sdlc-setup-app.env --print-key | gh secret set SDLC_SETUP_APP_PRIVATE_KEY --repo OpenSpineConsortium/sdlc-start
+
+(`--setup --print-key` reads the same file.) There is no stage 2 for it:
+nothing in this repository's server uses the setup App, and its env file
+is read only by `--print-key`.
 
 ## Stage 2: the webhook backend
 
@@ -382,3 +423,7 @@ Still open:
   the check again.
 - actions/create-github-app-token is written against `@v1`; v2 and v3
   exist, and their inputs should be checked before moving to one.
+- The setup App has not been registered yet: `--setup` is the same flow
+  with manifest-setup.json, so what is untried is only that manifest
+  against GitHub's form (a public App with Administration write and no
+  events), and whether GitHub gives it the slug `openspine-sdlc-setup`.
