@@ -1,10 +1,10 @@
 """app/vendor/sdlc_protocol is a partial copy of the claim protocol's
-library, OpenSpineConsortium/sdlc-protocol, holding at least
+library, OpenSpineConsortium/symphony-protocol, holding at least
 protocol_check.py, whose problems_for the handler turns into the check run
 sdlc/protocol, claims.py, which the handler imports too, and vendoring.py,
 the copy's own check. The library's scripts/vendor.py makes the copy, and
 its sync workflow lands each new one here as the pull request
-sdlc-protocol/sync; app/vendor/VENDORED records it, the version and the
+symphony-protocol/sync; app/vendor/VENDORED records it, the version and the
 commit on its first line and then the sha256 of every copied file.
 scripts/check.sh holds the copy to that record with the copy's own
 vendoring.py before any test runs.
@@ -30,9 +30,9 @@ clone SDLC_PROTOCOL names, which this repository's CI makes and names
 (.github/workflows/ci.yml), and fails there when the clone is missing or
 has no commit of the one VENDORED names, so a made-up commit does not
 pass as skipped. With SDLC_PROTOCOL unset it reads a clone beside this
-repository, as the clones sit on a developer's machine and in the
-library's downstream job, and skips when there is none or when it is
-behind."""
+repository, under the library's name or its old one, as the clones sit
+on a developer's machine and in the library's downstream job, and skips
+when there is none or when it is behind."""
 
 import hashlib
 import json
@@ -52,16 +52,27 @@ ROOT = Path(__file__).resolve().parent.parent
 VENDOR = ROOT / "app" / "vendor"
 VENDORED = VENDOR / "VENDORED"
 PACKAGE = VENDOR / "sdlc_protocol"
-LIBRARY = Path(os.environ.get("SDLC_PROTOCOL") or ROOT.parent / "sdlc-protocol")
+
+
+def clone_beside():
+    """The library's clone beside this repository, under its name or, since
+    a clone made before the rename to Symphony keeps its folder, the old one."""
+    named = [ROOT.parent / "symphony-protocol", ROOT.parent / "sdlc-protocol"]
+    return next((path for path in named if (path / ".git").exists()), named[0])
+
+
+LIBRARY = Path(os.environ.get("SDLC_PROTOCOL") or clone_beside())
 # A clone named on purpose, as CI names its own, is one the comparison must
 # have; a clone that only happens to sit beside this one may be absent or
 # behind, and then the comparison is skipped.
 LIBRARY_NAMED = bool(os.environ.get("SDLC_PROTOCOL"))
 CI = ROOT / ".github" / "workflows" / "ci.yml"
-CLONE = 'git clone --quiet https://github.com/OpenSpineConsortium/sdlc-protocol "$RUNNER_TEMP/sdlc-protocol"'
-NAMED_IN_CI = "SDLC_PROTOCOL: ${{ runner.temp }}/sdlc-protocol"
+CLONE = 'git clone --quiet https://github.com/OpenSpineConsortium/symphony-protocol "$RUNNER_TEMP/symphony-protocol"'
+NAMED_IN_CI = "SDLC_PROTOCOL: ${{ runner.temp }}/symphony-protocol"
 COMPARISON = "tests.test_vendor.TheCopyIsTheLibrarysTest.test_every_file_is_the_librarys_at_the_recorded_commit"
-THIS_REPOSITORY = "OpenSpineConsortium/sdlc-app"
+# Either name of this repository: the library's ecosystem.json at the recorded
+# commit predates the rename to Symphony and knows it by the old one.
+THIS_REPOSITORY = {"OpenSpineConsortium/symphony-app", "OpenSpineConsortium/sdlc-app"}
 # What the App itself runs from the copy: the two modules app/handlers.py
 # imports and the check scripts/check.sh runs.
 NEEDED = {"claims.py", "protocol_check.py", "vendoring.py"}
@@ -128,10 +139,10 @@ def why_the_library_cannot_compare(commit):
     """What stands in the way of comparing the copy with the library at
     commit, or "" when nothing does."""
     if not (LIBRARY / ".git").exists():
-        return f"no clone of sdlc-protocol at {LIBRARY}"
+        return f"no clone of symphony-protocol at {LIBRARY}"
     if library("cat-file", "-e", f"{commit}^{{commit}}").returncode != 0:
         return (f"the clone at {LIBRARY} does not have {commit}, the commit VENDORED names: "
-                "vendor a commit of sdlc-protocol's, never write one into the record by hand")
+                "vendor a commit of symphony-protocol's, never write one into the record by hand")
     return ""
 
 
@@ -185,7 +196,7 @@ class TheRecordTest(unittest.TestCase):
         for path, digest in listed:
             with self.subTest(file=path):
                 self.assertEqual(hashlib.sha256((PACKAGE / path).read_bytes()).hexdigest(), digest,
-                                 "change it in sdlc-protocol and let the sync bring it, never the copy here")
+                                 "change it in symphony-protocol and let the sync bring it, never the copy here")
 
     def test_the_record_holds_what_the_app_runs(self):
         self.assertLessEqual(NEEDED, set(recorded_paths()),
@@ -248,14 +259,14 @@ class TheCopyIsTheLibrarysTest(unittest.TestCase):
         if shown.returncode != 0:
             self.skipTest(f"the library at {commit} has no ecosystem.json")
         ecosystem = json.loads(shown.stdout)
-        ours = [consumer for consumer in ecosystem["consumers"] if consumer["repository"] == THIS_REPOSITORY]
+        ours = [consumer for consumer in ecosystem["consumers"] if consumer["repository"] in THIS_REPOSITORY]
         self.assertEqual(len(ours), 1)
         self.assertEqual(ours[0]["vendor_dir"], "app/vendor")
         self.assertEqual(files_the_library_names(ecosystem, ours[0], commit), recorded_paths())
 
 
 class TheComparisonOnCITest(unittest.TestCase):
-    """CI clones sdlc-protocol and names the clone to the checks, so the
+    """CI clones symphony-protocol and names the clone to the checks, so the
     comparison with the library runs on every pull request; where the clone
     it names is missing, or has no commit of the one VENDORED names, the
     comparison fails rather than skips."""
@@ -269,9 +280,9 @@ class TheComparisonOnCITest(unittest.TestCase):
 
     def test_a_named_clone_that_is_not_there_fails_the_comparison(self):
         with tempfile.TemporaryDirectory() as folder:
-            done = compare_with(Path(folder) / "sdlc-protocol")
+            done = compare_with(Path(folder) / "symphony-protocol")
         self.assertEqual(done.returncode, 1, done.stderr)
-        self.assertIn("no clone of sdlc-protocol at", done.stderr)
+        self.assertIn("no clone of symphony-protocol at", done.stderr)
         self.assertNotIn("skipped", done.stderr)
 
     def test_a_named_clone_without_the_recorded_commit_fails_the_comparison(self):

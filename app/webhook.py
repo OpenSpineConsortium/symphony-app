@@ -94,7 +94,7 @@ class Worker:
 
     def __init__(self):
         self.jobs = queue.Queue()
-        self.thread = threading.Thread(target=self.run, name="sdlc-app-worker", daemon=True)
+        self.thread = threading.Thread(target=self.run, name="symphony-app-worker", daemon=True)
         self.thread.start()
 
     def submit(self, job):
@@ -158,7 +158,7 @@ class WebhookServer(ThreadingHTTPServer):
 
 
 class WebhookRequestHandler(BaseHTTPRequestHandler):
-    server_version = "sdlc-app"
+    server_version = "symphony-app"
     sys_version = ""
 
     def do_GET(self):
@@ -234,7 +234,7 @@ class Config:
         except SigningError as error:
             problems.append(str(error))
         if problems:
-            raise SystemExit("sdlc-app cannot start: " + "; ".join(problems))
+            raise SystemExit("symphony-app cannot start: " + "; ".join(problems))
         return cls(port=int(environ.get("PORT") or DEFAULT_PORT), app_id=environ[APP_ID_VARIABLE],
                    key=key, secret=environ[SECRET_VARIABLE])
 

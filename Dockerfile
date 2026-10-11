@@ -1,4 +1,4 @@
-# The sdlc App's webhook server. python:3.12-slim carries the openssl
+# The Symphony App's webhook server. python:3.12-slim carries the openssl
 # binary (Debian's ca-certificates depends on it), which signs the App's
 # JWT (app/jwt.py), and the backend needs nothing else outside Python's
 # standard library, so nothing is installed. The RUN line below fails the
@@ -8,7 +8,7 @@ FROM python:3.12-slim
 RUN openssl version \
     && useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin sdlc
 
-WORKDIR /srv/sdlc-app
+WORKDIR /srv/symphony-app
 COPY app/ app/
 
 # A user of its own, so the server can read the key it is given and

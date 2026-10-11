@@ -1,24 +1,24 @@
-# sdlc-app
+# symphony-app
 
-The backend of the GitHub App "OpenSpine Symphony" (slug openspine-sdlc), which serves the claim protocol of
-[OpenSpineConsortium/sdlc-template](https://github.com/OpenSpineConsortium/sdlc-template)
+The backend of the GitHub App "SymphonyBoard" (slug symphonyboard), which serves the claim protocol of
+[OpenSpineConsortium/symphony-template](https://github.com/OpenSpineConsortium/symphony-template)
 (its docs/agents/PROTOCOL.md says what a claim is). Python 3.12's standard
 library and the openssl binary are all it needs: no package is installed,
 here or in the image.
 
 ## Where this repository fits
 
-sdlc-app is one of the repositories around the claim protocol of
-OpenSpineConsortium/sdlc-protocol. That repository's ECOSYSTEM.md,
-https://github.com/OpenSpineConsortium/sdlc-protocol/blob/main/ECOSYSTEM.md,
+symphony-app is one of the repositories around the claim protocol of
+OpenSpineConsortium/symphony-protocol. That repository's ECOSYSTEM.md,
+https://github.com/OpenSpineConsortium/symphony-protocol/blob/main/ECOSYSTEM.md,
 draws all of them, says which modules each one takes and how a change to
 the protocol reaches each. Here the App takes two of them,
 protocol_check.py and claims.py, into app/vendor, for the check run
 `sdlc/protocol`. The copy is never edited here: a pull request in
-sdlc-protocol already runs this repository's check on its change (the job
-`downstream (sdlc-app)`, which reads this private repository with the
+symphony-protocol already runs this repository's check on its change (the job
+`downstream (symphony-app)`, which reads this private repository with the
 App's token), and once it merges, that repository's sync workflow opens
-the pull request `sdlc-protocol/sync` here. The owner merges it: the
+the pull request `symphony-protocol/sync` here. The owner merges it: the
 sync arms auto-merge only where ecosystem.json says so, and for this
 repository it says `"auto_merge": false`.
 app/vendor/README.md says the rest.
@@ -36,7 +36,7 @@ Now, in two stages:
    from the App's id and private key.
 2. **The protocol check as the App's own check run.** On every pull request
    the webhook server runs the check the template's CI runs today
-   (`problems_for` from sdlc-protocol, vendored under app/vendor/) and
+   (`problems_for` from symphony-protocol, vendored under app/vendor/) and
    records it as the check run `sdlc/protocol` on the head commit: success,
    or failure with each problem on a line. A ruleset can require that check
    by name and by the App as its source, which no workflow in the
@@ -46,7 +46,7 @@ Now, in two stages:
 Every other event (issues, issue comments, pushes, check suites) is logged
 and ignored in this stage: the board's rendering and the release of idle
 claims stay in Actions (board.yml and the coordinator routine in
-sdlc-template).
+symphony-template).
 
 Later, each as a stage of its own: the board and the releases on these
 webhooks instead of Actions runs; an MCP server, so the protocol is offered
@@ -62,7 +62,7 @@ installations may use the App.
 | app/webhook.py | The server: `POST /webhook`, `GET /health`, one JSON log line per delivery |
 | app/handlers.py | What each event does: the `sdlc/protocol` check run on a pull request |
 | app/envfile.py | The env file register.py writes and the server reads |
-| app/vendor/ | protocol_check.py and claims.py from sdlc-protocol, with its `__init__.py` and vendoring.py, and VENDORED, the record they are held to (vendor/README.md) |
+| app/vendor/ | protocol_check.py and claims.py from symphony-protocol, with its `__init__.py` and vendoring.py, and VENDORED, the record they are held to (vendor/README.md) |
 | manifest.json | The App's manifest: name, permissions, events |
 | manifest-setup.json | The setup App's manifest: Administration and Metadata, public, no webhook (The Setup App for the front door) |
 | scripts/register.py | Registers the App, or with `--setup` the setup App, for an organization by GitHub's manifest flow |
@@ -91,9 +91,9 @@ printed commands are for.
 
 By hand, at `https://github.com/organizations/<org>/settings/apps/new`:
 
-- GitHub App name `OpenSpine Symphony`, as manifest.json has it (`sdlc` is
+- GitHub App name `SymphonyBoard`, as manifest.json has it (`sdlc` is
   held by the account @sdlc); homepage URL
-  https://github.com/OpenSpineConsortium/sdlc-template.
+  https://github.com/OpenSpineConsortium/symphony-template.
 - Webhook: untick Active (stage 2 turns it on).
 - Repository permissions: Contents read and write, Issues read and write,
   Pull requests read and write, Checks read and write; Metadata read-only
@@ -109,7 +109,7 @@ By hand, at `https://github.com/organizations/<org>/settings/apps/new`:
 ### Install it
 
 From the App's page, Install App, on the organization: the repositories it
-serves, sdlc-template and its copies. "All repositories" also covers a copy
+serves, symphony-template and its copies. "All repositories" also covers a copy
 made later, from its first push.
 
 ### Set the two repository settings
@@ -133,7 +133,7 @@ made in the organization afterwards, and the admin of such a copy, which
 is whoever made it, can print it with a workflow of their own. The list
 names repositories that exist, so a copy made from the template, which
 runs template-init on its first push, runs it on GITHUB_TOKEN whoever made
-it, and, as sdlc-template's template-init.yml says, "a push, an issue or
+it, and, as symphony-template's template-init.yml says, "a push, an issue or
 a label made with GITHUB_TOKEN starts no workflow, so without the App
 below the first Checks run comes with the first pull request, and the
 first Board run at the next six-hourly fallback or the first issue or
@@ -141,7 +141,7 @@ pull request a person opens". Set the two on the copy, or add it to the
 list, after that first push; the workflows that use the App have them
 from their next run.
 
-### Change the workflows in sdlc-template
+### Change the workflows in symphony-template
 
 A job that should start other workflows makes the token first and uses it
 where it used GITHUB_TOKEN. The step is skipped where the variable is not
@@ -175,9 +175,9 @@ token cannot change a file under .github/workflows/.
 
 ## The Setup App for the front door
 
-A second App, "OpenSpine Symphony Setup", exists for one job the main App
+A second App, "Symphony Setup", exists for one job the main App
 must never do. The public front door,
-[OpenSpineConsortium/sdlc-start](https://github.com/OpenSpineConsortium/sdlc-start),
+[OpenSpineConsortium/symphony-start](https://github.com/OpenSpineConsortium/symphony-start),
 adopts the template into a repository in one run of its workflow
 .github/workflows/adopt.yml, and that run applies the repository settings
 the template's scripts/setup-repo.sh applies by hand: the default
@@ -198,16 +198,17 @@ It sends manifest-setup.json in place of manifest.json and writes the
 credentials to `.sdlc-setup-app.env`, so the main App's `.sdlc-app.env`
 is never overwritten; `--webhook-url` is refused with `--setup`, since
 the App has no webhook. The manifest makes the App public, so any
-account can install it. Its slug is `openspine-sdlc-setup` unless GitHub
-assigns another, which the script's output then shows and sdlc-start's
+account can install it. Its slug is `symphony-setup`, derived from
+its name, unless GitHub assigns another, which the script's output, or the
+App's settings page once it is renamed, then shows and symphony-start's
 form link (`https://github.com/apps/<slug>/installations/new`), README
-and tests/test_form.py (SETUP_APP_INSTALL) must then name. sdlc-start's
-README, For the owner, also has the owner install it on sdlc-start
+and tests/test_form.py (SETUP_APP_INSTALL) must then name. symphony-start's
+README, For the owner, also has the owner install it on symphony-start
 itself, and only there, so the workflow can probe a failed mint. The steps the script prints are the front door's
 two settings, the variable and the secret adopt.yml reads:
 
-    gh variable set SDLC_SETUP_APP_ID --repo OpenSpineConsortium/sdlc-start --body <App ID>
-    python3 scripts/register.py --env-file .sdlc-setup-app.env --print-key | gh secret set SDLC_SETUP_APP_PRIVATE_KEY --repo OpenSpineConsortium/sdlc-start
+    gh variable set SDLC_SETUP_APP_ID --repo OpenSpineConsortium/symphony-start --body <App ID>
+    python3 scripts/register.py --env-file .sdlc-setup-app.env --print-key | gh secret set SDLC_SETUP_APP_PRIVATE_KEY --repo OpenSpineConsortium/symphony-start
 
 (`--setup --print-key` reads the same file.) There is no stage 2 for it:
 nothing in this repository's server uses the setup App, and its env file
@@ -219,8 +220,8 @@ is read only by `--print-key`.
 
 With the env file register.py wrote:
 
-    docker build -t sdlc-app .
-    docker run --rm --env-file .sdlc-app.env -p 3000:3000 sdlc-app
+    docker build -t symphony-app .
+    docker run --rm --env-file .sdlc-app.env -p 3000:3000 symphony-app
 
 or without docker, `python3 -m app.webhook --env-file .sdlc-app.env`. The
 settings, from the environment or the file (the environment wins):
@@ -259,15 +260,15 @@ outcome `pong`.
 ### Require the check
 
 In the repository's ruleset for the default branch (Settings, Rules), under
-"Require status checks to pass", add `sdlc/protocol` and choose the sdlc
-App as its source. In the ruleset's JSON (sdlc-template's
+"Require status checks to pass", add `sdlc/protocol` and choose the
+Symphony App as its source. In the ruleset's JSON (symphony-template's
 docs/setup/ruleset-main.json) that is one more entry in
 `required_status_checks`:
 
     { "context": "sdlc/protocol", "integration_id": <App ID> }
 
 Keep CI's own protocol step until the App's check has run on real pull
-requests. Then ci.yml in sdlc-template can drop the step "Hold a claude/
+requests. Then ci.yml in symphony-template can drop the step "Hold a claude/
 pull request to the claim protocol" and the event types `ready_for_review`,
 `converted_to_draft` and `edited`, which it has only for that step; that
 is where the minutes are saved, since an edit of a pull request's body
@@ -349,14 +350,14 @@ The owner's steps, once. The App's id and key on this repository, unless
 they are there already, as for any repository whose workflows use the
 App:
 
-    gh variable set SDLC_APP_ID --repo OpenSpineConsortium/sdlc-app --body <App ID>
-    python3 scripts/register.py --print-key | gh secret set SDLC_APP_PRIVATE_KEY --repo OpenSpineConsortium/sdlc-app
+    gh variable set SDLC_APP_ID --repo OpenSpineConsortium/symphony-app --body <App ID>
+    python3 scripts/register.py --print-key | gh secret set SDLC_APP_PRIVATE_KEY --repo OpenSpineConsortium/symphony-app
 
 There is no salt to make: the key gives it. Until the variable and the
 secret are set, the workflow ends with a notice and collects nothing.
 Last, make the App public, so that other accounts can install it: "Make
 public" at
-https://github.com/organizations/OpenSpineConsortium/settings/apps/openspine-sdlc/advanced.
+https://github.com/organizations/OpenSpineConsortium/settings/apps/symphonyboard/advanced.
 To see a run without writing, `python3 scripts/collect.py --env-file
 .sdlc-app.env --dry-run` prints the counts and the lines it would write.
 
@@ -372,13 +373,13 @@ tests/test_collect.py so far (What was not verified live).
 
     bash scripts/check.sh
 
-holds the vendored copy of sdlc-protocol to app/vendor/VENDORED with the
+holds the vendored copy of symphony-protocol to app/vendor/VENDORED with the
 copy's own `vendoring.py verify`, so a hand edit fails before any test,
 then runs the tests under tests/ with python3.12 (set `PYTHON` for
 another), including the text rules every file keeps (ASCII, LF, a newline
 at the end) and tests/test_vendor.py, which holds the record to a release
 and the copy to the library's files at the recorded commit, in the clone
-of sdlc-protocol that SDLC_PROTOCOL names or else one beside this
+of symphony-protocol that SDLC_PROTOCOL names or else one beside this
 repository. CI clones the library and names the clone, so there an edit
 that rewrote VENDORED to match fails too, as does a commit the library
 does not have. The JWT tests make an RSA
@@ -387,7 +388,7 @@ key with `openssl genrsa` and verify each signature with
 
 ## What was not verified live
 
-The App is registered, as OpenSpine Symphony (slug openspine-sdlc, id
+The App is registered, as SymphonyBoard (slug symphonyboard, id
 5258276), through register.py's manifest flow, so that flow and its
 conversion call have run for real; GitHub refused the name `sdlc`, which
 the account @sdlc holds, hence the manifest's name and `--name`. As far
@@ -423,7 +424,8 @@ Still open:
   the check again.
 - actions/create-github-app-token is written against `@v1`; v2 and v3
   exist, and their inputs should be checked before moving to one.
-- The setup App has not been registered yet: `--setup` is the same flow
-  with manifest-setup.json, so what is untried is only that manifest
-  against GitHub's form (a public App with Administration write and no
-  events), and whether GitHub gives it the slug `openspine-sdlc-setup`.
+- The setup App is registered as openspine-sdlc-setup; untried is whether
+  renaming it to Symphony Setup gives it the slug
+  `symphony-setup`, the one symphony-start's form link and
+  tests/test_form.py (SETUP_APP_INSTALL) name, or whether GitHub assigns
+  another.

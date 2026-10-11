@@ -42,7 +42,7 @@ class RegistrationTest(unittest.TestCase):
             self.codes.append(code)
             return answer or converted()
 
-        return register.Registration("OpenSpineConsortium", self.env_path, ["OpenSpineConsortium/sdlc-template"],
+        return register.Registration("OpenSpineConsortium", self.env_path, ["OpenSpineConsortium/symphony-template"],
                                      state=STATE, convert=convert)
 
     def test_a_return_with_the_wrong_state_is_refused_before_the_code_is_used(self):
@@ -77,10 +77,10 @@ class RegistrationTest(unittest.TestCase):
         registration.finish(f"code=c1&state={STATE}")
         steps = registration.steps
         self.assertIn("https://github.com/apps/sdlc/installations/new", steps)
-        self.assertIn("gh variable set SDLC_APP_ID --repo OpenSpineConsortium/sdlc-template --body 123456", steps)
+        self.assertIn("gh variable set SDLC_APP_ID --repo OpenSpineConsortium/symphony-template --body 123456", steps)
         self.assertIn(f"python3 scripts/register.py --env-file {self.env_path} --print-key"
-                      " | gh secret set SDLC_APP_PRIVATE_KEY --repo OpenSpineConsortium/sdlc-template", steps)
-        self.assertIn(f"docker run --rm --env-file {self.env_path} -p 3000:3000 sdlc-app", steps)
+                      " | gh secret set SDLC_APP_PRIVATE_KEY --repo OpenSpineConsortium/symphony-template", steps)
+        self.assertIn(f"docker run --rm --env-file {self.env_path} -p 3000:3000 symphony-app", steps)
         self.assertNotIn("AAAA", steps)
         self.assertNotIn("webhook-secret-from-github", steps)
 
@@ -178,7 +178,7 @@ class FlowTest(unittest.TestCase):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         env_path = Path(directory.name) / ".sdlc-app.env"
-        registration = register.Registration("o", env_path, ["o/sdlc-template"], state=STATE,
+        registration = register.Registration("o", env_path, ["o/symphony-template"], state=STATE,
                                              convert=lambda code: converted())
         server = HTTPServer(("127.0.0.1", 0), register.handler_for(registration, register.manifest_for()))
         self.addCleanup(server.server_close)
@@ -212,7 +212,7 @@ class FlowTest(unittest.TestCase):
         def refuse(code):
             raise register.GitHubError("POST", "/app-manifests/{code}/conversions", 404, "Not Found")
 
-        registration = register.Registration("o", env_path, ["o/sdlc-template"], state=STATE, convert=refuse)
+        registration = register.Registration("o", env_path, ["o/symphony-template"], state=STATE, convert=refuse)
         server = HTTPServer(("127.0.0.1", 0), register.handler_for(registration, register.manifest_for()))
         self.addCleanup(server.server_close)
         thread = threading.Thread(target=server.handle_request, daemon=True)
@@ -234,7 +234,7 @@ class NameTest(unittest.TestCase):
         """A name an account already holds is refused by GitHub, so the
         registration takes another without editing the manifest."""
         self.assertEqual(register.manifest_for(name="Another Name")["name"], "Another Name")
-        self.assertEqual(register.manifest_for()["name"], "OpenSpine Symphony")
+        self.assertEqual(register.manifest_for()["name"], "SymphonyBoard")
 
 
 class SetupAppTest(unittest.TestCase):
@@ -250,15 +250,15 @@ class SetupAppTest(unittest.TestCase):
     def registered(self):
         """A registration of the setup App, finished against a fake conversion."""
         registration = register.Registration("OpenSpineConsortium", self.env_path,
-                                             ["OpenSpineConsortium/sdlc-start"], state=STATE,
-                                             convert=lambda code: converted(None, slug="openspine-sdlc-setup"),
+                                             ["OpenSpineConsortium/symphony-start"], state=STATE,
+                                             convert=lambda code: converted(None, slug="symphony-setup"),
                                              steps=register.next_steps_setup)
         self.assertEqual(registration.finish(f"code=c1&state={STATE}")[0], 200)
         return registration
 
     def test_the_setup_manifest_asks_for_administration_and_nothing_else(self):
         manifest = register.manifest_for(path=register.MANIFEST_SETUP)
-        self.assertEqual(manifest["name"], "OpenSpine Symphony Setup")
+        self.assertEqual(manifest["name"], "Symphony Setup")
         self.assertTrue(manifest["public"])
         self.assertEqual(manifest["default_permissions"], {"administration": "write", "metadata": "read"})
         self.assertEqual(manifest["default_events"], [])
@@ -276,11 +276,11 @@ class SetupAppTest(unittest.TestCase):
 
     def test_the_setup_steps_are_the_front_doors_two_settings_and_the_install_link(self):
         steps = self.registered().steps
-        self.assertIn("openspine-sdlc-setup (id 123456)", steps)
-        self.assertIn("gh variable set SDLC_SETUP_APP_ID --repo OpenSpineConsortium/sdlc-start --body 123456", steps)
+        self.assertIn("symphony-setup (id 123456)", steps)
+        self.assertIn("gh variable set SDLC_SETUP_APP_ID --repo OpenSpineConsortium/symphony-start --body 123456", steps)
         self.assertIn(f"python3 scripts/register.py --env-file {self.env_path} --print-key"
-                      " | gh secret set SDLC_SETUP_APP_PRIVATE_KEY --repo OpenSpineConsortium/sdlc-start", steps)
-        self.assertIn("https://github.com/apps/openspine-sdlc-setup/installations/new", steps)
+                      " | gh secret set SDLC_SETUP_APP_PRIVATE_KEY --repo OpenSpineConsortium/symphony-start", steps)
+        self.assertIn("https://github.com/apps/symphony-setup/installations/new", steps)
         self.assertNotIn("AAAA", steps)
         self.assertNotIn(envfile.read(self.env_path)["WEBHOOK_SECRET"], steps)
 
@@ -295,8 +295,8 @@ class SetupAppTest(unittest.TestCase):
         self.registered()
         values = envfile.read(self.env_path)
         self.assertEqual(values["SDLC_APP_ID"], "123456")
-        self.assertEqual(values["SDLC_APP_SLUG"], "openspine-sdlc-setup")
-        self.assertIn("openspine-sdlc-setup", self.env_path.read_text().splitlines()[0])
+        self.assertEqual(values["SDLC_APP_SLUG"], "symphony-setup")
+        self.assertIn("symphony-setup", self.env_path.read_text().splitlines()[0])
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             self.assertEqual(register.print_key(self.env_path), 0)
@@ -304,8 +304,8 @@ class SetupAppTest(unittest.TestCase):
 
     def test_the_form_names_the_setup_app(self):
         page = register.form_page("o", STATE, register.manifest_for(path=register.MANIFEST_SETUP))
-        self.assertIn("<title>Register OpenSpine Symphony Setup</title>", page)
-        self.assertIn("Register OpenSpine Symphony Setup for o", page)
+        self.assertIn("<title>Register Symphony Setup</title>", page)
+        self.assertIn("Register Symphony Setup for o", page)
 
     def test_main_with_setup_refuses_to_overwrite_the_setup_env_file(self):
         self.env_path.write_text("SDLC_APP_ID=1\n")

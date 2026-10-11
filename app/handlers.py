@@ -12,7 +12,7 @@ through the API at the head commit, where CI reads it from a checkout.
 Every other event (issues, issue comments, pushes, check suites) is
 logged and ignored for now: the board's rendering and the release of idle
 claims stay in Actions (board.yml and the coordinator routine in
-sdlc-template) until a later stage moves them onto these webhooks.
+symphony-template) until a later stage moves them onto these webhooks.
 
 A handler returns its outcome as a short line of text, which the server
 writes into the event's log line; it never returns or logs a payload.

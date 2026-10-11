@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Collect the field metrics that projects using the App choose to share.
 
-A project made from sdlc-template, or adopted into it, writes two small
+A project made from symphony-template, or adopted into it, writes two small
 files to its branch `metrics` with its own workflow: METRICS.json, the
 claim protocol's counts, durations and rates over the last thirty days,
 and, when a contributor runs the judge on their own machine, JUDGE.json,

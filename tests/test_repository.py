@@ -1,6 +1,6 @@
 """The rules every file of the repository keeps, and the facts other
 files promise: the manifest's permissions and events as README.md lists
-them. The vendored copy of sdlc-protocol and its record app/vendor/VENDORED
+them. The vendored copy of symphony-protocol and its record app/vendor/VENDORED
 are tests/test_vendor.py's."""
 
 import json
@@ -35,8 +35,8 @@ class TextRulesTest(unittest.TestCase):
 class ManifestTest(unittest.TestCase):
     def test_the_manifest_asks_for_what_the_app_uses(self):
         manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual(manifest["name"], "OpenSpine Symphony")
-        self.assertEqual(manifest["url"], "https://github.com/OpenSpineConsortium/sdlc-template")
+        self.assertEqual(manifest["name"], "SymphonyBoard")
+        self.assertEqual(manifest["url"], "https://openspineconsortium.com/symphony/")
         self.assertFalse(manifest["public"])
         self.assertEqual(manifest["hook_attributes"], {"url": "https://example.invalid/webhook", "active": False})
         self.assertEqual(manifest["redirect_url"], "http://localhost:3010/registered")
