@@ -1,5 +1,5 @@
 {
-  "name": "OpenSpine SDLC Setup",
+  "name": "OpenSpine Symphony Setup",
   "url": "https://github.com/OpenSpineConsortium/sdlc-start",
   "description": "Applies the template's repository settings (the default branch's ruleset, auto-merge and delete-on-merge, secret scanning) in the one run that adopts it; install it for that run and uninstall it afterwards.",
   "hook_attributes": {
