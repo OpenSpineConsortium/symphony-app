@@ -35,7 +35,7 @@ class TextRulesTest(unittest.TestCase):
 class ManifestTest(unittest.TestCase):
     def test_the_manifest_asks_for_what_the_app_uses(self):
         manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual(manifest["name"], "Symphony Dev")
+        self.assertEqual(manifest["name"], "SymphonyBoard")
         self.assertEqual(manifest["url"], "https://openspineconsortium.com/symphony/")
         self.assertFalse(manifest["public"])
         self.assertEqual(manifest["hook_attributes"], {"url": "https://example.invalid/webhook", "active": False})

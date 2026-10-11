@@ -1,5 +1,5 @@
 {
-  "name": "Symphony Dev",
+  "name": "SymphonyBoard",
   "url": "https://openspineconsortium.com/symphony/",
   "description": "Symphony: pull-request-gated Claude Code agents for your repository. Install it, press Create on the form, merge the pull request.",
   "hook_attributes": {

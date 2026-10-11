@@ -1,4 +1,4 @@
-"""The backend of the GitHub App "Symphony Dev" (slug symphony-dev), for the claim protocol of
+"""The backend of the GitHub App "SymphonyBoard" (slug symphonyboard), for the claim protocol of
 OpenSpineConsortium/symphony-template.
 
 Python's standard library and the openssl binary are all it needs, so the

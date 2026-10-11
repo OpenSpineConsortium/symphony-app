@@ -1,6 +1,6 @@
 # symphony-app
 
-The backend of the GitHub App "Symphony Dev" (slug symphony-dev), which serves the claim protocol of
+The backend of the GitHub App "SymphonyBoard" (slug symphonyboard), which serves the claim protocol of
 [OpenSpineConsortium/symphony-template](https://github.com/OpenSpineConsortium/symphony-template)
 (its docs/agents/PROTOCOL.md says what a claim is). Python 3.12's standard
 library and the openssl binary are all it needs: no package is installed,
@@ -91,7 +91,7 @@ printed commands are for.
 
 By hand, at `https://github.com/organizations/<org>/settings/apps/new`:
 
-- GitHub App name `Symphony Dev`, as manifest.json has it (`sdlc` is
+- GitHub App name `SymphonyBoard`, as manifest.json has it (`sdlc` is
   held by the account @sdlc); homepage URL
   https://github.com/OpenSpineConsortium/symphony-template.
 - Webhook: untick Active (stage 2 turns it on).
@@ -357,7 +357,7 @@ There is no salt to make: the key gives it. Until the variable and the
 secret are set, the workflow ends with a notice and collects nothing.
 Last, make the App public, so that other accounts can install it: "Make
 public" at
-https://github.com/organizations/OpenSpineConsortium/settings/apps/symphony-dev/advanced.
+https://github.com/organizations/OpenSpineConsortium/settings/apps/symphonyboard/advanced.
 To see a run without writing, `python3 scripts/collect.py --env-file
 .sdlc-app.env --dry-run` prints the counts and the lines it would write.
 
@@ -388,7 +388,7 @@ key with `openssl genrsa` and verify each signature with
 
 ## What was not verified live
 
-The App is registered, as Symphony Dev (slug symphony-dev, id
+The App is registered, as SymphonyBoard (slug symphonyboard, id
 5258276), through register.py's manifest flow, so that flow and its
 conversion call have run for real; GitHub refused the name `sdlc`, which
 the account @sdlc holds, hence the manifest's name and `--name`. As far
