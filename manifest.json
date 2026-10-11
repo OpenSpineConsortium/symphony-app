@@ -1,7 +1,7 @@
 {
-  "name": "Symphony",
-  "url": "https://github.com/OpenSpineConsortium/symphony-template",
-  "description": "Symphony, the claim protocol of symphony-template: tokens for its workflows, and the sdlc/protocol check on every pull request.",
+  "name": "Symphony Dev",
+  "url": "https://openspineconsortium.com/symphony/",
+  "description": "Symphony: pull-request-gated Claude Code agents for your repository. Install it, press Create on the form, merge the pull request.",
   "hook_attributes": {
     "url": "https://example.invalid/webhook",
     "active": false

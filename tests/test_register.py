@@ -234,7 +234,7 @@ class NameTest(unittest.TestCase):
         """A name an account already holds is refused by GitHub, so the
         registration takes another without editing the manifest."""
         self.assertEqual(register.manifest_for(name="Another Name")["name"], "Another Name")
-        self.assertEqual(register.manifest_for()["name"], "Symphony")
+        self.assertEqual(register.manifest_for()["name"], "Symphony Dev")
 
 
 class SetupAppTest(unittest.TestCase):
