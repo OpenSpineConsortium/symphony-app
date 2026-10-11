@@ -24,7 +24,7 @@ lets the owner make a new client secret whenever one is needed.
 Without --webhook-url the App's webhook stays off (stage 1, tokens only);
 stage 2 turns it on later in the App's settings (README.md).
 
-With --setup the same flow registers the setup App "OpenSpine Symphony Setup"
+With --setup the same flow registers the setup App "Symphony Setup"
 from manifest-setup.json into .sdlc-setup-app.env, so the main App's file
 is never overwritten. That App is the one the front door,
 OpenSpineConsortium/symphony-start, mints a token from in the run that adopts

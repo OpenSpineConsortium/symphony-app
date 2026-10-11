@@ -1,5 +1,5 @@
 {
-  "name": "OpenSpine Symphony",
+  "name": "Symphony",
   "url": "https://github.com/OpenSpineConsortium/symphony-template",
   "description": "Symphony, the claim protocol of symphony-template: tokens for its workflows, and the sdlc/protocol check on every pull request.",
   "hook_attributes": {

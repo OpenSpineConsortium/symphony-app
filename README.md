@@ -1,6 +1,6 @@
 # symphony-app
 
-The backend of the GitHub App "OpenSpine Symphony" (slug openspine-symphony), which serves the claim protocol of
+The backend of the GitHub App "Symphony" (slug symphony), which serves the claim protocol of
 [OpenSpineConsortium/symphony-template](https://github.com/OpenSpineConsortium/symphony-template)
 (its docs/agents/PROTOCOL.md says what a claim is). Python 3.12's standard
 library and the openssl binary are all it needs: no package is installed,
@@ -91,7 +91,7 @@ printed commands are for.
 
 By hand, at `https://github.com/organizations/<org>/settings/apps/new`:
 
-- GitHub App name `OpenSpine Symphony`, as manifest.json has it (`sdlc` is
+- GitHub App name `Symphony`, as manifest.json has it (`sdlc` is
   held by the account @sdlc); homepage URL
   https://github.com/OpenSpineConsortium/symphony-template.
 - Webhook: untick Active (stage 2 turns it on).
@@ -175,7 +175,7 @@ token cannot change a file under .github/workflows/.
 
 ## The Setup App for the front door
 
-A second App, "OpenSpine Symphony Setup", exists for one job the main App
+A second App, "Symphony Setup", exists for one job the main App
 must never do. The public front door,
 [OpenSpineConsortium/symphony-start](https://github.com/OpenSpineConsortium/symphony-start),
 adopts the template into a repository in one run of its workflow
@@ -198,7 +198,7 @@ It sends manifest-setup.json in place of manifest.json and writes the
 credentials to `.sdlc-setup-app.env`, so the main App's `.sdlc-app.env`
 is never overwritten; `--webhook-url` is refused with `--setup`, since
 the App has no webhook. The manifest makes the App public, so any
-account can install it. Its slug is `openspine-symphony-setup`, derived from
+account can install it. Its slug is `symphony-setup`, derived from
 its name, unless GitHub assigns another, which the script's output, or the
 App's settings page once it is renamed, then shows and symphony-start's
 form link (`https://github.com/apps/<slug>/installations/new`), README
@@ -261,7 +261,7 @@ outcome `pong`.
 
 In the repository's ruleset for the default branch (Settings, Rules), under
 "Require status checks to pass", add `sdlc/protocol` and choose the
-Symphony App (OpenSpine Symphony) as its source. In the ruleset's JSON (symphony-template's
+Symphony App as its source. In the ruleset's JSON (symphony-template's
 docs/setup/ruleset-main.json) that is one more entry in
 `required_status_checks`:
 
@@ -357,7 +357,7 @@ There is no salt to make: the key gives it. Until the variable and the
 secret are set, the workflow ends with a notice and collects nothing.
 Last, make the App public, so that other accounts can install it: "Make
 public" at
-https://github.com/organizations/OpenSpineConsortium/settings/apps/openspine-symphony/advanced.
+https://github.com/organizations/OpenSpineConsortium/settings/apps/symphony/advanced.
 To see a run without writing, `python3 scripts/collect.py --env-file
 .sdlc-app.env --dry-run` prints the counts and the lines it would write.
 
@@ -388,7 +388,7 @@ key with `openssl genrsa` and verify each signature with
 
 ## What was not verified live
 
-The App is registered, as OpenSpine Symphony (slug openspine-symphony, id
+The App is registered, as Symphony (slug symphony, id
 5258276), through register.py's manifest flow, so that flow and its
 conversion call have run for real; GitHub refused the name `sdlc`, which
 the account @sdlc holds, hence the manifest's name and `--name`. As far
@@ -425,7 +425,7 @@ Still open:
 - actions/create-github-app-token is written against `@v1`; v2 and v3
   exist, and their inputs should be checked before moving to one.
 - The setup App is registered as openspine-sdlc-setup; untried is whether
-  renaming it to OpenSpine Symphony Setup gives it the slug
-  `openspine-symphony-setup`, the one symphony-start's form link and
+  renaming it to Symphony Setup gives it the slug
+  `symphony-setup`, the one symphony-start's form link and
   tests/test_form.py (SETUP_APP_INSTALL) name, or whether GitHub assigns
   another.
