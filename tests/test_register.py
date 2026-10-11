@@ -234,7 +234,7 @@ class NameTest(unittest.TestCase):
         """A name an account already holds is refused by GitHub, so the
         registration takes another without editing the manifest."""
         self.assertEqual(register.manifest_for(name="Another Name")["name"], "Another Name")
-        self.assertEqual(register.manifest_for()["name"], "OpenSpine SDLC")
+        self.assertEqual(register.manifest_for()["name"], "OpenSpine Symphony")
 
 
 class SetupAppTest(unittest.TestCase):
@@ -258,7 +258,7 @@ class SetupAppTest(unittest.TestCase):
 
     def test_the_setup_manifest_asks_for_administration_and_nothing_else(self):
         manifest = register.manifest_for(path=register.MANIFEST_SETUP)
-        self.assertEqual(manifest["name"], "OpenSpine SDLC Setup")
+        self.assertEqual(manifest["name"], "OpenSpine Symphony Setup")
         self.assertTrue(manifest["public"])
         self.assertEqual(manifest["default_permissions"], {"administration": "write", "metadata": "read"})
         self.assertEqual(manifest["default_events"], [])
@@ -304,8 +304,8 @@ class SetupAppTest(unittest.TestCase):
 
     def test_the_form_names_the_setup_app(self):
         page = register.form_page("o", STATE, register.manifest_for(path=register.MANIFEST_SETUP))
-        self.assertIn("<title>Register OpenSpine SDLC Setup</title>", page)
-        self.assertIn("Register OpenSpine SDLC Setup for o", page)
+        self.assertIn("<title>Register OpenSpine Symphony Setup</title>", page)
+        self.assertIn("Register OpenSpine Symphony Setup for o", page)
 
     def test_main_with_setup_refuses_to_overwrite_the_setup_env_file(self):
         self.env_path.write_text("SDLC_APP_ID=1\n")

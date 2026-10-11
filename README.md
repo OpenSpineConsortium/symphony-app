@@ -1,6 +1,6 @@
 # sdlc-app
 
-The backend of the GitHub App "OpenSpine SDLC" (slug openspine-sdlc), which serves the claim protocol of
+The backend of the GitHub App "OpenSpine Symphony" (slug openspine-sdlc), which serves the claim protocol of
 [OpenSpineConsortium/sdlc-template](https://github.com/OpenSpineConsortium/sdlc-template)
 (its docs/agents/PROTOCOL.md says what a claim is). Python 3.12's standard
 library and the openssl binary are all it needs: no package is installed,
@@ -91,7 +91,7 @@ printed commands are for.
 
 By hand, at `https://github.com/organizations/<org>/settings/apps/new`:
 
-- GitHub App name `OpenSpine SDLC`, as manifest.json has it (`sdlc` is
+- GitHub App name `OpenSpine Symphony`, as manifest.json has it (`sdlc` is
   held by the account @sdlc); homepage URL
   https://github.com/OpenSpineConsortium/sdlc-template.
 - Webhook: untick Active (stage 2 turns it on).
@@ -175,7 +175,7 @@ token cannot change a file under .github/workflows/.
 
 ## The Setup App for the front door
 
-A second App, "OpenSpine SDLC Setup", exists for one job the main App
+A second App, "OpenSpine Symphony Setup", exists for one job the main App
 must never do. The public front door,
 [OpenSpineConsortium/sdlc-start](https://github.com/OpenSpineConsortium/sdlc-start),
 adopts the template into a repository in one run of its workflow
@@ -387,7 +387,7 @@ key with `openssl genrsa` and verify each signature with
 
 ## What was not verified live
 
-The App is registered, as OpenSpine SDLC (slug openspine-sdlc, id
+The App is registered, as OpenSpine Symphony (slug openspine-sdlc, id
 5258276), through register.py's manifest flow, so that flow and its
 conversion call have run for real; GitHub refused the name `sdlc`, which
 the account @sdlc holds, hence the manifest's name and `--name`. As far

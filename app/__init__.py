@@ -1,4 +1,4 @@
-"""The backend of the GitHub App "OpenSpine SDLC" (slug openspine-sdlc), for the claim protocol of
+"""The backend of the GitHub App "OpenSpine Symphony" (slug openspine-sdlc), for the claim protocol of
 OpenSpineConsortium/sdlc-template.
 
 Python's standard library and the openssl binary are all it needs, so the
