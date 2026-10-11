@@ -27,7 +27,7 @@ stage 2 turns it on later in the App's settings (README.md).
 With --setup the same flow registers the setup App "OpenSpine Symphony Setup"
 from manifest-setup.json into .sdlc-setup-app.env, so the main App's file
 is never overwritten. That App is the one the front door,
-OpenSpineConsortium/sdlc-start, mints a token from in the run that adopts
+OpenSpineConsortium/symphony-start, mints a token from in the run that adopts
 the template, to apply the repository settings the template's
 scripts/setup-repo.sh applies by hand. Those take Administration, which
 the main App must never hold, hence a second App, public, that an adopter
@@ -138,7 +138,7 @@ def next_steps(org, values, env_path, repos, secret_made_here):
         f"Registered the App {slug} (id {app_id}) for {org}. Its id, slug, webhook secret and private key",
         f"are in {env_path} (mode 0600, ignored by git and docker); keep that file, it is the only copy of the key.",
         "",
-        "1. Install the App on the repositories it serves (sdlc-template and its copies):",
+        "1. Install the App on the repositories it serves (symphony-template and its copies):",
         f"   https://github.com/apps/{slug}/installations/new",
         "",
         "2. Stage 1, a token for each repository's workflows: set the variable and the secret, then make the",
@@ -151,7 +151,7 @@ def next_steps(org, values, env_path, repos, secret_made_here):
     lines += [
         "",
         "3. Stage 2, the webhook backend: start the server with the env file,",
-        f"   docker build -t sdlc-app . && docker run --rm --env-file {env_path} -p 3000:3000 sdlc-app",
+        f"   docker build -t symphony-app . && docker run --rm --env-file {env_path} -p 3000:3000 symphony-app",
         f"   (or python3 -m app.webhook --env-file {env_path}), expose its /webhook, then in the App's settings",
         f"   (https://github.com/organizations/{org}/settings/apps/{slug}) set the webhook URL, tick Active,",
         "   and set the webhook secret to the WEBHOOK_SECRET in the env file (README.md, Stage 2).",
@@ -302,8 +302,8 @@ def main(argv=None):
     parser.add_argument("--name", help="the App's name, unique across GitHub (default: the manifest's)")
     parser.add_argument("--webhook-url", help="the webhook's URL; without it the webhook stays off (not with --setup)")
     parser.add_argument("--repo", action="append", dest="repos", metavar="OWNER/NAME",
-                        help="a repository to print the commands for (repeatable; default ORG/sdlc-template, "
-                             "or ORG/sdlc-start with --setup)")
+                        help="a repository to print the commands for (repeatable; default ORG/symphony-template, "
+                             "or ORG/symphony-start with --setup)")
     parser.add_argument("--port", type=int, default=PORT, help=f"the local port (default {PORT})")
     parser.add_argument("--env-file", help="where the credentials go (default .sdlc-app.env, "
                                            "or .sdlc-setup-app.env with --setup)")
@@ -323,7 +323,7 @@ def main(argv=None):
               "move it away or give --env-file", file=sys.stderr)
         return 1
     manifest = MANIFEST_SETUP if args.setup else MANIFEST
-    default_repo = "sdlc-start" if args.setup else "sdlc-template"
+    default_repo = "symphony-start" if args.setup else "symphony-template"
     registration = Registration(args.org, env_file, args.repos or [f"{args.org}/{default_repo}"],
                                 steps=next_steps_setup if args.setup else next_steps)
     try:

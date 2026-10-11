@@ -1,8 +1,8 @@
 """What the App does with each event, and the behaviour it relies on from
 the vendored protocol check: which pull requests keep the claim protocol
 and the words each problem is put in, which become the check run's
-summary. A sync of sdlc-protocol that changes that behaviour fails here,
-on the pull request sdlc-protocol/sync, before it reaches the App."""
+summary. A sync of symphony-protocol that changes that behaviour fails here,
+on the pull request symphony-protocol/sync, before it reaches the App."""
 
 import unittest
 

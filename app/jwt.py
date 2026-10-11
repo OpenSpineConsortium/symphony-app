@@ -96,7 +96,7 @@ def key_file(key):
     if key.path:
         yield key.path
         return
-    descriptor, path = tempfile.mkstemp(prefix="sdlc-app-key-", suffix=".pem")
+    descriptor, path = tempfile.mkstemp(prefix="symphony-app-key-", suffix=".pem")
     try:
         os.fchmod(descriptor, 0o600)
         with os.fdopen(descriptor, "w", encoding="ascii") as handle:

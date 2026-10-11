@@ -26,7 +26,7 @@ from datetime import datetime
 
 API = "https://api.github.com"
 API_VERSION = "2022-11-28"
-USER_AGENT = "sdlc-app"
+USER_AGENT = "symphony-app"
 TIMEOUT_SECONDS = 30
 # A token is replaced this long before GitHub says it expires.
 TOKEN_MARGIN_SECONDS = 300
