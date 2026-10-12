@@ -5,7 +5,9 @@ A project made from symphony-template, or adopted into it, writes two small
 files to its branch `metrics` with its own workflow: METRICS.json, the
 claim protocol's counts, durations and rates over the last thirty days,
 in all, by work setting and in pairs of pull requests at work at the same
-time, and, when a contributor runs the judge on their own machine,
+time, with what the work cost in tokens and estimated dollars, set beside
+work done alone and in parallel, and, when a contributor runs the judge
+on their own machine,
 JUDGE.json, the number of each kind of communication failure the judge
 found, in all and by work setting. Both are aggregates by design, and the
 lists below are their format: the keys each file may hold and what kind
@@ -23,10 +25,11 @@ exactly "on"; when it is anything else the project's JUDGE.json is not
 even read. What is kept is cut to the keys the format names, and a value
 where it says a count, a duration or a rate is kept only when it is such
 a number, so no text a project writes, whether by mistake or on purpose,
-reaches the dataset. The two strings it allows besides numbers, the
-model's name and the prompt variant, must look like identifiers, and a
-time is rewritten in one form of the collector's own. The names of the
-work settings and of the kinds of pairs are fixed words of the
+reaches the dataset. The strings it allows besides numbers, the model's
+name and the prompt variant, must look like identifiers, the date of the
+template's price table like a date, and a time is rewritten in one form
+of the collector's own. The names of the work settings, of the kinds of
+pairs, of the model families and of the two sides are fixed words of the
 template's, from the lists below, never a project's.
 
 The repository is never named in the dataset. It becomes the HMAC-SHA256
@@ -136,6 +139,14 @@ PARALLEL_COUNTS = ("people", "sessions", "sessions_per_person_max", "pull_reques
                    "peak_parallel", "peak_parallel_people", "peak_sessions_one_person", "conflict_marks",
                    "conflict_marks_unattributed", "open_conflicting", "open_conflicting_drafts",
                    "open_conflicting_dirty", "truncated", "files_unread")
+# What the work cost, as the template sums it (tools/economics.py's
+# FAMILIES, GROUP_KEYS and RATIO_KEYS, in their order): token counts by
+# model family, whose names the format fixes like the settings', the two
+# sides of work done alone and in parallel, and the ratios between them.
+FAMILIES = ("fable", "opus", "sonnet", "haiku", "other")
+SIDES = ("alone", "parallel")
+RATIOS = ("tokens_per_merge", "usd_per_merge", "latency", "throughput", "first_check_pass", "commits_per_merge",
+          "failures_per_pull_request")
 # The largest whole number a JSON reader's double holds exactly along
 # with every one below it (JavaScript's Number.MAX_SAFE_INTEGER). A count
 # is a number of pull requests, comments or seconds, and a duration one of
@@ -146,6 +157,8 @@ MAX_COUNT = 2 ** 53 - 1
 # The vendored protocol's release and, as the template writes it from
 # tools/VENDORED's first line, its short commit: "0.2.0 f530a66".
 VERSION = re.compile(r"[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}( [0-9a-f]{7,40})?")
+# The date of the template's price table, as economics' prices_as_of says it.
+DATE = re.compile(r"20[0-9]{2}-[01][0-9]-[0-3][0-9]")
 IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}(\[[a-z0-9]{1,8}\])?")
 
 
@@ -187,6 +200,12 @@ def duration(value):
 def rate(value):
     """A fraction from 0 to 1."""
     return value if is_number(value) and 0 <= value <= 1 else None
+
+
+def amount(value):
+    """A number from zero up, whole or not, such as dollars, a rate per
+    merge or a ratio, bounded as a duration is."""
+    return value if is_number(value) and 0 <= value <= MAX_COUNT else None
 
 
 def timestamp(value):
@@ -271,6 +290,49 @@ def durations(value):
     return cleaned
 
 
+# economics: the window's bill and what it delivered. The counts are of
+# pull requests, sessions, runs, tokens, seconds and commits; the amounts
+# are the estimated dollars and the rates per merge. actions_runs_unread
+# is null when the records could not be listed, and then left out.
+ECONOMICS_FIELDS = {
+    "prices_as_of": matching(DATE),
+    **dict.fromkeys(("pull_requests", "pull_requests_measured", "merged", "sessions", "actions_runs",
+                     "actions_runs_unread", "tokens_input", "tokens_cache_write", "tokens_cache_read",
+                     "tokens_output", "tokens_total", "tokens_unpriced"), count),
+    "estimated_usd": amount,
+    "coordinator_usd": amount,
+    **dict.fromkeys(("claude_seconds", "commits", "check_failures", "reverts"), count),
+    "tokens_by_family": section(FAMILIES, count),
+    **dict.fromkeys(("tokens_per_merge", "usd_per_merge", "claude_seconds_per_merge", "commits_per_merge"), amount),
+}
+
+# One side of coordination, work done alone or in parallel.
+SIDE_FIELDS = {
+    **dict.fromkeys(("pull_requests", "merged", "measured", "measured_merged", "tokens"), count),
+    "estimated_usd": amount,
+    **dict.fromkeys(("claude_seconds", "commits", "check_failures", "first_check_passed", "first_check_counted"),
+                    count),
+    "open_to_merge_median": duration,
+    "active_seconds": count,
+}
+
+
+def economics(value):
+    return kept(value, ECONOMICS_FIELDS) if isinstance(value, dict) else None
+
+
+def coordination(value):
+    """The two sides, each cut as a work setting is, and the ratios, each a
+    number from zero up and null where a side has nothing to divide."""
+    if not isinstance(value, dict):
+        return None
+    cleaned = strata(SIDES, SIDE_FIELDS)(value)
+    ratios = section(RATIOS, amount)(value.get("ratios"))
+    if ratios:
+        cleaned["ratios"] = ratios
+    return cleaned
+
+
 METRICS_FIELDS = {
     "schema": exactly(METRICS_SCHEMA),
     "generated_at": timestamp,
@@ -286,6 +348,8 @@ METRICS_FIELDS = {
     # is None, so they are left out then, never kept as zeros.
     "by_setting": strata(SETTINGS, dict.fromkeys(SETTING_COUNTS, count)),
     "pairs": strata(RELATIONS, dict.fromkeys(PAIR_COUNTS, count)),
+    "economics": economics,
+    "coordination": coordination,
 }
 
 # What the judge counts for each work setting: its pull requests that

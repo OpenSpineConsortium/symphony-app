@@ -119,6 +119,30 @@ def metrics(**changes):
             "undetermined": {"pairs": 1, "both_active": 0, "file_overlap": 1, "landings": 1,
                              "landings_file_overlap": 1, "conflict_onsets": 1, "conflict_onsets_file_overlap": 1},
         },
+        # The template's sample economics; its coordination has both sides
+        # and every ratio, where the template's sample world, with nothing
+        # done alone, has none, so each name of the format is held here.
+        "economics": {"prices_as_of": "2026-10-06", "pull_requests": 11, "pull_requests_measured": 6, "merged": 10,
+                      "sessions": 2, "actions_runs": 2, "actions_runs_unread": 0, "tokens_input": 9200,
+                      "tokens_cache_write": 219000, "tokens_cache_read": 3250000, "tokens_output": 65200,
+                      "tokens_total": 3543400, "tokens_unpriced": 0, "estimated_usd": 2.5122, "coordinator_usd": 0.1654,
+                      "claude_seconds": 8635, "commits": 16, "check_failures": 0, "reverts": 0,
+                      "tokens_by_family": {"fable": 0, "opus": 1927300, "sonnet": 1580900, "haiku": 35200,
+                                           "other": 0},
+                      "tokens_per_merge": 354340.0, "usd_per_merge": 0.25122, "claude_seconds_per_merge": 863.5,
+                      "commits_per_merge": 1.6},
+        "coordination": {
+            "alone": {"pull_requests": 2, "merged": 2, "measured": 2, "measured_merged": 2, "tokens": 6000000,
+                      "estimated_usd": 12.5, "claude_seconds": 7200, "commits": 5, "check_failures": 2,
+                      "first_check_passed": 1, "first_check_counted": 2, "open_to_merge_median": 36000,
+                      "active_seconds": 72000},
+            "parallel": {"pull_requests": 3, "merged": 3, "measured": 3, "measured_merged": 3, "tokens": 6000000,
+                         "estimated_usd": 11.9, "claude_seconds": 9000, "commits": 4, "check_failures": 1,
+                         "first_check_passed": 2, "first_check_counted": 3, "open_to_merge_median": 14400,
+                         "active_seconds": 28800},
+            "ratios": {"tokens_per_merge": 1.5, "usd_per_merge": 1.5756, "latency": 2.5, "throughput": 3.75,
+                       "first_check_pass": 1.3333, "commits_per_merge": 1.875, "failures_per_pull_request": 2.0},
+        },
     }
     document.update(changes)
     return document
@@ -178,6 +202,11 @@ NOISY_METRICS = metrics(
                 "undetermined": {"merged": "bob-labs merged"}},
     pairs={"several_people": {"pairs": 2, "conflict_onsets": 10 ** 20}, "bob-labs": {"pairs": 1},
            "same_session": {"pairs": {"nested": 1}}},
+    economics={"prices_as_of": "2026-10-06 by bob-labs", "tokens_total": "lots", "estimated_usd": -1, "merged": 3,
+               "tokens_by_family": {"opus": 10, "bob-labs": 5, "sonnet": "x"}, "model": "claude-opus-5-5",
+               "usd_per_merge": 0.5, "actions_runs_unread": None},
+    coordination={"alone": {"pull_requests": 2, "tokens": "many", "logins": 1}, "bob-labs": {"pull_requests": 1},
+                  "parallel": {"estimated_usd": -3}, "ratios": {"latency": 2.5, "throughput": -1, "names": 3}},
 )
 NOISY_METRICS_KEPT = {
     "schema": "sdlc-metrics/1", "window_days": 30, "sharing": "on",
@@ -187,6 +216,8 @@ NOISY_METRICS_KEPT = {
     "parallel": {"people": 2, "files_unread": 1},
     "by_setting": {"solo": {"pull_requests": 4, "partners": 1}, "automation": {"open": 1}},
     "pairs": {"several_people": {"pairs": 2}},
+    "economics": {"merged": 3, "tokens_by_family": {"opus": 10}, "usd_per_merge": 0.5},
+    "coordination": {"alone": {"pull_requests": 2}, "ratios": {"latency": 2.5}},
 }
 # The judge's file with text or a negative number in window_days, limit
 # and multi_speaker and in solo's conversations and multi_speaker, and
@@ -208,7 +239,10 @@ NOISY_JUDGE_KEPT = {"schema": "sdlc-judge/1", "generated_at": "2026-10-09T21:30:
 # The keys the breakdown by work setting added to each file. A copy of the
 # template made before it writes none of them, and goes on doing so until
 # its owner brings the new metrics tool in.
-BREAKDOWN_METRICS_KEYS = ("parallel", "by_setting", "pairs")
+BREAKDOWN_METRICS_KEYS = ("parallel", "by_setting", "pairs", "economics", "coordination")
+# The keys the economics added; a copy of the template with the breakdown
+# and from before them writes the rest.
+ECONOMICS_METRICS_KEYS = ("economics", "coordination")
 BREAKDOWN_JUDGE_KEYS = ("window_days", "limit", "multi_speaker", "by_setting")
 
 
@@ -376,6 +410,13 @@ class CollectTest(unittest.TestCase):
             with self.subTest(schema=document["schema"]):
                 self.assertEqual(kept_line(records, ORCHARD), line_for(ORCHARD, document))
         self.assertEqual(collect.summary(collected.tally), SUMMARY)
+
+    def test_a_file_from_before_the_economics_is_kept_as_it_was(self):
+        old_metrics = before_the_breakdown(metrics(), ECONOMICS_METRICS_KEYS)
+        held = files()
+        held[(ORCHARD[0], "METRICS.json")] = old_metrics
+        collected = run(World(held))
+        self.assertEqual(kept_line(collected.metrics, ORCHARD), line_for(ORCHARD, old_metrics))
 
     def test_sharing_off_drops_the_metrics_and_the_judge_unread(self):
         self.assertNotIn(hash_of(QUIET[1]), self.metrics)
@@ -583,7 +624,9 @@ class FailureTest(unittest.TestCase):
         kept = (before_the_breakdown(metrics(), BREAKDOWN_METRICS_KEYS), judge())
         del kept[1]["by_setting"]
         self.assert_kept_and_the_rest_collected(
-            (metrics(parallel="bob-labs", by_setting=["bob-labs"], pairs=5), judge(by_setting=["bob-labs"])), kept)
+            (metrics(parallel="bob-labs", by_setting=["bob-labs"], pairs=5, economics="spent by bob-labs",
+                     coordination=["bob-labs"]),
+             judge(by_setting=["bob-labs"])), kept)
 
     def test_a_setting_that_is_no_object_is_left_out_and_the_rest_collected(self):
         # Each string holds a count's name, so a setting read as an object
@@ -630,6 +673,28 @@ class ValuesTest(unittest.TestCase):
             self.assertIsNone(collect.duration(value), value)
         for value in (1.01, -0.1, float("nan"), True, "0.5", 10 ** 400):
             self.assertIsNone(collect.rate(value), value)
+
+    def test_amounts_are_numbers_from_zero_whole_or_not(self):
+        # Dollars, rates per merge and ratios; a ratio may be well over 1.
+        for value in (0, 2.5122, 354340.0, 3.75, 2 ** 53 - 1):
+            self.assertEqual(collect.amount(value), value)
+        for value in (-0.01, float("inf"), float("nan"), True, "1.5", None, 2 ** 53, 10 ** 400):
+            self.assertIsNone(collect.amount(value), value)
+
+    def test_the_price_tables_date_is_a_date(self):
+        clean = collect.matching(collect.DATE)
+        self.assertEqual(clean("2026-10-06"), "2026-10-06")
+        for value in ("2026-10-06 by bob-labs", "06/10/2026", "bob-labs", "2026-1-6", 20261006):
+            self.assertIsNone(clean(value), value)
+
+    def test_a_ratio_with_nothing_to_divide_is_left_out_and_the_side_kept(self):
+        document = metrics()
+        document["coordination"] = {**document["coordination"], "ratios": dict.fromkeys(collect.RATIOS)}
+        document["coordination"]["alone"] = {**document["coordination"]["alone"], "open_to_merge_median": None}
+        kept = collect.shared_metrics(document)
+        self.assertNotIn("ratios", kept["coordination"])
+        self.assertNotIn("open_to_merge_median", kept["coordination"]["alone"])
+        self.assertEqual(kept["coordination"]["parallel"], metrics()["coordination"]["parallel"])
 
     def test_a_protocol_version_is_a_release_with_or_without_its_commit(self):
         # tools/metrics.py in the template writes the release and the short
