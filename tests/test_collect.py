@@ -54,6 +54,11 @@ FORBIDDEN = (["alice-co", "bob-labs", "github.com", "mill wheel", str(ALICE), st
 
 
 def metrics(**changes):
+    """A METRICS.json as the template writes it. by_setting and pairs hold
+    every work setting and every kind of pair, with the template's sample
+    numbers, so the round trip holds each of the format's names to the
+    template's: a name the collector misspelled would leave out what it
+    names."""
     document = {
         "schema": "sdlc-metrics/1", "generated_at": "2026-10-10T04:00:00Z", "window_days": 30, "sharing": "on",
         "protocol_version": "0.2.0 f530a66",
@@ -74,20 +79,54 @@ def metrics(**changes):
             "solo": {"pull_requests": 1, "merged": 1, "closed_unmerged": 0, "open": 0, "conflicted": 0, "released": 0,
                      "changes_requested": 1, "claim_branches": 1, "partners": 0, "work_seconds": 7200,
                      "landings_under": 1, "landings_before_opening": 0, "file_overlap": 0},
+            "one_session": {"pull_requests": 2, "merged": 2, "closed_unmerged": 0, "open": 0, "conflicted": 0,
+                            "released": 0, "changes_requested": 0, "claim_branches": 2, "partners": 2,
+                            "work_seconds": 11580, "landings_under": 0, "landings_before_opening": 1,
+                            "file_overlap": 0},
             "one_person_sessions": {"pull_requests": 3, "merged": 3, "closed_unmerged": 0, "open": 0, "conflicted": 1,
                                     "released": 0, "changes_requested": 0, "claim_branches": 3, "partners": 5,
                                     "work_seconds": 6814800, "landings_under": 2, "landings_before_opening": 0,
                                     "file_overlap": 2},
+            "several_people": {"pull_requests": 1, "merged": 0, "closed_unmerged": 1, "open": 2, "conflicted": 0,
+                               "released": 0, "changes_requested": 0, "claim_branches": 1, "partners": 1,
+                               "work_seconds": 10800, "landings_under": 1, "landings_before_opening": 0,
+                               "file_overlap": 1},
+            "several_people_and_sessions": {"pull_requests": 1, "merged": 1, "closed_unmerged": 0, "open": 0,
+                                            "conflicted": 1, "released": 0, "changes_requested": 0,
+                                            "claim_branches": 0, "partners": 2, "work_seconds": 19800,
+                                            "landings_under": 1, "landings_before_opening": 0, "file_overlap": 1},
+            "undetermined": {"pull_requests": 2, "merged": 2, "closed_unmerged": 0, "open": 0, "conflicted": 1,
+                             "released": 1, "changes_requested": 0, "claim_branches": 2, "partners": 2,
+                             "work_seconds": 25200, "landings_under": 1, "landings_before_opening": 0,
+                             "file_overlap": 2},
+            "workflow_agents": {"pull_requests": 1, "merged": 1, "closed_unmerged": 0, "open": 0, "conflicted": 0,
+                                "released": 0, "changes_requested": 0, "claim_branches": 1, "partners": 0,
+                                "work_seconds": 1500, "landings_under": 0, "landings_before_opening": 0,
+                                "file_overlap": 0},
+            "automation": {"pull_requests": 1, "merged": 1, "closed_unmerged": 0, "open": 1, "conflicted": 0,
+                           "released": 0, "changes_requested": 0, "claim_branches": 0, "partners": 0,
+                           "work_seconds": 1800, "landings_under": 0, "landings_before_opening": 0,
+                           "file_overlap": 0},
         },
-        "pairs": {"one_person_sessions": {"pairs": 3, "both_active": 1, "file_overlap": 1, "landings": 2,
-                                          "landings_file_overlap": 1, "conflict_onsets": 2,
-                                          "conflict_onsets_file_overlap": 1}},
+        "pairs": {
+            "same_session": {"pairs": 2, "both_active": 1, "file_overlap": 1, "landings": 1,
+                             "landings_file_overlap": 1, "conflict_onsets": 0, "conflict_onsets_file_overlap": 0},
+            "one_person_sessions": {"pairs": 3, "both_active": 1, "file_overlap": 1, "landings": 2,
+                                    "landings_file_overlap": 1, "conflict_onsets": 2,
+                                    "conflict_onsets_file_overlap": 1},
+            "several_people": {"pairs": 1, "both_active": 0, "file_overlap": 1, "landings": 1,
+                               "landings_file_overlap": 1, "conflict_onsets": 0, "conflict_onsets_file_overlap": 0},
+            "undetermined": {"pairs": 1, "both_active": 0, "file_overlap": 1, "landings": 1,
+                             "landings_file_overlap": 1, "conflict_onsets": 1, "conflict_onsets_file_overlap": 1},
+        },
     }
     document.update(changes)
     return document
 
 
 def judge(**changes):
+    """A JUDGE.json as the template's judge writes it, by_setting with every
+    work setting and the template's sample numbers, as metrics() has it."""
     document = {
         "schema": "sdlc-judge/1", "generated_at": "2026-10-09T21:30:00Z", "model": "claude-opus-5-5",
         "prompt_variant": "appF-7", "conversations": 5,
@@ -95,10 +134,23 @@ def judge(**changes):
         "groups": {"unresponsiveness": 3, "hallucination": 1, "repetition": 3},
         "window_days": 30, "limit": 20, "multi_speaker": 2,
         "by_setting": {
-            "solo": {"pull_requests": 3, "conversations": 3, "multi_speaker": 1,
-                     "counts": {"C1a": 1, "C1b": 0, "C2": 1, "C3a": 0, "C3b": 0, "C4a": 0, "C4b": 1}},
-            "several_people": {"pull_requests": 2, "conversations": 2, "multi_speaker": 1,
-                               "counts": {"C1a": 0, "C1b": 0, "C2": 1, "C3a": 0, "C3b": 1, "C4a": 0, "C4b": 2}},
+            "solo": {"pull_requests": 9, "conversations": 6, "multi_speaker": 1,
+                     "counts": {"C1a": 0, "C1b": 0, "C2": 0, "C3a": 0, "C3b": 0, "C4a": 0, "C4b": 1}},
+            "one_session": {"pull_requests": 5, "conversations": 4, "multi_speaker": 0,
+                            "counts": {"C1a": 0, "C1b": 0, "C2": 0, "C3a": 0, "C3b": 0, "C4a": 0, "C4b": 1}},
+            "one_person_sessions": {"pull_requests": 3, "conversations": 3, "multi_speaker": 0,
+                                    "counts": {"C1a": 1, "C1b": 0, "C2": 0, "C3a": 0, "C3b": 0, "C4a": 0, "C4b": 1}},
+            "several_people": {"pull_requests": 2, "conversations": 2, "multi_speaker": 2,
+                               "counts": {"C1a": 1, "C1b": 1, "C2": 0, "C3a": 0, "C3b": 0, "C4a": 0, "C4b": 0}},
+            "several_people_and_sessions": {"pull_requests": 1, "conversations": 1, "multi_speaker": 1,
+                                            "counts": {"C1a": 0, "C1b": 0, "C2": 0, "C3a": 1, "C3b": 0, "C4a": 0,
+                                                       "C4b": 0}},
+            "undetermined": {"pull_requests": 0, "conversations": 0, "multi_speaker": 0,
+                             "counts": {"C1a": 0, "C1b": 0, "C2": 0, "C3a": 0, "C3b": 0, "C4a": 0, "C4b": 0}},
+            "workflow_agents": {"pull_requests": 1, "conversations": 0, "multi_speaker": 0,
+                                "counts": {"C1a": 0, "C1b": 0, "C2": 0, "C3a": 0, "C3b": 0, "C4a": 0, "C4b": 0}},
+            "automation": {"pull_requests": 2, "conversations": 1, "multi_speaker": 0,
+                           "counts": {"C1a": 0, "C1b": 0, "C2": 0, "C3a": 0, "C3b": 0, "C4a": 0, "C4b": 0}},
         },
     }
     document.update(changes)
@@ -106,7 +158,10 @@ def judge(**changes):
 
 
 # A project's files with keys the format does not name and text where it
-# says a number, much of it naming the project.
+# says a number, much of it naming the project. Its settings come in an
+# order of the file's own, automation before solo and solo's counts
+# shuffled, and its whole numbers partly as floats (2.0): the line keeps the
+# format's order and writes ints, whatever the file did.
 NOISY_METRICS = metrics(
     repository="bob-labs/noisy-river", owner="bob-labs", titles=["Fix the mill wheel"],
     generated_at="written by bob-labs", protocol_version="0.2.0 on bob-labs/noisy-river",
@@ -117,7 +172,8 @@ NOISY_METRICS = metrics(
     rates={"merge_rate": 1.5, "first_check_pass_rate": 0.25, "secret_rate": 0.1},
     parallel={"people": 2, "logins": 3, "sessions": "two", "peak_parallel": -1, "files_unread": 1.0,
               "truncated": True},
-    by_setting={"solo": {"pull_requests": 4, "file_overlap": None, "work_seconds": 2.5, "titles": 1},
+    by_setting={"automation": {"open": 1, "logins": 2},
+                "solo": {"partners": 1, "pull_requests": 4, "file_overlap": None, "work_seconds": 2.5, "titles": 1},
                 "ann-secret": {"pull_requests": 1}, "several_people": [1],
                 "undetermined": {"merged": "bob-labs merged"}},
     pairs={"several_people": {"pairs": 2, "conflict_onsets": 10 ** 20}, "bob-labs": {"pairs": 1},
@@ -129,15 +185,21 @@ NOISY_METRICS_KEPT = {
     "durations_seconds": {"open_to_merge": {"median": 300}, "first_review": {"median": 60}},
     "rates": {"first_check_pass_rate": 0.25},
     "parallel": {"people": 2, "files_unread": 1},
-    "by_setting": {"solo": {"pull_requests": 4}},
+    "by_setting": {"solo": {"pull_requests": 4, "partners": 1}, "automation": {"open": 1}},
     "pairs": {"several_people": {"pairs": 2}},
 }
+# The judge's file with text or a negative number in window_days, limit
+# and multi_speaker and in solo's conversations and multi_speaker, and
+# with one_session holding only codes the format does not know: none of it
+# is kept, and one_session not even as an empty object.
 NOISY_JUDGE = judge(quotes=["bob-labs said the mill wheel was fixed"],
                     model="claude-opus-5-5 reading bob-labs/noisy-river",
                     counts={"C1a": "many", "C2": 2, "C5": 1, "bob-labs": 3}, groups={"repetition": 1, "names": 2},
-                    window_days="thirty", limit=None, multi_speaker=-2,
-                    by_setting={"solo": {"pull_requests": 2, "counts": {"C1a": 1, "C5": 1, "bob-labs": 2},
+                    window_days="thirty", limit="bob-labs/noisy-river", multi_speaker=-2,
+                    by_setting={"solo": {"pull_requests": 2, "conversations": "bob-labs", "multi_speaker": -1,
+                                         "counts": {"C1a": 1, "C5": 1, "bob-labs": 2},
                                          "quotes": ["bob-labs said so"]},
+                                "one_session": {"counts": {"C5": 2, "bob-labs": 1}},
                                 "bob-labs": {"conversations": 1}})
 NOISY_JUDGE_KEPT = {"schema": "sdlc-judge/1", "generated_at": "2026-10-09T21:30:00Z", "prompt_variant": "appF-7",
                     "conversations": 5, "counts": {"C2": 2}, "groups": {"repetition": 1},
@@ -273,6 +335,18 @@ def by_repo(records):
     return {found["repo"]: found for found in records}
 
 
+def kept_line(records, repository):
+    """The line the collector wrote for repository, as its text: compared
+    as text, a line's key order and a count's int are held too, which dict
+    equality passes (another order, 1.0 for 1)."""
+    return collect.line_of(by_repo(records)[hash_of(repository[1])])
+
+
+def line_for(repository, document):
+    """The line {repo, collected_at, ...document} of repository today."""
+    return collect.line_of({"repo": hash_of(repository[1]), "collected_at": TODAY, **document})
+
+
 def read_lines(path):
     return [json.loads(line) for line in path.read_text(encoding="ascii").splitlines()] if path.exists() else []
 
@@ -285,11 +359,8 @@ class CollectTest(unittest.TestCase):
         self.judges = by_repo(self.collected.judges)
 
     def test_shared_metrics_and_judge_become_a_record_each_under_the_hash(self):
-        self.assertEqual(self.metrics[hash_of(ORCHARD[1])],
-                         {"repo": hash_of(ORCHARD[1]), "collected_at": TODAY, **metrics()})
-        self.assertEqual(self.judges[hash_of(ORCHARD[1])],
-                         {"repo": hash_of(ORCHARD[1]), "collected_at": TODAY, **judge()})
-        self.assertEqual(list(self.metrics[hash_of(ORCHARD[1])])[:2], ["repo", "collected_at"])
+        self.assertEqual(kept_line(self.collected.metrics, ORCHARD), line_for(ORCHARD, metrics()))
+        self.assertEqual(kept_line(self.collected.judges, ORCHARD), line_for(ORCHARD, judge()))
 
     def test_a_file_from_before_the_breakdown_is_kept_as_it_was(self):
         # The collector and the template change in either order, so files
@@ -301,11 +372,9 @@ class CollectTest(unittest.TestCase):
         held[(ORCHARD[0], "METRICS.json")] = old_metrics
         held[(ORCHARD[0], "JUDGE.json")] = old_judge
         collected = run(World(held))
-        repo = hash_of(ORCHARD[1])
         for records, document in ((collected.metrics, old_metrics), (collected.judges, old_judge)):
             with self.subTest(schema=document["schema"]):
-                self.assertEqual(collect.line_of(by_repo(records)[repo]),
-                                 collect.line_of({"repo": repo, "collected_at": TODAY, **document}))
+                self.assertEqual(kept_line(records, ORCHARD), line_for(ORCHARD, document))
         self.assertEqual(collect.summary(collected.tally), SUMMARY)
 
     def test_sharing_off_drops_the_metrics_and_the_judge_unread(self):
@@ -319,10 +388,8 @@ class CollectTest(unittest.TestCase):
         self.assertIn(f"/repos/{EMPTY[0]}/contents/METRICS.json", self.world.transport.paths())
 
     def test_keys_the_format_does_not_name_and_text_where_a_number_belongs_are_stripped(self):
-        self.assertEqual(self.metrics[hash_of(NOISY[1])],
-                         {"repo": hash_of(NOISY[1]), "collected_at": TODAY, **NOISY_METRICS_KEPT})
-        self.assertEqual(self.judges[hash_of(NOISY[1])],
-                         {"repo": hash_of(NOISY[1]), "collected_at": TODAY, **NOISY_JUDGE_KEPT})
+        self.assertEqual(kept_line(self.collected.metrics, NOISY), line_for(NOISY, NOISY_METRICS_KEPT))
+        self.assertEqual(kept_line(self.collected.judges, NOISY), line_for(NOISY, NOISY_JUDGE_KEPT))
 
     def test_a_wrong_schema_is_dropped(self):
         self.assertNotIn(hash_of(OLD[1]), self.metrics)
@@ -499,6 +566,35 @@ class FailureTest(unittest.TestCase):
         self.assertEqual(collected.tally["shared"], 3)
         self.assertEqual(collect.summary(collected.tally), SUMMARY)
 
+    def assert_kept_and_the_rest_collected(self, given, kept):
+        """ORCHARD's METRICS.json and JUDGE.json, given, become the lines of
+        kept, and the run goes on to every other project as it would."""
+        held = files()
+        held[(ORCHARD[0], "METRICS.json")], held[(ORCHARD[0], "JUDGE.json")] = given
+        collected = run(World(held))
+        for records, document in zip((collected.metrics, collected.judges), kept):
+            self.assertEqual(kept_line(records, ORCHARD), line_for(ORCHARD, document))
+        self.assertEqual(collect.summary(collected.tally), SUMMARY)
+
+    def test_a_section_that_is_no_object_is_left_out_and_the_rest_collected(self):
+        # Text, a list or a number where an object belongs costs that part
+        # of one project's file alone; read as an object, it would stop the
+        # run before any project's line was written.
+        kept = (before_the_breakdown(metrics(), BREAKDOWN_METRICS_KEYS), judge())
+        del kept[1]["by_setting"]
+        self.assert_kept_and_the_rest_collected(
+            (metrics(parallel="bob-labs", by_setting=["bob-labs"], pairs=5), judge(by_setting=["bob-labs"])), kept)
+
+    def test_a_setting_that_is_no_object_is_left_out_and_the_rest_collected(self):
+        # Each string holds a count's name, so a setting read as an object
+        # would find that name in the text and then fail to read it.
+        given = (metrics(by_setting={**metrics()["by_setting"], "undetermined": "merged by bob-labs"},
+                         pairs={**metrics()["pairs"], "same_session": "pairs of bob-labs"}),
+                 judge(by_setting={**judge()["by_setting"], "solo": "conversations of bob-labs"}))
+        kept = (metrics(), judge())
+        del kept[0]["by_setting"]["undetermined"], kept[0]["pairs"]["same_session"], kept[1]["by_setting"]["solo"]
+        self.assert_kept_and_the_rest_collected(given, kept)
+
 
 class ValuesTest(unittest.TestCase):
     def test_counts_are_whole_numbers_from_zero(self):
@@ -522,11 +618,15 @@ class ValuesTest(unittest.TestCase):
         self.assertEqual(collect.shared_metrics(document), expected)
 
     def test_durations_and_rates_are_finite_and_in_range(self):
+        # A duration stops where a count does, at 2 ** 53 - 1 seconds, some
+        # 285 million years: a longer one could spell text in its digits,
+        # as the last refused here spells a repository's name.
         self.assertEqual(collect.duration(14400.5), 14400.5)
+        self.assertEqual(collect.duration(2 ** 53 - 1), 2 ** 53 - 1)
         self.assertEqual(collect.rate(0), 0)
         self.assertEqual(collect.rate(1), 1)
-        self.assertEqual(collect.duration(10 ** 300), 10 ** 300)
-        for value in (-1, float("inf"), float("nan"), True, "60", 10 ** 400, -10 ** 400):
+        for value in (-1, float("inf"), float("nan"), True, "60", 10 ** 400, -10 ** 400, 2 ** 53, float(2 ** 53),
+                      10 ** 300, int.from_bytes(b"bob-labs/noisy-river", "big")):
             self.assertIsNone(collect.duration(value), value)
         for value in (1.01, -0.1, float("nan"), True, "0.5", 10 ** 400):
             self.assertIsNone(collect.rate(value), value)
@@ -553,6 +653,12 @@ class ValuesTest(unittest.TestCase):
             self.assertEqual(clean(value), value)
         for value in ("claude opus", "bob-labs/noisy-river", "a" * 65, "", 7, "-x"):
             self.assertIsNone(clean(value), value)
+
+    def test_a_judge_run_without_a_limit_keeps_no_limit(self):
+        # The judge writes null for a run without a limit, and the line leaves
+        # it out: a line holds limit only when its run judged just the newest
+        # pull requests.
+        self.assertNotIn("limit", collect.shared_judge(judge(limit=None)))
 
     def test_durations_nested_or_flat_are_kept_nested(self):
         self.assertEqual(collect.durations({"open_to_merge": {"median": 5, "p90": 9},

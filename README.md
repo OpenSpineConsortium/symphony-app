@@ -307,17 +307,28 @@ Reading the dataset. A line of metrics.jsonl is one repository's rolling
 thirty days as its workflow last wrote them, so one repository's
 consecutive lines overlap by 29 days. Take one line per repository per
 thirty-day block, chosen by generated_at, not collected_at, since a run
-that failed leaves the last record standing. The breakdown's counts then
-add up across blocks, because each pull request counts in the block where
-it ended. Compare settings within one repository's hash before pooling. A
+that failed leaves the last record standing. by_setting's counts other
+than open, and pairs', then add up across blocks, because each pull
+request, and each pair, counts in the block where it ended. parallel's
+counts and by_setting's open describe their block alone and are never
+summed: people and sessions are distinct counts, the peaks are maxima,
+and a pull request open at the end of one block can count again in the
+next. Compare settings within one repository's hash before pooling. A
 line without parallel, by_setting and pairs comes from a copy of the
 template made before the breakdown and is not broken out, which is not
-the same as zero. Read conflicts per landing (by_setting's conflicted
-over landings_under, pairs' conflict_onsets over landings), never as
-conflicted over pull_requests. judge.jsonl repeats a JUDGE.json until
-someone judges again: deduplicate on generated_at, and leave out lines
-whose limit is set. Wilson intervals belong to counts of pull requests,
-never to pairs.
+the same as zero. Nor is an absent file count: it is not known. Where the
+workflow left changed files unread, parallel's files_unread is above 0
+and the counts that need those files are left out: file_overlap in every
+setting but workflow_agents and automation, which keep their 0, and
+pairs' file_overlap, landings_file_overlap and
+conflict_onsets_file_overlap. Read conflicts per landing (by_setting's
+conflicted over landings_under, pairs' conflict_onsets over landings),
+never as conflicted over pull_requests. judge.jsonl repeats a JUDGE.json
+until someone judges again: deduplicate on generated_at, and leave out
+lines whose limit is set. A judge line without window_days comes from a
+judge before the breakdown, which did not record a limit: treat its limit
+as not known, never as none. Wilson intervals belong to counts of pull
+requests, never to pairs.
 
 What is read: those two files at the ref `metrics` of every repository
 the App is installed on, with a token that can only read, and no other

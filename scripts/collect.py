@@ -138,8 +138,9 @@ PARALLEL_COUNTS = ("people", "sessions", "sessions_per_person_max", "pull_reques
                    "open_conflicting_dirty", "truncated", "files_unread")
 # The largest whole number a JSON reader's double holds exactly along
 # with every one below it (JavaScript's Number.MAX_SAFE_INTEGER). A count
-# is a number of pull requests, comments or seconds, and a larger one is
-# no count: its digits could carry text.
+# is a number of pull requests, comments or seconds, and a duration one of
+# seconds, some 285 million years at this bound; a larger number is
+# neither, and its digits could carry text.
 MAX_COUNT = 2 ** 53 - 1
 
 # The vendored protocol's release and, as the template writes it from
@@ -178,8 +179,9 @@ def count(value):
 
 
 def duration(value):
-    """Seconds, zero or more."""
-    return value if is_number(value) and value >= 0 else None
+    """Seconds, from zero to MAX_COUNT, which bounds a duration's digits
+    as it bounds a count's."""
+    return value if is_number(value) and 0 <= value <= MAX_COUNT else None
 
 
 def rate(value):
@@ -235,8 +237,9 @@ def section(names, clean):
 def strata(names, fields):
     """A cleaner for an object of named objects, such as by_setting: each
     name the format knows is cut by fields as kept() cuts a file, and a
-    name it does not know, or one whose object keeps nothing, is left
-    out."""
+    name it does not know, or one whose object keeps nothing but empty
+    objects (a judge's counts of codes the format does not know), is left
+    out, so a line never shows a setting that holds nothing."""
     def clean_strata(value):
         if not isinstance(value, dict):
             return None
@@ -244,7 +247,7 @@ def strata(names, fields):
         for name in names:
             given = value.get(name)
             kept_one = kept(given, fields) if isinstance(given, dict) else {}
-            if kept_one:
+            if any(part != {} for part in kept_one.values()):
                 cleaned[name] = kept_one
         return cleaned
     return clean_strata
