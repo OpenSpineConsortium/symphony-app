@@ -64,6 +64,24 @@ def metrics(**changes):
                               "open_to_merge": {"median": 7200, "p90": 86400},
                               "first_review": {"median": 1800, "p90": 14400.5}},
         "rates": {"merge_rate": 0.75, "first_check_pass_rate": 0.5},
+        "parallel": {"people": 2, "sessions": 4, "sessions_per_person_max": 4, "pull_requests_with_session": 11,
+                     "pull_requests_without_session": 1, "pull_requests_multi_session": 2,
+                     "sessions_across_people": 1, "peak_parallel": 2, "peak_parallel_people": 2,
+                     "peak_sessions_one_person": 2, "conflict_marks": 3, "conflict_marks_unattributed": 1,
+                     "open_conflicting": 2, "open_conflicting_drafts": 1, "open_conflicting_dirty": 1, "truncated": 1,
+                     "files_unread": 0},
+        "by_setting": {
+            "solo": {"pull_requests": 1, "merged": 1, "closed_unmerged": 0, "open": 0, "conflicted": 0, "released": 0,
+                     "changes_requested": 1, "claim_branches": 1, "partners": 0, "work_seconds": 7200,
+                     "landings_under": 1, "landings_before_opening": 0, "file_overlap": 0},
+            "one_person_sessions": {"pull_requests": 3, "merged": 3, "closed_unmerged": 0, "open": 0, "conflicted": 1,
+                                    "released": 0, "changes_requested": 0, "claim_branches": 3, "partners": 5,
+                                    "work_seconds": 6814800, "landings_under": 2, "landings_before_opening": 0,
+                                    "file_overlap": 2},
+        },
+        "pairs": {"one_person_sessions": {"pairs": 3, "both_active": 1, "file_overlap": 1, "landings": 2,
+                                          "landings_file_overlap": 1, "conflict_onsets": 2,
+                                          "conflict_onsets_file_overlap": 1}},
     }
     document.update(changes)
     return document
@@ -75,6 +93,13 @@ def judge(**changes):
         "prompt_variant": "appF-7", "conversations": 5,
         "counts": {"C1a": 1, "C1b": 0, "C2": 2, "C3a": 0, "C3b": 1, "C4a": 0, "C4b": 3},
         "groups": {"unresponsiveness": 3, "hallucination": 1, "repetition": 3},
+        "window_days": 30, "limit": 20, "multi_speaker": 2,
+        "by_setting": {
+            "solo": {"pull_requests": 3, "conversations": 3, "multi_speaker": 1,
+                     "counts": {"C1a": 1, "C1b": 0, "C2": 1, "C3a": 0, "C3b": 0, "C4a": 0, "C4b": 1}},
+            "several_people": {"pull_requests": 2, "conversations": 2, "multi_speaker": 1,
+                               "counts": {"C1a": 0, "C1b": 0, "C2": 1, "C3a": 0, "C3b": 1, "C4a": 0, "C4b": 2}},
+        },
     }
     document.update(changes)
     return document
@@ -90,18 +115,45 @@ NOISY_METRICS = metrics(
     durations_seconds={"open_to_merge_median": 300, "open_to_merge_p90": "slow",
                        "first_review": {"median": 60, "p90": None, "note": 5}, "branch_names": {"median": 1}},
     rates={"merge_rate": 1.5, "first_check_pass_rate": 0.25, "secret_rate": 0.1},
+    parallel={"people": 2, "logins": 3, "sessions": "two", "peak_parallel": -1, "files_unread": 1.0,
+              "truncated": True},
+    by_setting={"solo": {"pull_requests": 4, "file_overlap": None, "work_seconds": 2.5, "titles": 1},
+                "ann-secret": {"pull_requests": 1}, "several_people": [1],
+                "undetermined": {"merged": "bob-labs merged"}},
+    pairs={"several_people": {"pairs": 2, "conflict_onsets": 10 ** 20}, "bob-labs": {"pairs": 1},
+           "same_session": {"pairs": {"nested": 1}}},
 )
 NOISY_METRICS_KEPT = {
     "schema": "sdlc-metrics/1", "window_days": 30, "sharing": "on",
     "counts": {"claims": 4, "contributors": 2},
     "durations_seconds": {"open_to_merge": {"median": 300}, "first_review": {"median": 60}},
     "rates": {"first_check_pass_rate": 0.25},
+    "parallel": {"people": 2, "files_unread": 1},
+    "by_setting": {"solo": {"pull_requests": 4}},
+    "pairs": {"several_people": {"pairs": 2}},
 }
 NOISY_JUDGE = judge(quotes=["bob-labs said the mill wheel was fixed"],
                     model="claude-opus-5-5 reading bob-labs/noisy-river",
-                    counts={"C1a": "many", "C2": 2, "C5": 1, "bob-labs": 3}, groups={"repetition": 1, "names": 2})
+                    counts={"C1a": "many", "C2": 2, "C5": 1, "bob-labs": 3}, groups={"repetition": 1, "names": 2},
+                    window_days="thirty", limit=None, multi_speaker=-2,
+                    by_setting={"solo": {"pull_requests": 2, "counts": {"C1a": 1, "C5": 1, "bob-labs": 2},
+                                         "quotes": ["bob-labs said so"]},
+                                "bob-labs": {"conversations": 1}})
 NOISY_JUDGE_KEPT = {"schema": "sdlc-judge/1", "generated_at": "2026-10-09T21:30:00Z", "prompt_variant": "appF-7",
-                    "conversations": 5, "counts": {"C2": 2}, "groups": {"repetition": 1}}
+                    "conversations": 5, "counts": {"C2": 2}, "groups": {"repetition": 1},
+                    "by_setting": {"solo": {"pull_requests": 2, "counts": {"C1a": 1}}}}
+
+# The keys the breakdown by work setting added to each file. A copy of the
+# template made before it writes none of them, and goes on doing so until
+# its owner brings the new metrics tool in.
+BREAKDOWN_METRICS_KEYS = ("parallel", "by_setting", "pairs")
+BREAKDOWN_JUDGE_KEYS = ("window_days", "limit", "multi_speaker", "by_setting")
+
+
+def before_the_breakdown(document, added):
+    """document as a copy of the template made before the breakdown writes
+    it: the same file without the keys the breakdown added."""
+    return {key: value for key, value in document.items() if key not in added}
 
 
 def files():
@@ -238,6 +290,23 @@ class CollectTest(unittest.TestCase):
         self.assertEqual(self.judges[hash_of(ORCHARD[1])],
                          {"repo": hash_of(ORCHARD[1]), "collected_at": TODAY, **judge()})
         self.assertEqual(list(self.metrics[hash_of(ORCHARD[1])])[:2], ["repo", "collected_at"])
+
+    def test_a_file_from_before_the_breakdown_is_kept_as_it_was(self):
+        # The collector and the template change in either order, so files
+        # without the breakdown keep coming; each must become the very
+        # line it became before the collector knew the new keys.
+        old_metrics = before_the_breakdown(metrics(), BREAKDOWN_METRICS_KEYS)
+        old_judge = before_the_breakdown(judge(), BREAKDOWN_JUDGE_KEYS)
+        held = files()
+        held[(ORCHARD[0], "METRICS.json")] = old_metrics
+        held[(ORCHARD[0], "JUDGE.json")] = old_judge
+        collected = run(World(held))
+        repo = hash_of(ORCHARD[1])
+        for records, document in ((collected.metrics, old_metrics), (collected.judges, old_judge)):
+            with self.subTest(schema=document["schema"]):
+                self.assertEqual(collect.line_of(by_repo(records)[repo]),
+                                 collect.line_of({"repo": repo, "collected_at": TODAY, **document}))
+        self.assertEqual(collect.summary(collected.tally), SUMMARY)
 
     def test_sharing_off_drops_the_metrics_and_the_judge_unread(self):
         self.assertNotIn(hash_of(QUIET[1]), self.metrics)
@@ -437,6 +506,20 @@ class ValuesTest(unittest.TestCase):
         self.assertEqual(collect.count(3.0), 3)
         for value in (True, False, -1, 2.5, float("nan"), float("inf"), "3", None, [3]):
             self.assertIsNone(collect.count(value), value)
+
+    def test_counts_stop_at_the_largest_exact_whole_number(self):
+        # Past 2 ** 53 - 1 a JSON reader's double no longer holds every
+        # whole number exactly, and a count of more digits than that is
+        # room for text, in any of the breakdown's many count fields.
+        self.assertEqual(collect.count(2 ** 53 - 1), 2 ** 53 - 1)
+        for value in (2 ** 53, float(2 ** 53), 10 ** 20):
+            self.assertIsNone(collect.count(value), value)
+        document = metrics()
+        document["counts"]["claims"] = 10 ** 20
+        document["by_setting"]["solo"]["work_seconds"] = 2 ** 60
+        expected = metrics()
+        del expected["counts"]["claims"], expected["by_setting"]["solo"]["work_seconds"]
+        self.assertEqual(collect.shared_metrics(document), expected)
 
     def test_durations_and_rates_are_finite_and_in_range(self):
         self.assertEqual(collect.duration(14400.5), 14400.5)

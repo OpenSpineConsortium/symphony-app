@@ -294,11 +294,30 @@ when the commit already has the same verdict (a redelivery, a title edit),
 Projects that use the App can share how the claim protocol fares in them,
 as coordbench measures it on CooperBench, without their code or text
 leaving them. A project's own workflow writes two files to its branch
-`metrics`: METRICS.json, counts, durations and rates over thirty days,
-and, when a contributor runs the judge on their own machine, JUDGE.json,
-how often each kind of communication failure was found.
-scripts/collect.py, run daily by .github/workflows/collect.yml, gathers
-them.
+`metrics`: METRICS.json, counts, durations and rates over thirty days, in
+all, by work setting (what else was at work beside each pull request, and
+whose: one Claude Code session's, one person's several sessions', several
+people's) and in pairs of pull requests at work at the same time, and,
+when a contributor runs the judge on their own machine, JUDGE.json, how
+often each kind of communication failure was found, in all and by work
+setting. scripts/collect.py, run daily by .github/workflows/collect.yml,
+gathers them.
+
+Reading the dataset. A line of metrics.jsonl is one repository's rolling
+thirty days as its workflow last wrote them, so one repository's
+consecutive lines overlap by 29 days. Take one line per repository per
+thirty-day block, chosen by generated_at, not collected_at, since a run
+that failed leaves the last record standing. The breakdown's counts then
+add up across blocks, because each pull request counts in the block where
+it ended. Compare settings within one repository's hash before pooling. A
+line without parallel, by_setting and pairs comes from a copy of the
+template made before the breakdown and is not broken out, which is not
+the same as zero. Read conflicts per landing (by_setting's conflicted
+over landings_under, pairs' conflict_onsets over landings), never as
+conflicted over pull_requests. judge.jsonl repeats a JUDGE.json until
+someone judges again: deduplicate on generated_at, and leave out lines
+whose limit is set. Wilson intervals belong to counts of pull requests,
+never to pairs.
 
 What is read: those two files at the ref `metrics` of every repository
 the App is installed on, with a token that can only read, and no other
