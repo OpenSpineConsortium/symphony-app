@@ -4,11 +4,12 @@
 A project made from symphony-template, or adopted into it, writes two small
 files to its branch `metrics` with its own workflow: METRICS.json, the
 claim protocol's counts, durations and rates over the last thirty days,
-and, when a contributor runs the judge on their own machine, JUDGE.json,
-the number of each kind of communication failure the judge found. Both
-are aggregates by design, and the lists below are their format: the keys
-each file may hold and what kind of value each key takes. This script
-holds every file it reads to them.
+in all, by work setting and in pairs of pull requests at work at the same
+time, and, when a contributor runs the judge on their own machine,
+JUDGE.json, the number of each kind of communication failure the judge
+found, in all and by work setting. Both are aggregates by design, and the
+lists below are their format: the keys each file may hold and what kind
+of value each key takes. This script holds every file it reads to them.
 
 With the App's JWT this lists the App's installations, mints a token for
 each that can read contents and nothing else, lists the repositories it
@@ -24,7 +25,9 @@ where it says a count, a duration or a rate is kept only when it is such
 a number, so no text a project writes, whether by mistake or on purpose,
 reaches the dataset. The two strings it allows besides numbers, the
 model's name and the prompt variant, must look like identifiers, and a
-time is rewritten in one form of the collector's own.
+time is rewritten in one form of the collector's own. The names of the
+work settings and of the kinds of pairs are fixed words of the
+template's, from the lists below, never a project's.
 
 The repository is never named in the dataset. It becomes the HMAC-SHA256
 of its node id under a salt only the collector holds, so a line can be
@@ -95,7 +98,8 @@ METRICS_LINES = "metrics.jsonl"
 JUDGE_LINES = "judge.jsonl"
 METRICS_SCHEMA = "sdlc-metrics/1"
 JUDGE_SCHEMA = "sdlc-judge/1"
-# Both files are a few hundred bytes; anything far larger is not one.
+# Both files are a few kilobytes at most, the breakdown by work setting
+# included; anything far larger is not one.
 MAX_FILE_BYTES = 64 * 1024
 # Read access to contents is all the collector needs of an installation.
 READ_ONLY = {"contents": "read", "metadata": "read"}
@@ -112,6 +116,32 @@ RATES = ("merge_rate", "first_check_pass_rate")
 # The seven codes of the CooperBench paper's App F and its three groups.
 CATEGORIES = ("C1a", "C1b", "C2", "C3a", "C3b", "C4a", "C4b")
 GROUPS = ("unresponsiveness", "hallucination", "repetition")
+# The template's breakdown of the same pull requests: the work settings it
+# sorts them into and the counts it keeps for each, the kinds of pairs of
+# pull requests at work at the same time and the counts it keeps for each,
+# and its counts of the parallel work as a whole (tools/metrics.py's
+# SETTINGS, SETTING_KEYS, RELATIONS, PAIR_KEYS and PARALLEL_KEYS, in their
+# order). They are words the format fixes, so a setting or a kind of pair
+# a file names besides them is left out like any other key.
+SETTINGS = ("solo", "one_session", "one_person_sessions", "several_people", "several_people_and_sessions",
+            "undetermined", "workflow_agents", "automation")
+SETTING_COUNTS = ("pull_requests", "merged", "closed_unmerged", "open", "conflicted", "released", "changes_requested",
+                  "claim_branches", "partners", "work_seconds", "landings_under", "landings_before_opening",
+                  "file_overlap")
+RELATIONS = ("same_session", "one_person_sessions", "several_people", "undetermined")
+PAIR_COUNTS = ("pairs", "both_active", "file_overlap", "landings", "landings_file_overlap", "conflict_onsets",
+               "conflict_onsets_file_overlap")
+PARALLEL_COUNTS = ("people", "sessions", "sessions_per_person_max", "pull_requests_with_session",
+                   "pull_requests_without_session", "pull_requests_multi_session", "sessions_across_people",
+                   "peak_parallel", "peak_parallel_people", "peak_sessions_one_person", "conflict_marks",
+                   "conflict_marks_unattributed", "open_conflicting", "open_conflicting_drafts",
+                   "open_conflicting_dirty", "truncated", "files_unread")
+# The largest whole number a JSON reader's double holds exactly along
+# with every one below it (JavaScript's Number.MAX_SAFE_INTEGER). A count
+# is a number of pull requests, comments or seconds, and a duration one of
+# seconds, some 285 million years at this bound; a larger number is
+# neither, and its digits could carry text.
+MAX_COUNT = 2 ** 53 - 1
 
 # The vendored protocol's release and, as the template writes it from
 # tools/VENDORED's first line, its short commit: "0.2.0 f530a66".
@@ -142,15 +172,16 @@ def is_number(value):
 
 
 def count(value):
-    """A whole number, zero or more."""
+    """A whole number, from zero to MAX_COUNT."""
     if isinstance(value, float) and math.isfinite(value) and value.is_integer():
         value = int(value)
-    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+    return value if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= MAX_COUNT else None
 
 
 def duration(value):
-    """Seconds, zero or more."""
-    return value if is_number(value) and value >= 0 else None
+    """Seconds, from zero to MAX_COUNT, which bounds a duration's digits
+    as it bounds a count's."""
+    return value if is_number(value) and 0 <= value <= MAX_COUNT else None
 
 
 def rate(value):
@@ -203,6 +234,25 @@ def section(names, clean):
     return clean_section
 
 
+def strata(names, fields):
+    """A cleaner for an object of named objects, such as by_setting: each
+    name the format knows is cut by fields as kept() cuts a file, and a
+    name it does not know, or one whose object keeps nothing but empty
+    objects (a judge's counts of codes the format does not know), is left
+    out, so a line never shows a setting that holds nothing."""
+    def clean_strata(value):
+        if not isinstance(value, dict):
+            return None
+        cleaned = {}
+        for name in names:
+            given = value.get(name)
+            kept_one = kept(given, fields) if isinstance(given, dict) else {}
+            if any(part != {} for part in kept_one.values()):
+                cleaned[name] = kept_one
+        return cleaned
+    return clean_strata
+
+
 def durations(value):
     """Each measure's median and p90, whether the file nests them
     ({"open_to_merge": {"median": s, "p90": s}}) or writes them flat
@@ -230,6 +280,22 @@ METRICS_FIELDS = {
     "counts": section(COUNTS, count),
     "durations_seconds": durations,
     "rates": section(RATES, rate),
+    "parallel": section(PARALLEL_COUNTS, count),
+    # The counts that need the changed files are null in the template's
+    # file when the board's reserve left those files unread; count(None)
+    # is None, so they are left out then, never kept as zeros.
+    "by_setting": strata(SETTINGS, dict.fromkeys(SETTING_COUNTS, count)),
+    "pairs": strata(RELATIONS, dict.fromkeys(PAIR_COUNTS, count)),
+}
+
+# What the judge counts for each work setting: its pull requests that
+# ended in the window, their judged conversations, those with two or more
+# people, and the codes.
+JUDGE_SETTING_FIELDS = {
+    "pull_requests": count,
+    "conversations": count,
+    "multi_speaker": count,
+    "counts": section(CATEGORIES, count),
 }
 
 JUDGE_FIELDS = {
@@ -240,6 +306,13 @@ JUDGE_FIELDS = {
     "conversations": count,
     "counts": section(CATEGORIES, count),
     "groups": section(GROUPS, count),
+    "window_days": count,
+    # Null when the judge ran without a limit or under one that cut
+    # nothing, and then left out: a line holds limit only when its run
+    # judged just the newest pull requests.
+    "limit": count,
+    "multi_speaker": count,
+    "by_setting": strata(SETTINGS, JUDGE_SETTING_FIELDS),
 }
 
 
@@ -254,7 +327,8 @@ def shared_metrics(document):
 
 
 def shared_judge(document):
-    """A JUDGE.json as the dataset keeps it: category counts and no text."""
+    """A JUDGE.json as the dataset keeps it: counts, its time, the
+    model's name and two identifier words, and no text."""
     if not isinstance(document, dict) or document.get("schema") != JUDGE_SCHEMA:
         raise Dropped("refused")
     return kept(document, JUDGE_FIELDS)
