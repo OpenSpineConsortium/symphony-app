@@ -309,14 +309,17 @@ consecutive lines overlap by 29 days. Take one line per repository per
 thirty-day block, chosen by generated_at, not collected_at, since a run
 that failed leaves the last record standing. by_setting's counts other
 than open, and pairs', then add up across blocks, because each pull
-request, and each pair, counts in the block where it ended. parallel's
-counts and by_setting's open describe their block alone and are never
-summed: people and sessions are distinct counts, the peaks are maxima,
-and a pull request open at the end of one block can count again in the
-next. Compare settings within one repository's hash before pooling. A
+request, and each pair, counts in the block where it ended; parallel's
+conflict_marks, conflict_marks_unattributed and truncated add up the
+same way, each mark and each ended pull request counting in the block
+that holds it. parallel's other counts and by_setting's open describe
+their block alone and are never summed: people and sessions are
+distinct counts, the peaks are maxima, and a pull request open at the
+end of one block can count again in the next. Compare settings within one repository's hash before pooling. A
 line without parallel, by_setting and pairs comes from a copy of the
-template made before the breakdown and is not broken out, which is not
-the same as zero. Nor is an absent file count: it is not known. Where the
+template made before the breakdown, or from a day whose breakdown reads
+would have reached the board's reserve or failed; it is not broken out,
+which is not the same as zero, and the line cannot say which. Nor is an absent file count: it is not known. Where the
 workflow left changed files unread, parallel's files_unread is above 0
 and the counts that need those files are left out: file_overlap in every
 setting but workflow_agents and automation, which keep their 0, and

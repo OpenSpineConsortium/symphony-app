@@ -307,8 +307,9 @@ JUDGE_FIELDS = {
     "counts": section(CATEGORIES, count),
     "groups": section(GROUPS, count),
     "window_days": count,
-    # Null when the judge ran without a limit, and then left out: a line
-    # holds limit only when its run judged just the newest pull requests.
+    # Null when the judge ran without a limit or under one that cut
+    # nothing, and then left out: a line holds limit only when its run
+    # judged just the newest pull requests.
     "limit": count,
     "multi_speaker": count,
     "by_setting": strata(SETTINGS, JUDGE_SETTING_FIELDS),
@@ -326,7 +327,8 @@ def shared_metrics(document):
 
 
 def shared_judge(document):
-    """A JUDGE.json as the dataset keeps it: category counts and no text."""
+    """A JUDGE.json as the dataset keeps it: counts, its time, the
+    model's name and two identifier words, and no text."""
     if not isinstance(document, dict) or document.get("schema") != JUDGE_SCHEMA:
         raise Dropped("refused")
     return kept(document, JUDGE_FIELDS)
