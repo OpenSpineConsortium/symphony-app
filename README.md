@@ -297,11 +297,14 @@ leaving them. A project's own workflow writes two files to its branch
 `metrics`: METRICS.json, counts, durations and rates over thirty days, in
 all, by work setting (what else was at work beside each pull request, and
 whose: one Claude Code session's, one person's several sessions', several
-people's) and in pairs of pull requests at work at the same time, and,
-when a contributor runs the judge on their own machine, JUDGE.json, how
-often each kind of communication failure was found, in all and by work
-setting. scripts/collect.py, run daily by .github/workflows/collect.yml,
-gathers them.
+people's) and in pairs of pull requests at work at the same time, with
+what the work cost (economics: tokens, an estimated price at API list
+prices, Claude's seconds, per merge) and that cost and speed for work done
+alone set beside work done in parallel (coordination, with ratios over 1
+where parallel did better), and, when a contributor runs the judge on
+their own machine, JUDGE.json, how often each kind of communication
+failure was found, in all and by work setting. scripts/collect.py, run
+daily by .github/workflows/collect.yml, gathers them.
 
 Reading the dataset. A line of metrics.jsonl is one repository's rolling
 thirty days as its workflow last wrote them, so one repository's
@@ -332,6 +335,23 @@ lines whose limit is set. A judge line without window_days comes from a
 judge before the breakdown, which did not record a limit: treat its limit
 as not known, never as none. Wilson intervals belong to counts of pull
 requests, never to pairs.
+
+economics and coordination come and go with the breakdown, so a line
+without them is not broken out either. economics is its block's bill
+(the usage on commits made in it and the Actions runs recorded in it)
+over the pull requests that ended in it: its tokens and dollars add up
+across blocks, its rates per merge do not, and pull_requests_measured
+beside pull_requests says how much of the work the bill covers, since
+work done outside a session of the repository carries no usage. A line
+without actions_runs_unread comes from a day whose Actions records could
+not be listed, which counts only the records read before. estimated_usd
+is the price of the tokens at the API list prices of prices_as_of,
+whatever plan paid for them, so compare it only between lines with the
+same prices_as_of. coordination's ratios are each over 1 where work done
+in parallel did better, and are left out where a side has nothing to
+divide; read them beside the sides' pull_requests, pool sides' sums
+across blocks within one repository's hash and take ratios of the sums,
+never averages of the ratios.
 
 What is read: those two files at the ref `metrics` of every repository
 the App is installed on, with a token that can only read, and no other
