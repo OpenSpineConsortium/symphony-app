@@ -114,6 +114,21 @@ class ProtocolCheckRunTest(unittest.TestCase):
         self.assertIn("not a claim branch", created["title"])
         self.assertEqual(client.lookups, [])
 
+    def test_a_branch_that_reads_as_a_claim_and_claims_nothing_fails(self):
+        # Since symphony-protocol 0.4.1 claude/03 names no issue, so no claim
+        # file is looked up, and the verdict points at #3's own branch rather
+        # than passing it as a branch outside the protocol.
+        client = FakeClient(pull(branch="claude/03", body="Closes #3", draft=True),
+                            files={"docs/agents/claims/3.md"})
+        outcome, _ = run(client)
+        created = self.only_run(client)
+        self.assertEqual(created["conclusion"], "failure")
+        self.assertEqual(created["title"], "1 problem with the claim protocol")
+        self.assertIn("claude/03 reads as a claim branch and claims nothing", created["summary"])
+        self.assertIn("the claim branch of #3 is claude/3", created["summary"])
+        self.assertEqual(client.lookups, [])
+        self.assertEqual(outcome, f"sdlc/protocol failure on {HEAD_SHA[:7]}: 1 problem with the claim protocol")
+
     def test_the_same_verdict_already_on_the_commit_is_not_made_twice(self):
         earlier = {"id": 3, "name": "sdlc/protocol", "status": "completed", "conclusion": "success",
                    "app": {"id": int(APP_ID)}, "output": {"summary": handlers.KEPT}}
