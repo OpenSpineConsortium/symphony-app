@@ -6,9 +6,13 @@ https://openspineconsortium.com/symphony/cost.html (the site's
 tools/pages/symphony/control/, tools/pages/symphony/cost/ and
 assets/js/symphony-panel.js in OpenSpineConsortium/openspineconsortium.github.io).
 The pages are static files that call GitHub's API from the person's browser
-as that person. Until this service runs, they take a fine-grained personal
-access token pasted into the page; with it, they also offer "Sign in with
-GitHub", which needs no token made by hand.
+as that person. Their first way in is "Sign in with GitHub", one press and no
+token made by hand, which this service makes possible (the owner, 2026-10-16:
+one-click sign-in as the primary option, as opposed to a fine-grained token).
+Until the service runs, the button shows but cannot be pressed, a line says
+why, and the way in is a fine-grained personal access token pasted into the
+page, folded under "Use a fine-grained token instead"; the token stays the
+fallback afterwards.
 
 ## Why a service at all
 
@@ -22,13 +26,14 @@ address, the Worker adds the client id and the secret, asks
 page needs (the token, when it expires, the refresh token and when that
 expires). `POST /refresh` renews the token the same way from the refresh
 token. `POST /revoke` asks GitHub to revoke a token, which the page does
-when the person presses "Forget the token". `GET /` says what the service
+when the person presses "Forget the token" and when a new sign-in or a
+pasted token takes the place of a sign-in's token. `GET /` says what the service
 is. It keeps nothing: no store, no cookie, no log of its own; it answers
 only the site's origin; it never sees a Claude token and never reads a
 repository. The owner decided this shape on 2026-10-13: the control panel
 is a site page with a small stateless sign-in service acting through the
 App's user token (symphony-template's CLAUDE.md), and the Apps' privacy
-statement (symphony-start's PRIVACY.md, version 8) says the same to the
+statement (symphony-start's PRIVACY.md, version 9) says the same to the
 people who use it.
 
 What binds a code to the page that asked for it is PKCE, not the Origin
@@ -58,10 +63,13 @@ Nothing here deploys itself; the owner does these steps, each on the page
 named, and nobody else needs to.
 
 1. The Worker. Open https://dash.cloudflare.com/ and sign in; in the left
-   menu press "Workers & Pages", then "Create", then "Create Worker" (or
-   "Start with Hello World!"); name it `symphony-signin` and press
-   "Deploy". On the Worker's page press "Edit code", replace everything in
-   the editor with the contents of worker.js, and press "Deploy". The
+   menu press "Workers & Pages", then "Create application" (or "Create"),
+   then "Start with Hello World!" (or "Create Worker"); name it
+   `symphony-signin` and press "Deploy". Open
+   https://github.com/OpenSpineConsortium/symphony-app/blob/main/signin/worker.js
+   and press "Copy raw file" (the copy button above the code). On the
+   Worker's page press "Edit code", replace everything in the editor with
+   what you copied, and press "Deploy". The
    Worker's address is on its page, of the form
    `https://symphony-signin.<account>.workers.dev`; copy it. That address
    is public and takes no password: the secret stays inside, and the
@@ -93,17 +101,19 @@ named, and nobody else needs to.
 4. The Worker's settings. Back on the Worker's page in Cloudflare, press
    "Settings", then "Variables and Secrets", then "Add": type "Text", name
    `GITHUB_CLIENT_ID`, value the Client ID; "Add" again: type "Secret",
-   name `GITHUB_CLIENT_SECRET`, value the client secret; "Add" once more:
-   type "Text", name `ALLOWED_ORIGIN`, value
-   `https://openspineconsortium.com` (a bare origin: no path, no slash at
-   the end; the service answers 503 not_configured until it is one). Press
-   "Deploy" (or "Save and deploy") so the Worker restarts with them.
+   name `GITHUB_CLIENT_SECRET`, value the client secret. Press "Deploy" (or
+   "Save and deploy") so the Worker restarts with them. `ALLOWED_ORIGIN`
+   needs no setting: it is `https://openspineconsortium.com` when unset,
+   and a value set for another origin must be a bare origin (no path, no
+   slash at the end), since the service answers 503 not_configured until it
+   is one. The client secret goes into this field and nowhere else: not
+   into a chat, a file or a repository.
 5. Tell the site. The Worker's address from step 1 and the Client ID from
    step 3 go into the two constants at the top of the site's
    assets/js/symphony-panel.js, `SIGNIN_SERVICE` and `CLIENT_ID`, by a
    pull request on openspineconsortium.github.io, which a session makes
-   once the owner gives the two values; the pages then show "Sign in with
-   GitHub".
+   once the owner gives the two values (neither is a secret); "Sign in with
+   GitHub", already the pages' first button, can then be pressed.
 
 To check it: `curl https://symphony-signin.<account>.workers.dev/` answers
 `{"service":"symphony-signin","routes":["/exchange","/refresh","/revoke"],"keeps":"nothing"}`,
