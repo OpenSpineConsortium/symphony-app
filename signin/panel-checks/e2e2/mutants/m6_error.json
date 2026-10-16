@@ -1,0 +1,1 @@
+[["if (!kept || !state || kept.state !== state || !kept.verifier) {", "if (error) { say('GitHub did not sign you in (' + error + ': ' + description + ').', true); return Promise.resolve(false); }\n    if (!kept || !state || kept.state !== state || !kept.verifier) {"]]

@@ -1,0 +1,6 @@
+[
+ [
+  "      return inTurn(function (locked) { return locked || tabOnly || ended ? '' : lookAgain(sent, Date.now() + 22000); });",
+  "      // another tab renews a sign-in only in its token's last minute, so while the record kept here is\n      // further from its end than that, no renewal can be under way and the refusal is GitHub's word\n      var o = oauthRecord();\n      var due = !!(o && o.expires_at && Date.now() >= o.expires_at - 120000);\n      return inTurn(function (locked) { return locked || tabOnly || ended || !due ? '' : lookAgain(sent, Date.now() + 22000); });"
+ ]
+]

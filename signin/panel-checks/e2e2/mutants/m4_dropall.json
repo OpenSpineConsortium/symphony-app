@@ -1,0 +1,1 @@
+[["  function dropSignin(store) {\n    endHere();\n", "  function dropSignin(store) {\n    forgetToken();\n"]]

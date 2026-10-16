@@ -1,0 +1,224 @@
+Third adversarial review of the sign-in in assets/js/symphony-panel.js
+(the uncommitted diff against 5caf463, sha256 c3a4913c...df66bca of the working tree)
+
+How it was checked. Every finding below except those marked "theory" was reproduced in Chromium
+through Playwright against the static server at http://127.0.0.1:8077, with GitHub, GitHub's
+authorize page and the sign-in service mocked as in e2e2/signin.test.mjs (copied, not edited).
+The scripts are in /tmp/claude-0/-home-user/7e5b307e-d455-57dd-8df4-168cc84c8307/scratchpad/review3/:
+lib.mjs (the harness), review.test.mjs (R1a, R1b, R2, R2b, R3, R4, R5, R6), r1c.test.mjs,
+r2c.test.mjs, r4b.test.mjs, r4c.test.mjs, more.test.mjs (G, H, H2, I). Each check asserts what the
+page should do, so FAIL means the defect is there. BASEVERSION=1 runs review.test.mjs against
+5caf463 to tell what this round broke from what it left open. The existing harness
+e2e2/signin.test.mjs passes all 39 of its checks on the working tree (log:
+review3/e2e2-signin.log), so the ten fixes hold for the sequences it covers. The service's code
+(/home/user/symphony-app/signin/worker.js) was read to confirm its answers match what the page
+assumes (bad_refresh_token passes through as data.error with 502; /revoke answers 200
+{revoked:true}); they do.
+
+Nothing loops: the 401 retry is bounded by `again`; lookAgain by its deadline; the storage handler
+writes nothing, so it cannot feed itself or the other tabs. No double listeners: watchOtherTabs is
+registered once per page, and startCost re-adds the same `measured` function, which the browser
+keeps once.
+
+Findings, most severe first.
+
+
+1. Forget does not stop a renewal this tab is waiting for: the refresh token goes to the service
+   after Forget, a new token pair can be minted after Forget, and the tab's last word becomes
+   "expired or was revoked". Severity: medium. Left open (5caf463 does the same), not broken by
+   this round. Confirmed: review.test.mjs R2, R2b; r2c.test.mjs.
+
+   Sequence (locks, R2). Tabs 1 and 2 share a kept sign-in (localStorage: ghu_OLD, ghr_R). Its eight
+   hours pass with both open. Refresh in tab 1: tab 1 takes the lock and sends ghr_R to /refresh
+   (the service takes 2 s). Refresh in tab 2: tab 2's ensureToken has captured `refresh = ghr_R`
+   and waits for the lock. The person presses Forget the token in tab 2: storage is emptied and
+   ghu_OLD revoked; tab 2 says "The token is forgotten here and the sign-in's token is revoked at
+   GitHub. The repositories you listed stay." Tab 1's answer comes: its record is gone, so it
+   revokes ghu_NEW and releases the lock. Tab 2's turn: storedSince('ghu_OLD') finds nothing
+   stored, returns '' (read as "nothing changed"), and renew() sends ghr_R to /refresh after the
+   Forget. GitHub refuses it (spent), the lock was held so nothing is waited for, and expired()
+   overwrites Forget's words with "Your sign-in expired or was revoked; press Sign in with GitHub
+   again." Observed: /refresh ghr_R at 11167 ms, Forget at 11808, /revoke ghu_OLD at 11837,
+   /revoke ghu_NEW at 13176, /refresh ghr_R again at 13178 -> 400 bad_refresh_token.
+
+   R2b: the same, but tab 1's renewal fails before GitHub (502 github_unreachable), so ghr_R is
+   unspent. After the Forget, tab 2 renews it: /refresh ghr_R -> 200 ghu_AFTER / ghr_AFTER at
+   19562 ms (Forget at 18213), then /revoke ghu_AFTER. A sign-in the person forgot was used to
+   mint new tokens; ghr_AFTER is held by nobody, and whether GitHub still honours it after its
+   access token is revoked was not verified (theory).
+
+   R2c (no locks): tab 2 is refused at once and looks for 22 s; Forget during the look does not end
+   it, and after 22 s tab 2 ends on "Your sign-in expired or was revoked; press Sign in with GitHub
+   again."
+
+   The window is a renewal in flight in one tab while another tab waits its turn (up to the
+   service's 20 s) or, without locks, the 22-second look.
+
+   Smallest fix: treat "nothing stored any more" as forgotten, not as "nothing changed". In
+   ensureToken's inTurn work, after `if (renewed) return renewed;` add
+   `if (!storedToken()) { token = ''; tokenStored = false; return ''; }`; the same line in renew's
+   catch after `if (taken) return taken;`; and in lookAgain stop when `!storedToken()`, with the
+   `.then` returning '' instead of throwing expired() when nothing is stored.
+
+
+2. A pasted token is stored, kept and replaces (now revokes) the browser's working sign-in before
+   GitHub has seen it; since finding 4's change, a token no request can carry opens the panel.
+   Severity: medium. (a) is a regression of this round; (b) and (c) left open, the revocation new.
+   Confirmed: review.test.mjs R4 (and BASEVERSION=1), r4b.test.mjs, r4c.test.mjs.
+
+   (a) Paste "github_pat_ABC" followed by a zero-width space (U+200B, which String.trim keeps; a
+   token copied from chat, a PDF or a document can carry one, or a curly quote). fetch rejects the
+   Authorization header with a TypeError before anything is sent; enter()'s catch sees no
+   e.status and a token, so it opens the panel: no "Signed in as" line, the message "Failed to
+   execute 'fetch' on 'Window': Failed to read the 'headers' property from 'RequestInit': String
+   contains non ISO-8859-1 code point.", the summary "Could not read acme/demo: the repository
+   (...)", zero GitHub calls. With Keep ticked the token is kept on the browser. 5caf463 kept the
+   sign-in box here.
+   (b) The same paste with Keep ticked in tab 2, while tab 1 uses a kept sign-in: storeSignin
+   revokes ghu_KEPT at once; tab 1 still says "Signed in as tester through GitHub, kept on this
+   browser." and every call it makes fails with the same TypeError (5caf463 replaced tab 1's
+   sign-in the same way but did not revoke it).
+   (c) A wrong or expired token pasted with Keep ticked in tab 2: ghu_KEPT is revoked before GitHub
+   answers, GitHub then refuses the pasted token, and both tabs end on "GitHub refused the token
+   (401). Paste one that is still valid, or press Sign in with GitHub."; localStorage holds only
+   the refused token. One mistaken paste signs every tab out and destroys the working sign-in.
+
+   Smallest fix: in cp-open's handler refuse `t` unless /^[\x21-\x7e]+$/ (GitHub tokens are ASCII)
+   with a sentence saying a character came with the copy. For (b) and (c): ask GET /user with the
+   pasted token first and only on 200 call storeSignin (so the replaced sign-in is dropped and
+   revoked only for a token that works); on 401 say so and change nothing.
+
+
+3. Forget in another tab while this tab is still asking GitHub who it is opens this tab's panel
+   as signed in. Severity: medium-low. Left open by finding 1's fix. Confirmed: review.test.mjs
+   R1a (control page), R1b (cost page); r1c.test.mjs (the variant that corrects itself).
+
+   Sequence. Tab 1 is open on the kept sign-in. Tab 2 is opened; its first GET /user is in flight
+   (slow network, or a renewal at load before it). Forget the token in tab 1. Tab 2's storage
+   handler signs it out after 300 ms ("Signed out: the token was forgotten in another tab of this
+   browser."). Then GitHub answers tab 2's /user with 200 (it was sent before the revocation):
+   whoAmI writes "Signed in as tester with a token, for this tab." (both halves false: it reads the
+   now empty storage) and enter() calls showApp() and begin(). With no repository listed on the
+   control page, or none chosen on the cost page (a new person's case), begin() makes no call, so
+   the panel stays open under that line, beneath the "Signed out" message, until the person acts.
+   With a repository listed, loadRepo's first call finds no token and puts the box back with "This
+   page is signed out now (...)"; nothing is sent after the Forget in any variant (R1c). Traced,
+   not run: the same holds for the enter() a paste with Keep ticked starts, and for the 401
+   retry's second /user.
+
+   Smallest fix: in enter(), `whoAmI().then(function () { if (!token) { showGate(); return; }
+   showApp(); begin(); }, function (e) { ...the present catch... })`. The two-argument then also
+   removes the theory in item 10a.
+
+
+4. A token kept in another tab carries this tab over to that token's account under its old
+   "Signed in as" line. Severity: medium-low. Left open (ensureToken has always taken up what is
+   stored; watchOtherTabs, new this round, sees the change and does nothing). Confirmed:
+   more.test.mjs H2.
+
+   Sequence. Tab 1 is signed in, kept, as tester. In tab 2 the person keeps another account's token
+   (the check pastes one; Sign in with GitHub with Keep ticked takes the same storeSignin path,
+   traced), e.g. after tab 2's own tab-only sign-in ran out and its box came back.
+   storeSignin revokes ghu_KEPT and stores the new token; tab 1's storage handler finds a
+   stored token and returns. Tab 1's next calls (Refresh, Merge, Give to, Ask Claude, a workflow
+   dispatch) go out with the other account's token (observed: Bearer github_pat_OTHER, whose /user
+   is other-person) while tab 1 says "Signed in as tester through GitHub, kept on this browser."
+   A merge or a comment is then made as someone the page does not name.
+
+   Smallest fix: in watchOtherTabs's timer, when storedToken() is set and differs from `token`
+   while `tokenStored`, call whoAmI().catch(function () {}) so the line is rewritten for the token
+   now in use (another tab's renewal costs one /user per tab every eight hours).
+
+
+5. Other tabs are told the token "was forgotten in another tab" when that tab dropped the kept
+   sign-in because GitHub refused it (401), would not renew it (bad_refresh_token) or its six months
+   ran out. Severity: low (a message that says something false). New this round. Confirmed for the
+   401 path: review.test.mjs R3; the other two traced (expired() -> dropSignin(localStorage) ->
+   the same storage event).
+
+   Sequence. Tabs 1 and 2 on the kept sign-in; the person revokes SymphonyBoard at
+   github.com/settings/apps/authorizations; Refresh in tab 1 -> 401 -> "GitHub refused the
+   sign-in's token (401): it was revoked or has run out. Press Sign in with GitHub again." and
+   localStorage dropped; tab 2 -> "Signed out: the token was forgotten in another tab of this
+   browser." Nobody pressed Forget.
+
+   Smallest fix: word the line for every way a kept token leaves storage, e.g. "Signed out: the
+   token kept on this browser was forgotten in another tab, or GitHub refused it there; sign in
+   again." (or have the dropping tab write its reason under a small key the handler reads).
+
+
+6. Forget's message leaves out a personal access token kept on the browser that it forgot.
+   Severity: low (finding 7 left open in a mixed case). Confirmed: more.test.mjs G.
+
+   Sequence. A token pasted with Keep ticked sits in localStorage; this tab has its own tab-only
+   Sign in with GitHub in front of it. Forget the token: both are dropped, only the sign-in's
+   ghu_TAB is revoked, and the page says "The token is forgotten here and the sign-in's token is
+   revoked at GitHub. The repositories you listed stay." Nothing says the personal access token it
+   just forgot stays valid at GitHub, because `pasted` reads only this tab's store.
+
+   Smallest fix: in signOut, `var pasted = !!readKey(KEY_TOKEN);` (readKey looks in both stores).
+
+
+7. When this tab's own sign-in ends, the rest of its load, and its later calls, go out with the
+   browser's kept sign-in while the box asks the person to sign in again. Severity: low. The
+   "ran out after its eight hours" path is new this round; the 401 path behaved so before.
+   Confirmed: review.test.mjs R5.
+
+   Sequence. This tab holds a tab-only sign-in whose refresh token went with an earlier page
+   (record ghu_TAB, refresh ''), with seconds left; localStorage keeps another account's sign-in
+   (ghu_OTHER_ACCOUNT). Load a repository: GET /repos/acme/demo is answered after the token's end;
+   loadBoard's ensureToken calls expired(), which drops sessionStorage and shows "Your sign-in for
+   this tab ran out after its eight hours; press Sign in with GitHub again."; the next loaders'
+   ensureToken then reads localStorage and sends GET .../contents/.github/symphony/workers,
+   .../actions/runs, .../pulls and .../issues with Bearer ghu_OTHER_ACCOUNT, rendering that
+   account's answers into the hidden panel, and the page now holds that token as its own. The
+   same follows a 401 that drops a tab-only sign-in, with any call already queued.
+
+   Smallest fix: a page flag `ended`, set in expired() and in refusedToken's sign-in drop, cleared
+   by storeSignin, keepOauth and loadToken, with `if (ended) { token = ''; return
+   Promise.resolve(''); }` at the top of ensureToken, so a sign-in that ended stays ended in this
+   page until the person signs in, pastes or reloads.
+
+
+8. Without Web Locks, a tab-only sign-in GitHub will not renew waits 22 s before the box comes
+   back. Severity: low (current browsers all have locks). New this round. Confirmed:
+   review.test.mjs R6 (22,074 ms; with locks it is immediate).
+
+   Its refresh token lives in this page alone, so no other tab can have spent it, yet renew()
+   looks for another tab's renewal as for a kept one; meanwhile every call waits on it.
+
+   Smallest fix: `lookAgain(old, Date.now() + (locked || store === sessionStorage ? 0 : 22000))`.
+
+
+9. A tab-only sign-in stops renewing whenever its page is replaced in the tab, not only on reload,
+   and the privacy paragraph says less than the code knows. Severity: low (design consequence and
+   text). Confirmed: more.test.mjs I.
+
+   Sign in with Keep me signed in unticked, then follow the control page's own link to the cost
+   page (run), or let Chrome's Memory Saver discard the tab (traced: a discarded tab reloads):
+   heldRefresh is gone, and at the token's
+   end the cost page says "Your sign-in for this tab ran out after its eight hours" with no renewal
+   tried. tools/pages/symphony/control/index/body.html says the refresh token "goes when the tab
+   closes or reloads" and that the token stays "until ... the tab closes"; leaving for the other
+   page ends the renewal too, and the browser brings the eight-hour token back with a reopened or
+   restored tab, as the code's own comment on heldRefresh says.
+
+   Smallest fix: say so in the paragraph ("goes when this page closes, reloads or is left for
+   another page; the token itself comes back with a reopened tab for what is left of its eight
+   hours").
+
+
+10. Theories, traced by reading and not reproduced:
+   a. enter(): if begin() threw synchronously inside the then handler, the catch would run
+      showApp() and begin() a second time (.then(A).catch(B) where B calls A). Nothing in start()
+      or startCost() throws today. The fix in item 3 removes it.
+   b. gh(): a 401 retried once whose retry is also refused while storage changed again in between
+      (two token changes within one round trip) throws "GitHub refused the sign-in's token (401)
+      ... Press Sign in with GitHub again." although nothing is dropped and the panel stays open
+      with a newer token.
+   c. The service's permanent refusals (403 origin_refused, 503 not_configured, 400 bad_request)
+      are reported as "The token could not be renewed: ... Try again in a moment.", and each later
+      call asks the service again; only a misdeployment produces them.
+   d. On the cost page, measured() is not tied to the page's state, so an answer still in flight
+      for a forgotten token renders into the hidden panel, and could land after a new sign-in's own
+      read of the same repository if it were the slower of the two.

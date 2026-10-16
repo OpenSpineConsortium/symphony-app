@@ -1,0 +1,10 @@
+[
+ [
+  "      return fetch(API + path, { method: method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) });",
+  "      var ask = { method: method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) };\n      // the one question every later call may wait on must not hold them for good when GitHub never answers it\n      if (path === '/user' && typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ask.signal = AbortSignal.timeout(20000);\n      return fetch(API + path, ask).catch(function (e) {\n        if (e && e.name === 'TimeoutError') throw new Error('GitHub did not say within 20 seconds whose the token is; press again.');\n        throw e;\n      });"
+ ],
+ [
+  "    // the person chose this one in this tab, so GitHub's first answer about it names it afresh\n    shownLogin = '';\n    shownToken = '';",
+  "    // the person chose this one in this tab, so GitHub's first answer about it names it afresh\n    shownLogin = '';\n    shownToken = '';\n    naming = null;"
+ ]
+]

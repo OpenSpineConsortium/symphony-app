@@ -1,0 +1,6 @@
+[
+ [
+  "      if (e.status === 401 || e.unusable || !token) { showGate(); if (e.unusable) offerToken(); }",
+  "      if (e.status === 401 || e.unusable || !token) { showGate(); if (e.unusable) { dropSignin(signinStore()); offerToken(); } }"
+ ]
+]

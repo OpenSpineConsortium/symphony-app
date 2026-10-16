@@ -1,0 +1,46 @@
+[
+ [
+  "      return fetch(API + path, { method: method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) });",
+  "      var ask = { method: method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) };\n      // the one question every later call may wait on must not hold them for good when GitHub never answers it\n      if (path === '/user' && typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ask.signal = AbortSignal.timeout(20000);\n      return fetch(API + path, ask).catch(function (e) {\n        if (e && e.name === 'TimeoutError') throw new Error('GitHub did not say within 20 seconds whose the token is; press again.');\n        throw e;\n      });"
+ ],
+ [
+  "    // the person chose this one in this tab, so GitHub's first answer about it names it afresh\n    shownLogin = '';\n    shownToken = '';",
+  "    // the person chose this one in this tab, so GitHub's first answer about it names it afresh\n    shownLogin = '';\n    shownToken = '';\n    naming = null;"
+ ],
+ [
+  "        heldRefresh = { access: '', refresh: '' };\n        storeSignin(KEY_TOKEN, t, keep);",
+  "        heldRefresh = { access: '', refresh: '' };\n        // a panel the stored sign-in opened meanwhile closes, its name and its reads with it, until\n        // GitHub names the pasted token\n        showGate();\n        state = emptyState(state.repo);\n        storeSignin(KEY_TOKEN, t, keep);"
+ ],
+ [
+  "      return inTurn(function (locked) { return locked || tabOnly || ended ? '' : lookAgain(sent, Date.now() + 22000); });",
+  "      // another tab renews a sign-in only in its token's last minute, so while the record kept here is\n      // further from its end than that, no renewal can be under way and the refusal is GitHub's word\n      var o = oauthRecord();\n      var due = !!(o && o.expires_at && Date.now() >= o.expires_at - 120000);\n      return inTurn(function (locked) { return locked || tabOnly || ended || !due ? '' : lookAgain(sent, Date.now() + 22000); });"
+ ],
+ [
+  "      if (e.status === 401 || e.unusable || !token) { showGate(); if (e.unusable) offerToken(); }",
+  "      if (e.status === 401 || e.unusable || !token) { showGate(); if (e.unusable) { dropSignin(signinStore()); offerToken(); } }"
+ ],
+ [
+  "  function followToken(now) {\n    var known = !!shownToken;\n    token = now;\n    named().catch(function (e) {\n      if (e.status === 401 || !token) return;\n      if ($('cp-who')) $('cp-who').textContent = '';\n",
+  "  function followToken(now) {\n    var known = !!shownToken;\n    var changed = now !== token;\n    token = now;\n    named().catch(function (e) {\n      if (e.status === 401 || !token) return;\n      if ($('cp-who')) $('cp-who').textContent = '';\n      // the page holds the token it had and named nobody: no other tab put anything in its place\n      if (!changed && !known) return;\n"
+ ],
+ [
+  "    var pasted = readKey(KEY_TOKEN);\n    var dead = signinTokens();",
+  "    // with storage refused, a pasted token lives in this page alone, where readKey finds nothing\n    var pasted = readKey(KEY_TOKEN) || (!tokenStored && /^(ghp_|github_pat_)/.test(token) ? token : '');\n    var listed = repos().length ? ' The repositories you listed stay.' : '';\n    var dead = signinTokens();"
+ ],
+ [
+  "+ others + own + ' The repositories you listed stay.');\n      }).catch(",
+  "+ others + own + listed);\n      }).catch("
+ ],
+ [
+  "    say(where + '.' + others + own + ' The repositories you listed stay.');",
+  "    say(where + '.' + others + own + listed);"
+ ],
+ [
+  "    // a tab already signed out has said why\n    if (ended) return false;",
+  "    // a tab already signed out has said why: the call is dropped (null), not retried or said\n    if (ended) return null;"
+ ],
+ [
+  "        if (r.status === 401) return refused(sent, byApp).then(function (retry) {\n",
+  "        if (r.status === 401) return refused(sent, byApp).then(function (retry) {\n          if (retry === null) return new Promise(function () { /* dropped: the sign-out said why */ });\n"
+ ]
+]

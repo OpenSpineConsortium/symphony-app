@@ -1,0 +1,18 @@
+[
+ [
+  "  // the one question \"whose is this token?\" on its way, which every call that needs the answer shares\n  var naming = null;\n",
+  "  // the one question \"whose is this token?\" on its way, which every call that needs the answer shares\n  var naming = null;\n  // this tab's sign-outs, counted: a call begun before one is dropped when it fails, not said\n  var ends = 0;\n"
+ ],
+ [
+  "    heldRefresh = { access: '', refresh: '' };\n    ended = true;\n    state = emptyState(state.repo);\n",
+  "    heldRefresh = { access: '', refresh: '' };\n    ended = true;\n    ends++;\n    state = emptyState(state.repo);\n"
+ ],
+ [
+  "  function call(method, path, body, headers, raw, account, again) {\n    var sent = '', byApp = false;\n",
+  "  function call(method, path, body, headers, raw, account, again) {\n    var sent = '', byApp = false, era = ends;\n"
+ ],
+ [
+  "        if (!r.ok) throw failure(r.status, data, path, byApp);\n        return { status: r.status, data: data, headers: r.headers, sent: sent };\n      });\n    });\n  }\n",
+  "        if (!r.ok) throw failure(r.status, data, path, byApp);\n        return { status: r.status, data: data, headers: r.headers, sent: sent };\n      });\n    }).catch(function (e) {\n      // the tab signed out since this call began and has said why\n      if (ends !== era) return new Promise(function () { /* dropped */ });\n      throw e;\n    });\n  }\n"
+ ]
+]

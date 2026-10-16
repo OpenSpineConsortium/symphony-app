@@ -1,0 +1,1 @@
+[["return renew(refresh, old, store, locked || tabOnly);", "return renew(refresh, old, store, locked);"]]

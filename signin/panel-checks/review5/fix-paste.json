@@ -1,0 +1,6 @@
+[
+ [
+  "        heldRefresh = { access: '', refresh: '' };\n        storeSignin(KEY_TOKEN, t, keep);",
+  "        heldRefresh = { access: '', refresh: '' };\n        // a panel the stored sign-in opened meanwhile closes, its name and its reads with it, until\n        // GitHub names the pasted token\n        showGate();\n        state = emptyState(state.repo);\n        storeSignin(KEY_TOKEN, t, keep);"
+ ]
+]

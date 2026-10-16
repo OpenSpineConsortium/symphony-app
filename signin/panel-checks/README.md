@@ -1,0 +1,50 @@
+# The control panel's browser checks
+
+From the thread "Symphony control website" of the claude.ai Project "symphony", 2026-10-16. These
+checks ran in that thread's session while it built "Sign in with GitHub" as the first way into the
+control panel and the cost page (OpenSpineConsortium/openspineconsortium.github.io, site pull
+requests #20, #22 and #23; master 009109c). They are kept here, beside the sign-in service they
+test, so a later session on any account can run them again. Their findings and the design are in
+symphony-template's docs/research/control-panel.md.
+
+CI does not run them. They need Playwright with Chromium and a checkout of the site, and
+scripts/check.sh runs only signin/test_worker.mjs. Every token in them is a stand-in such as
+ghu_TEST or github_pat_X.
+
+## What is here
+
+- `e2e2/signin.test.mjs`: 112 checks of the sign-in, run against a mocked api.github.com, a mocked
+  GitHub authorize page and a mocked sign-in service at https://signin.example.test. Some checks
+  run both ways in, Sign in with GitHub and a pasted token.
+- `e2e2/panel.test.mjs`: the panel's walkthrough on both pages.
+- `e2e2/hostile.test.mjs`: 13 hostile-input checks.
+- `e2e2/mutants/`: 79 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+  assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it.
+  `e2e2/run-mutants.sh` runs them. Every one was caught against master 009109c.
+- `e2e2/shots.mjs`: the screenshots of the gate, before and after the two constants are set.
+- `review-signin/` and `review2/` to `review5/`: the five adversarial reviews of the sign-in, each
+  with its report (`report.txt`) and its own reproductions. The reports name the session's
+  scratchpad, where they were written; the same files are here under the same folder names. In
+  the fourth review, the first variant of R1 fails on purpose. It expects a tab to be signed out,
+  and the page now goes on with the renewed token.
+- `run-suite.sh` and `round6-*.sh`: the runners of the last round.
+
+## Running them
+
+1. Clone the site to /home/user/openspineconsortium.github.io. The runners serve that folder, and
+   the checks read the script from it unless `SITE` names another.
+2. In each folder you run from, link Playwright:
+   `mkdir -p node_modules && ln -s /opt/node-tools/node_modules/playwright node_modules/playwright`.
+   In a cloud session, Playwright finds Chromium under /opt/pw-browsers.
+3. Run one suite: `PORT=8077 bash run-suite.sh e2e2 signin.test.mjs out.log`. Every check prints
+   PASS or FAIL.
+   - `ONLY=I11b,G7` runs only the checks whose names start with those prefixes, each followed by
+     a colon.
+   - `MUTANT=mutants/m33_noended.json` runs the checks against that mutant.
+   - `e2e2/run-mutants.sh` expects a server already on port 8077 and reports each mutant as
+     KILLED, SURVIVED, STALE or ERROR.
+
+The checks turn the gate on by replacing `var SIGNIN_SERVICE = '';` and `var CLIENT_ID = '';`
+in the script. Once the pull request that sets the two real values has merged, change the
+`configured` line near the top of e2e2/signin.test.mjs to match the new lines. Until then the
+suite stops at the start, saying that the two constants were not found.

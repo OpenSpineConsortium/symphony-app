@@ -1,0 +1,1 @@
+[["    var now = storedToken();\n    // a call of this tab may have taken up", "    var now = (function () { try { return localStorage.getItem(KEY_TOKEN) || localStorage.getItem(KEY_OAUTH); } catch (e) { return ''; } })() ? storedToken() : '';\n    // a call of this tab may have taken up"]]

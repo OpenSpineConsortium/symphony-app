@@ -1,0 +1,30 @@
+// R2c: without locks, Forget while this tab looks for another tab's renewal ends with "expired or was revoked"
+import assert from 'node:assert/strict';
+import { BASE, HOUR, configured, results, check, launch, close, open, rec, singleUse, facts, sleep, loaded, repoList, noLocks, t } from './lib.mjs';
+await launch();
+await check('R2c: no lock, Forget during the 22-second look keeps Forget\'s words', async () => {
+  const { context, page, service, errors } = await open({ script: configured, noLoad: true, initScript: noLocks, serviceFn: singleUse(3000, 0), storage: { local: { symphony_panel_oauth: rec('ghu_OLD', 'ghr_R', 2 * HOUR), symphony_panel_repos: repoList } } });
+  const page2 = await context.newPage();
+  page2.on('pageerror', (e) => errors.push(String(e)));
+  const path = BASE + '/symphony/control/?repo=acme/demo';
+  await Promise.all([page.goto(path), page2.goto(path)]);
+  await Promise.all([loaded(page), loaded(page2)]);
+  await page.evaluate(() => { const o = JSON.parse(localStorage.getItem('symphony_panel_oauth')); o.expires_at = Date.now() - 1000; localStorage.setItem('symphony_panel_oauth', JSON.stringify(o)); });
+  await sleep(400);
+  await page.click('#cp-refresh');
+  await sleep(300);
+  await page2.click('#cp-refresh');
+  await sleep(500);
+  const forgotAt = t();
+  await page2.click('#cp-signout');
+  await sleep(25000);
+  const f2 = await facts(page2);
+  console.log('      forgot at', forgotAt);
+  for (const x of service) console.log('      service', x.path, JSON.stringify(x.body), 'at', x.at, '->', x.answer);
+  console.log('      tab 2 messages:', JSON.stringify(f2.msgs));
+  assert.ok(/forgotten here/.test(f2.msg), 'tab 2 ends on "' + f2.msg + '"');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await close();
+console.log('\n' + results.join('\n'));

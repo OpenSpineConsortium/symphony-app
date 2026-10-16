@@ -1,0 +1,1 @@
+[["    window.addEventListener('pageshow', function (e) { if (e.persisted) lookAtStorage(); });\n", ""]]

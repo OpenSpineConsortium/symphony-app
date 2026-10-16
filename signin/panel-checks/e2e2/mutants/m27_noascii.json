@@ -1,0 +1,1 @@
+[["      if (!/^[\\x21-\\x7e]+$/.test(t)) { say('The pasted text holds a character no GitHub token has (a space, or one outside plain ASCII that the copy brought along); copy the token again from GitHub.', true); return; }\n", ""]]

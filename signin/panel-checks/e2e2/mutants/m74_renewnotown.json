@@ -1,0 +1,1 @@
+[["    token = record.access_token;\n    own.push(token);\n", "    token = record.access_token;\n"]]

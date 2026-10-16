@@ -1,0 +1,1 @@
+[["      if (path !== '/user' && token !== shownToken && (shownToken || write || !mine)) return named().then(function () { return ready(method, path, account); });\n", ""]]

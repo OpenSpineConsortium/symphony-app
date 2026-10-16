@@ -1,0 +1,10 @@
+[
+ [
+  "    // a tab already signed out has said why\n    if (ended) return false;",
+  "    // a tab already signed out has said why: the call is dropped (null), not retried or said\n    if (ended) return null;"
+ ],
+ [
+  "        if (r.status === 401) return refused(sent, byApp).then(function (retry) {\n",
+  "        if (r.status === 401) return refused(sent, byApp).then(function (retry) {\n          if (retry === null) return new Promise(function () { /* dropped: the sign-out said why */ });\n"
+ ]
+]

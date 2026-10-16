@@ -1,0 +1,1 @@
+[["      if (renewed) return renewed;\n      if (!storedToken()) return signedOutMeanwhile();\n", "      if (renewed) return renewed;\n"]]

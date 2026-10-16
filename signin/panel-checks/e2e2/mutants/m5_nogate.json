@@ -1,0 +1,1 @@
+[["    if (byApp) dropSignin(store);\n    else { endHere(); offerToken(); }\n    showGate();\n", "    if (byApp) { dropSignin(store); showGate(); }\n    else { endHere(); offerToken(); }\n"]]

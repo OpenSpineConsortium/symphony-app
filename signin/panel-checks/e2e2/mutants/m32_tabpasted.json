@@ -1,0 +1,1 @@
+[["  function pastedTokens() {\n    var found = [];\n    [function () { return sessionStorage; }, function () { return localStorage; }].forEach", "  function pastedTokens() {\n    var found = [];\n    [function () { return sessionStorage; }].forEach"]]
