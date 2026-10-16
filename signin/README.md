@@ -26,13 +26,14 @@ address, the Worker adds the client id and the secret, asks
 page needs (the token, when it expires, the refresh token and when that
 expires). `POST /refresh` renews the token the same way from the refresh
 token. `POST /revoke` asks GitHub to revoke a token, which the page does
-when the person presses "Forget the token". `GET /` says what the service
+when the person presses "Forget the token" and when a new sign-in or a
+pasted token takes the place of a sign-in's token. `GET /` says what the service
 is. It keeps nothing: no store, no cookie, no log of its own; it answers
 only the site's origin; it never sees a Claude token and never reads a
 repository. The owner decided this shape on 2026-10-13: the control panel
 is a site page with a small stateless sign-in service acting through the
 App's user token (symphony-template's CLAUDE.md), and the Apps' privacy
-statement (symphony-start's PRIVACY.md, version 8) says the same to the
+statement (symphony-start's PRIVACY.md, version 9) says the same to the
 people who use it.
 
 What binds a code to the page that asked for it is PKCE, not the Origin
