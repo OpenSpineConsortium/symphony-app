@@ -1,0 +1,1 @@
+[["return locked || tabOnly || ended || !due ? '' : lookAgain(sent, Date.now() + 22000);", "return '';"]]

@@ -1,0 +1,1 @@
+[["      if (r.sent !== token) return token === shownToken ? shownLogin : whoAmI();\n", ""]]

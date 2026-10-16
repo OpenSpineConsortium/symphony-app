@@ -1,0 +1,1 @@
+[["{ name: label, color: LABEL_COLOR, description: 'Held or given to the worker ' + name }, undefined, false, account);", "{ name: label, color: LABEL_COLOR, description: 'Held or given to the worker ' + name });"], ["{ labels: [label] }, undefined, false, account);", "{ labels: [label] });"]]

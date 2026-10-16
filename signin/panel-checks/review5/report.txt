@@ -1,0 +1,398 @@
+Fifth adversarial review of "Sign in with GitHub": commit 75da0b4
+====================================================================
+
+File under review: /home/user/openspineconsortium.github.io/assets/js/symphony-panel.js at 75da0b4
+("Sign-in fourth review: a call goes out only with a token the page has named"), 1606 lines,
+sha256 5ae5b114e886b443965033851bc12c997845bc38c54722b29734b088f05b54e3. The one script serves
+/symphony/control/ and /symphony/cost.html. It was compared with 0b9600b, the round before.
+Nothing under /home/user/ was changed (git status is clean and the sha256 is the same after the
+review). Every token below is a stand-in (ghu_KEPT, github_pat_OTHER and the like).
+
+
+HOW I CHECKED
+-------------
+
+- Read the whole diff 0b9600b..75da0b4 and the code around it: ready(), call(), gh(), whoAmI(),
+  named(), enter(), refused(), refusedToken(), endHere(), renew(), lookAtStorage(),
+  followToken(), checkToken(), unusable(), signOut(), wireGate() and the cost page's wiring.
+- Reproduced each suspicion in a browser:
+  - Playwright 1.56.1 with headless Chromium 141 on Node 22.
+  - The site was served from the repository by python3 -m http.server on port 8078, one browser
+    file at a time.
+  - The script was served in place of the real one: 75da0b4 as it is, 0b9600b from git
+    (BASEVERSION=1), or a copy with fix pairs applied (FIX=<pairs.json>). Nothing was served from
+    the real file on disk.
+  - Two configurations:
+    - configured: SIGNIN_SERVICE and CLIENT_ID patched in.
+    - unconfigured (UNCONFIGURED=1): the site as deployed today, where only a pasted token works.
+  - Mocked: api.github.com, github.com/login/oauth, and the sign-in service
+    (/exchange, /refresh, /revoke).
+  - Stand-ins:
+    - no Web Locks: navigator.locks is undefined;
+    - storage that throws: localStorage and sessionStorage getters throw SecurityError;
+    - the back-forward cache: a synthetic PageTransitionEvent('pageshow', {persisted: true}), as
+      the suite's H11 does.
+- Ran each check on 75da0b4 and on 0b9600b, in both configurations where the flow exists in both.
+  That is how each finding is marked introduced or left open.
+- Ran each proposed fix on a copy, in both configurations. Then ran all fixes together through:
+  - every check of mine;
+  - the existing suite e2e2/signin.test.mjs (77 checks);
+  - the fourth review's checks R1 to R11.
+- Regression baseline on 75da0b4 itself: e2e2 is 77/77 (e2e2-current.log). R1 to R11 are as in
+  the round5 logs: all pass except R1's first variant. That variant asserts a sign-out which this
+  round replaced on purpose with a retry on the renewed token, and it still sends nothing with
+  the other account's token.
+
+
+FINDINGS, MOST SEVERE FIRST
+---------------------------
+
+1. A token pasted while the page still checks the stored sign-in: the panel opens as the stored
+   account, then acts with the pasted token under that name, writes included (S4)
+
+   Severity: medium-low. The window is rare: a paste during the page's first question, and a
+   paste check slower than that question. But when it is hit, a write is made as another account
+   than the page names, and with one more GitHub hiccup the wrong name stays for good.
+   Status: left open. 0b9600b fails the same way in both configurations. It contradicts this
+   round's claim that "a call goes out only with a token the page has named".
+
+   Mechanism: storeSignin() clears shownLogin and shownToken, which turns ready()'s rule off.
+   That rule asks for naming only when shownToken is set or the call writes for a named account,
+   and gh() takes account = shownLogin = ''. The paste handler leaves the panel open, and cp-who
+   still names the stored account.
+
+   Sequence:
+   1. The browser keeps a sign-in for tester (configured: a sign-in record; unconfigured: a kept
+      paste). The person opens /symphony/control/?repo=acme/demo.
+   2. While the box stands and the page asks GitHub whose the kept token is (1.5 s), they paste
+      another account's token, github_pat_OTHER, Keep unticked, and press Open the panel. The
+      check of the paste takes 2 s.
+   3. GitHub answers about the kept token first. enter() opens the panel ("Signed in as tester
+      through GitHub, kept on this browser.") and the load starts.
+   4. The paste's check comes back. storeSignin() keeps it for the tab, token = github_pat_OTHER,
+      and a second enter() asks GitHub about it. The panel stays open, naming tester.
+   5. The person presses "Run the workers now" (visible and enabled).
+
+   Observed (s4.log; s4.unconfigured.log the same):
+   - cp-who named tester from 1685 ms to 4910 ms, then "Signed in as other-person with a token,
+     for this tab."
+   - Pressed at 2410 ms: "2423 POST /repos/acme/demo/actions/workflows/workers.yml/dispatches
+     Bearer github_pat_OTHER", and GET /repos/acme/demo/issues at 2946 with the paste, while the
+     page named tester.
+   - Second variant, GitHub answering the paste's second GET /user with 502:
+     - the write went out at 2600 ms with github_pat_OTHER;
+     - cp-who still names tester at the end;
+     - a Refresh sends all seven reads with github_pat_OTHER, for good.
+   - 0b9600b (s4.base.log, s4.base.unconfigured.log): the same, with the write at 2470 ms and at
+     2449 ms.
+   - e2e2's H5 covers the other order (the paste's check back first) and passes.
+
+   Script: s4.test.mjs (two variants; it presses only a button that is visible).
+
+   Smallest fix (fix-paste.json, tested in both configurations): in wireGate's paste handler,
+   just before storeSignin(KEY_TOKEN, t, keep), add
+       showGate(); state = emptyState(state.repo);
+   The panel the stored sign-in opened closes, with its name and its reads, until GitHub names
+   the paste. In the 502 variant the page then opens naming nobody, as enter() promises.
+
+2. One GET /user that GitHub never answers holds every later call of the tab, or holds the
+   sign-in box, with no words and nothing to press that helps (S1, S2, S2c, S3)
+
+   Severity: low-medium. Nothing goes wrong at GitHub, but the tab sits on "Reading..." or on
+   the box with no message until it is reloaded. It needs one request that never comes back
+   (a dropped connection, a captive portal).
+   Status: introduced. 0b9600b passes all four.
+
+   Mechanism:
+   - whoAmI() shares one question per token (naming), and the question has no time limit.
+   - Since this round, every call with a token the page has not named waits on that question:
+     ready() -> named() -> whoAmI().
+   - A second press asks nothing new, because the token is the same and so is the promise.
+   - A re-paste of the same token shares it too, since storeSignin() does not clear naming.
+   - The paste handler's say('') leaves the box with no words.
+
+   Sequences and observations:
+   - S1 (configured; s1.log): the kept sign-in reaches its last minute. Refresh renews it
+     (ghu_NEW), and the GET /user about ghu_NEW (2062 ms) never answers.
+     - 24 s later: still "Reading acme/demo...", no message, cp-who naming tester.
+     - A second Refresh sent nothing in 6 s.
+     - 0b9600b (s1.base.log) loaded at once with ghu_NEW, and again on the second Refresh.
+   - S2 (both configurations; s1.log, s1.unconfigured.log): paste github_pat_NEW.
+     - The check answers, then enter()'s GET /user never answers: the box, no words.
+     - The person presses again with the same token. The check (third /user) answers, and no
+       fourth is sent.
+     - 12 s later: still the box, empty message.
+     - 0b9600b: four /user calls, and the panel opens.
+   - S2c (both configurations; w1.log, w1.unconfigured.log): the same on /symphony/cost.html.
+     - Three /user calls; the box with no words 10 s after the second press.
+     - 0b9600b opens the page and reads METRICS.json.
+   - S3 (both configurations): tab 1 is open on the kept sign-in, and tab 2 keeps a new token of
+     the same account (github_pat_NEW).
+     - Tab 1's question about it, from the storage event, never answers.
+     - Refresh in tab 1 sends nothing for 24 s: "Reading acme/demo...", no message.
+     - 0b9600b read at once, with the token unnamed (the previous round's finding).
+
+   Script: s1.test.mjs (S1, S2, S3) and w1.test.mjs (S2c).
+
+   Smallest fix (fix-stall.json, two pairs, tested in both configurations):
+   (a) In call(), give a GET /user AbortSignal.timeout(20000), as checkToken() and exchange() have,
+       and turn a TimeoutError into "GitHub did not say within 20 seconds whose the token is;
+       press again."
+   (b) In storeSignin(), set naming = null beside shownLogin and shownToken, so a paste asks
+       afresh.
+
+3. In a browser with no Web Locks, a sign-in GitHub refuses waits 22 s before it is judged, though
+   no renewal can be under way (S5, S5b)
+
+   Severity: low. Web Locks are missing only in Safari before 15.4, Firefox before 96 and Chrome
+   before 69. There the page reads, or the box stands with no words, for 22 s.
+   Status: introduced, by refused()'s unconditional lookAgain(sent, now + 22000).
+
+   Sequence: a kept sign-in; SymphonyBoard is revoked at GitHub, so every call is refused with
+   401; no renewal is asked.
+
+   Observed (s5.log; 0b9600b in s5.base.log):
+   - S5, Refresh mid-session: the box came back after 22244 ms. 0b9600b: 128 ms.
+   - S5b, at load: the box stood with no words for 22641 ms, then "GitHub refused the sign-in's
+     token (401)...". 0b9600b: 373 ms.
+
+   Script: s5.test.mjs (S5, S5b; configured only).
+
+   Smallest fix (fix-nolock.json, tested): look for another tab's renewal only while the kept
+   record is within two minutes of its end, since another tab renews only in its token's last
+   minute:
+       var o = oauthRecord();
+       var due = !!(o && o.expires_at && Date.now() >= o.expires_at - 120000);
+   Then `locked || tabOnly || ended || !due ? '' : lookAgain(...)`.
+   - S5 112 ms, S5b 335 ms (s5.fixed-nolock.log).
+   - E1b, F10, G8 and H12, the no-lock and renewal checks, still pass.
+
+4. A kept token no request can carry stays kept after the paste the box asks for, so every new
+   tab meets the same box (S6)
+
+   Severity: low. Every new tab stops at the same words. The way out (tick Keep, or Forget) is
+   not said, and Forget is not reachable from the box.
+   Status: introduced with this round's box for an unusable token. 0b9600b opened the panel with
+   the dead token, the previous round's finding 9, so S6 times out there.
+
+   Sequence:
+   1. localStorage holds 'github_pat_ABC\u200b', stored unchecked by an earlier version.
+   2. The box says "...no request can carry it; paste the token again, copied afresh from
+      GitHub."
+   3. The person pastes github_pat_ABC with Keep unticked, as the box leaves it. The panel opens.
+   4. A new tab of the same browser.
+
+   Observed (s6.log, s6.unconfigured.log): the new tab shows the box with the same words, and
+   localStorage still holds 'github_pat_ABC\u200b'.
+
+   Script: s5.test.mjs (S6).
+
+   Smallest fix (fix-unusable.json, tested in both configurations): in enter()'s failure, for
+   e.unusable, call dropSignin(signinStore()) before offerToken(). The new tab then shows the
+   plain box with nothing kept. An alternative is to tick Keep when the dead token was kept, so
+   the paste replaces it.
+
+5. Forget's words are replaced by the failure of an action that was on its way (F1, F2)
+
+   Severity: low (words only). It drops what Forget said: that another tab signed in for itself
+   keeps its sign-in, and, in the unconfigured page, that the personal access token stays valid
+   at GitHub. Nothing is sent: this round's `ended` holds the write back.
+   Status:
+   - F1 without Web Locks: introduced. The 22 s wait of finding 3 makes Forget pressable;
+     0b9600b signs out at once.
+   - F1 with a lock: left open. 0b9600b does the same.
+   - F2: introduced. It is a side effect of this round's naming wait; on 0b9600b the write went
+     out at once with the unnamed token, before Forget.
+
+   Mechanism: endHere() promises that what is still on its way "is dropped when it comes, not
+   shown or said". Loads keep that promise through stale(s). Actions do not: their catches say
+   e.message. refusedToken() now returns false at once for a tab already signed out ("has said
+   why"), yet call() still throws the 401 failure.
+
+   Sequences and observations:
+   - F1, no lock (f1.log):
+     - A kept sign-in; GitHub refuses the write "Run the workers now".
+     - The person presses Forget 2 s later. Its revoke words appear.
+     - Within 500 ms they are replaced by "GitHub refused the sign-in's token (401): it was
+       revoked or has run out. Press Sign in with GitHub again."
+   - F1, with a lock: the dispatch's 401 comes back 1.5 s after the press, just after Forget's
+     revoke (Forget at 300 ms). The same replacement; f1.base.log shows 0b9600b does it too.
+   - F2 (both configurations; f2.log, f2.unconfigured.log): another tab puts a new token of the
+     same account in place.
+     - While this tab asks GitHub about it (2 s), the person presses "Run the workers now", then
+       Forget.
+     - No write goes out, which is right.
+     - Then "This page is signed out now: the token was forgotten, or GitHub refused it, here or
+       in another tab. Sign in again to go on." replaces Forget's words. In the unconfigured page
+       those words included "The personal access token itself stays valid at GitHub until it
+       runs out or you delete it at github.com/settings/personal-access-tokens."
+     - 0b9600b (f2.base*.log): the write went out at once with the new token, before Forget.
+
+   Script: f1.test.mjs (two variants, configured) and f2.test.mjs.
+
+   Smallest fix (fix-ends.json, four pairs, tested; F1 and F2 pass in both configurations):
+   - Count sign-outs: var ends = 0, and ends++ in endHere().
+   - Capture era = ends in call().
+   - End call()'s chain with
+       .catch(function (e) { if (ends !== era) return new Promise(function () {}); throw e; })
+   Every endHere() comes with words of its own (Forget, refusedToken, expired, lookAtStorage),
+   so a dropped failure loses nothing.
+   - Narrower alternative for F1 alone (fix-drop.json, tested): refusedToken() returns null for a
+     tab already signed out, and call() drops on null.
+   - Either way a dropped question leaves `naming` set for its token. Ship it with fix-stall's
+     `naming = null` in storeSignin().
+
+6. A page that opened naming nobody says "Another tab of this browser kept a new token" when it
+   comes back from the back-forward cache with nothing changed (W1)
+
+   Severity: low (false words; nothing is sent wrongly).
+   Status: introduced, by the pageshow look this round added.
+
+   Mechanism: lookAtStorage() returns early only when now === token && now === shownToken. On a
+   page that opened unnamed, shownToken is '', so it follows the very token it holds. When
+   GitHub still cannot answer, followToken()'s catch says another tab kept a new token.
+
+   Sequence (both configurations):
+   1. /user answers 502 at load, so the page opens naming nobody, with "GitHub answered 502:
+      Server Error.".
+   2. The person goes to another page of the site and comes Back. Storage is unchanged.
+
+   Observed (w1.log, w1.unconfigured.log): "Another tab of this browser kept a new token in place
+   of the one this page had, and GitHub could not be asked whose it is (GitHub answered 502:
+   Server Error.)." 0b9600b keeps "GitHub answered 502: Server Error.".
+
+   Script: w1.test.mjs (W1).
+
+   Smallest fix (fix-words.json, tested): in followToken(), note `var changed = now !== token;`
+   before `token = now;`, and in the catch, after clearing cp-who, `if (!changed && !known)
+   return;`. H4, H4b, H11 and G4 still pass.
+
+7. With storage refused, Forget says nothing of the pasted token staying valid at GitHub, and says
+   the listed repositories stay though none could be listed (W2)
+
+   Severity: low (a missing caution). Site data blocked is the one setting where only a paste
+   works.
+   Status: left open. 0b9600b also reads the paste back with readKey(); its words were "The token
+   is forgotten on this browser. The repositories you listed stay.".
+
+   Sequence (both configurations): storage throws; the person pastes github_pat_X on
+   /symphony/control/?repo=acme/demo, the panel opens, and they press Forget the token.
+
+   Observed (w2.log, w2.unconfigured.log): "The token is forgotten in this tab and on this
+   browser. Another tab signed in for that tab alone keeps its sign-in until you forget it there
+   or close it. The repositories you listed stay." It has no personal access token sentence, and
+   repos() is empty when storage refuses. On 0b9600b: w2.base*.log.
+
+   Script: w2.test.mjs.
+
+   Smallest fix (fix-forget.json, three pairs, tested in both configurations):
+   - var pasted = readKey(KEY_TOKEN) || (!tokenStored && /^(ghp_|github_pat_)/.test(token) ? token : '');
+   - Say " The repositories you listed stay." only when repos().length.
+
+
+ALL FIXES TOGETHER
+------------------
+
+fixes-all2.json holds 13 pairs, applied in one copy, fixed-all2-copy.js:
+- fix-stall: 2
+- fix-paste: 1
+- fix-nolock: 1
+- fix-unusable: 1
+- fix-words: 1
+- fix-forget: 3
+- fix-ends: 4
+
+With them:
+- Every check of mine passes, configured and unconfigured: S1 to S6, S2c, S5b, W1, W2, F1, F2
+  (*.allfixed2*.log).
+- e2e2/signin.test.mjs passes 77/77 (e2e2-allfixed2.log).
+- The fourth review's R2a to R11 pass in both configurations (review4-*.allfixed2*.log).
+- R1's first variant fails exactly as on 75da0b4 unfixed. It asserts a sign-out that this round
+  replaced with a retry, and it still sends nothing with the other account's token.
+- fixes-all.json (11 pairs: fix-drop in place of fix-ends) passed the same set
+  (e2e2-allfixed.log, *.allfixed*.log).
+
+
+WHAT HELD
+---------
+
+- e2e2's 77 checks hold on 75da0b4. They cover:
+  - pasting, tab-only and kept sign-ins;
+  - two and three tabs, with one renewal for all;
+  - Forget, including during a renewal;
+  - a 401 mid-session;
+  - renewal with and without locks;
+  - storage that throws (R5);
+  - the cost page;
+  - the bfcache look when another account's token was kept or the token forgotten meanwhile.
+- No false "The sign-in changed" was found:
+  - a renewal of the same account names the same login;
+  - giveTo's pinned account goes out for the account named at the press;
+  - storeSignin's reset clears `before`, so a paste of this tab is not called another tab's.
+- No write went out after Forget in F1 or F2. The new `ended` check in ready() and refusedToken()
+  holds.
+- No loop:
+  - whoAmI() asks again only when the token changed meanwhile;
+  - the 401 retry is bounded by `again`;
+  - lookAgain() is bounded by its deadline.
+- No deadlock: refused() takes the lock only after this tab's own renewal has ended, and nothing
+  inside the lock's callback waits on refused().
+- renew() writes back only over the record it renewed, in the storage it came from. This holds in
+  four cases: tab-only, kept, paste for the tab during a renewal (R10, H6), and paste to keep.
+- A token wrongly revoked: none found. storeSignin(), renew() and signOut() each revoke only a
+  sign-in token that is nobody's any more, by their stated rules.
+
+
+THEORIES, NOT REPRODUCED
+------------------------
+
+Each was reasoned through but not run, or would need a contrived timing.
+
+- A false "Now signed in as X, not Y: another tab ...". It needs a write waiting in named() across
+  a Forget and a paste in the same tab, with the paste's check done before one GitHub /user
+  answers. named() keeps `before`, and storeSignin() cannot clear it.
+- A page that opened unnamed (any non-401 failure of its first /user) never asks again on its
+  own. Until a reload its calls and writes go out unnamed, including after its own renewal or a
+  token taken up from another tab. There, followToken's warning is the only word. This is by the
+  rule as written (enter() opens such a page on purpose), but it means "only with a token the
+  page has named" is not the whole truth.
+- Browsers without AbortSignal.timeout (Chrome before 103, Firefox before 100, Safari before 16):
+  exchange() and checkToken() have no time limit. A hung service then holds the renewal lock for
+  good, and since this round every sign-in's 401 waits on that lock.
+- "The sign-in changed while this was on its way" is said even when the change came before the
+  press: the storage event is looked at only 300 ms later.
+- signOut() names one deletion page (tokens or personal-access-tokens) when this tab's paste and
+  the kept paste are of different kinds. It reads only the first.
+- A token no request can carry, taken up mid-session from a tab of an older version, would leave
+  the panel open. followToken's words would carry the paste advice in parentheses, with no box to
+  paste into. This only happens during a deploy.
+- W1's words could also follow from another tab keeping the very token this unnamed page holds
+  (a re-paste of the same token). fix-words covers it too.
+- Before this round, and not counted as findings:
+  - Merge stays armed after "The sign-in changed" (by design).
+  - signOut's revoke-failure branch omits "The repositories you listed stay.".
+  - The cost page's measured() is not stale-guarded, so a quick second choice of repository can
+    show the first one's answer.
+
+
+FILES
+-----
+
+All under /tmp/claude-0/-home-user/7e5b307e-d455-57dd-8df4-168cc84c8307/scratchpad/review5/:
+- Checks:
+  - s1.test.mjs: S1, S2, S3
+  - s4.test.mjs: S4
+  - s5.test.mjs: S5, S5b, S6
+  - w1.test.mjs: W1, S2c
+  - w2.test.mjs: W2
+  - f1.test.mjs: F1
+  - f2.test.mjs: F2
+- Harness:
+  - lib.mjs: routes, storage and recording
+  - pick.mjs: which script is served
+- Fixes:
+  - fix-stall.json, fix-paste.json, fix-nolock.json, fix-unusable.json, fix-words.json,
+    fix-forget.json, fix-ends.json, and fix-drop.json (the narrower alternative)
+  - fixes-all2.json and fixed-all2-copy.js: all of them together
+- Logs, one per run: <check>[.base][.fixed|.allfixed2][.unconfigured].log, plus
+  e2e2-current.log, e2e2-allfixed2.log and review4-*.allfixed2*.log.

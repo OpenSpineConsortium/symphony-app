@@ -1,0 +1,1 @@
+[["    if (now) { followToken(now); return; }\n", "    if (now) return;\n"]]

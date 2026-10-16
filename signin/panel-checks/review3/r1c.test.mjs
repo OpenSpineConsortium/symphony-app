@@ -1,0 +1,30 @@
+// R1c: the same race as R1 with a repository listed: what the tab ends on, and whether anything is sent
+import assert from 'node:assert/strict';
+import { BASE, HOUR, configured, results, check, repoRoutes, launch, close, open, rec, facts, sleep, appShown, repoList, t } from './lib.mjs';
+await launch();
+await check('R1c: with a repository listed, the tab that was asking ends signed out and sends nothing more', async () => {
+  let slow = false;
+  const routes = repoRoutes('acme/demo');
+  routes['GET /user'] = async () => { if (slow) await sleep(1500); return { login: 'tester' }; };
+  const { context, page, calls, errors } = await open({ script: configured, routes, path: '/symphony/control/?repo=acme/demo', storage: { local: { symphony_panel_oauth: rec('ghu_KEPT', 'ghr_K', 2 * HOUR), symphony_panel_repos: repoList } } });
+  await appShown(page);
+  slow = true;
+  const page2 = await context.newPage();
+  page2.on('pageerror', (e) => errors.push(String(e)));
+  page2.goto(BASE + '/symphony/control/?repo=acme/demo');
+  await page2.waitForFunction(() => !!document.getElementById('msg'));
+  await sleep(500);
+  const forgotAt = t();
+  await page.click('#cp-signout');
+  await sleep(2500);
+  const f2 = await facts(page2);
+  const after = calls.filter((c) => c.at > forgotAt + 50);
+  console.log('      tab 2:', JSON.stringify({ app: f2.app, gate: f2.gate, who: f2.who, msg: f2.msg }));
+  console.log('      tab 2 messages:', JSON.stringify(f2.msgs));
+  console.log('      GitHub calls after Forget:', JSON.stringify(after.map((c) => c.key + ' ' + c.auth)));
+  assert.ok(f2.gate && !f2.app);
+  assert.equal(after.length, 0);
+  await context.close();
+});
+await close();
+console.log('\n' + results.join('\n'));

@@ -1,0 +1,1 @@
+[["if (!now || now.access_token !== old) {", "if (false) {"]]

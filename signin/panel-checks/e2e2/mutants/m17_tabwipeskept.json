@@ -1,0 +1,1 @@
+[["(keep ? [localStorage, sessionStorage] : [sessionStorage]).forEach", "[localStorage, sessionStorage].forEach"]]

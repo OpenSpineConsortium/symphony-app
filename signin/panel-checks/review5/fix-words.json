@@ -1,0 +1,6 @@
+[
+ [
+  "  function followToken(now) {\n    var known = !!shownToken;\n    token = now;\n    named().catch(function (e) {\n      if (e.status === 401 || !token) return;\n      if ($('cp-who')) $('cp-who').textContent = '';\n",
+  "  function followToken(now) {\n    var known = !!shownToken;\n    var changed = now !== token;\n    token = now;\n    named().catch(function (e) {\n      if (e.status === 401 || !token) return;\n      if ($('cp-who')) $('cp-who').textContent = '';\n      // the page holds the token it had and named nobody: no other tab put anything in its place\n      if (!changed && !known) return;\n"
+ ]
+]

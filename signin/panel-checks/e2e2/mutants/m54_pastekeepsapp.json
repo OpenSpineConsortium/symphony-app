@@ -1,0 +1,1 @@
+[["        showGate();\n        state = emptyState(state.repo);\n        storeSignin(KEY_TOKEN, t, keep, t);", "        storeSignin(KEY_TOKEN, t, keep, t);"]]

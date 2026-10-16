@@ -1,0 +1,20 @@
+import { BASE, HOUR, configured, repoRoutes, launch, close, open, rec, facts, sleep, appShown, t } from './lib.mjs';
+await launch();
+let slow = false;
+const routes = repoRoutes('acme/demo');
+routes['GET /user'] = async () => { if (slow) { console.log('  /user slow start', t()); await sleep(1500); console.log('  /user slow end', t()); } return { login: 'tester' }; };
+const { context, page, calls, errors } = await open({ script: configured, routes, path: '/symphony/control/', storage: { local: { symphony_panel_oauth: rec('ghu_KEPT', 'ghr_K', 2 * HOUR) } } });
+await appShown(page);
+slow = true;
+const page2 = await context.newPage();
+page2.on('pageerror', (e) => errors.push(String(e)));
+page2.on('console', (m) => console.log('  tab2 console:', m.text()));
+page2.goto(BASE + '/symphony/control/');
+await page2.waitForFunction(() => !!document.getElementById('msg'));
+await sleep(500);
+console.log('  forget at', t());
+await page.click('#cp-signout');
+for (let i = 0; i < 8; i++) { await sleep(400); const f = await facts(page2); console.log('  ', t(), JSON.stringify({ app: f.app, gate: f.gate, who: f.who, msg: f.msg })); }
+console.log(calls.map((c) => c.key + ' ' + c.auth + ' @' + c.at).join('\n'));
+console.log('errors', errors);
+await close();

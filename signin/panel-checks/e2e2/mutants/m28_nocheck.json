@@ -1,0 +1,1 @@
+[["  function checkToken(t) {\n", "  function checkToken(t) {\n    return Promise.resolve(true);\n"]]

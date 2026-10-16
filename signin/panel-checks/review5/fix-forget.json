@@ -1,0 +1,14 @@
+[
+ [
+  "    var pasted = readKey(KEY_TOKEN);\n    var dead = signinTokens();",
+  "    // with storage refused, a pasted token lives in this page alone, where readKey finds nothing\n    var pasted = readKey(KEY_TOKEN) || (!tokenStored && /^(ghp_|github_pat_)/.test(token) ? token : '');\n    var listed = repos().length ? ' The repositories you listed stay.' : '';\n    var dead = signinTokens();"
+ ],
+ [
+  "+ others + own + ' The repositories you listed stay.');\n      }).catch(",
+  "+ others + own + listed);\n      }).catch("
+ ],
+ [
+  "    say(where + '.' + others + own + ' The repositories you listed stay.');",
+  "    say(where + '.' + others + own + listed);"
+ ]
+]

@@ -1,0 +1,1 @@
+[["    var listed = repos().length ? ' The repositories you listed stay.' : '';", "    var listed = ' The repositories you listed stay.';"]]

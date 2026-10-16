@@ -1,0 +1,1 @@
+[["    var pat = !pasted.length ? '' : pasted.length === 1\n", "    var pat = !pasted.length ? '' : true\n"]]

@@ -1,0 +1,1 @@
+[["      if (method !== 'GET' && account !== shownLogin && (write || !mine)) throw", "      if (write && account !== shownLogin) throw"]]
