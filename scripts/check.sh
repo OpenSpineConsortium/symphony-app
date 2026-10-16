@@ -25,4 +25,13 @@ fi
 
 "$PYTHON" -m unittest discover -s tests -t . -v
 
+# The sign-in service under signin/ is JavaScript for a Cloudflare Worker,
+# so its tests run on node, which GitHub's runners carry; a machine without
+# node skips them and says so, since the Python checks need none.
+if command -v node >/dev/null 2>&1; then
+    node --test signin/test_worker.mjs
+else
+    echo "node is not on PATH; the sign-in service's tests were skipped" >&2
+fi
+
 echo "checks ok"
