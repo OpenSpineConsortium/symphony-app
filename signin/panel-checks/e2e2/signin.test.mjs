@@ -21,8 +21,15 @@ async function check(name, fn) {
 let real = fs.readFileSync(SITE + '/assets/js/symphony-panel.js', 'utf8');
 // a mutant, for proving a check bites: pairs of [text, replacement] applied to the script
 if (process.env.MUTANT) for (const [a, b] of JSON.parse(fs.readFileSync(process.env.MUTANT, 'utf8'))) { assert.ok(real.includes(a), 'mutant text not found: ' + a.slice(0, 60)); real = real.replace(a, b); }
-const configured = real.replace("var SIGNIN_SERVICE = '';", "var SIGNIN_SERVICE = '" + SERVICE + "';").replace("var CLIENT_ID = '';", "var CLIENT_ID = 'Iv1.testclient';");
-assert.notEqual(configured, real, 'the two constants were not found in the script');
+// The site sets the two constants to the live service and client id; the checks set them to the
+// mocked service for the configured page and empty them for the unconfigured one, so the same
+// checks hold whatever the shipped script names.
+const SERVICE_LINE = /var SIGNIN_SERVICE = '[^']*';/;
+const CLIENT_LINE = /var CLIENT_ID = '[^']*';/;
+assert.ok(SERVICE_LINE.test(real) && CLIENT_LINE.test(real), 'the two constants were not found in the script');
+const configured = real.replace(SERVICE_LINE, "var SIGNIN_SERVICE = '" + SERVICE + "';").replace(CLIENT_LINE, "var CLIENT_ID = 'Iv1.testclient';");
+real = real.replace(SERVICE_LINE, "var SIGNIN_SERVICE = '';").replace(CLIENT_LINE, "var CLIENT_ID = '';");
+assert.notEqual(configured, real, 'the two constants were not set apart');
 
 function repoRoutes(repo) {
   return {

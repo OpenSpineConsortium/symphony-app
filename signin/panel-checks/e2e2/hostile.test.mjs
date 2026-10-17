@@ -5,6 +5,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const BASE = process.env.BASE || 'http://localhost:8077';
+// These checks paste a token, which the page shows open only while the sign-in is off, so the
+// page is served the shipped script with its two sign-in constants emptied.
+const SITE = process.env.SITE || '/home/user/openspineconsortium.github.io';
+const UNCONFIGURED = fs.readFileSync(SITE + '/assets/js/symphony-panel.js', 'utf8').replace(/var SIGNIN_SERVICE = '[^']*';/, "var SIGNIN_SERVICE = '';").replace(/var CLIENT_ID = '[^']*';/, "var CLIENT_ID = '';");
 const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
 const now = new Date().toISOString();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -48,7 +52,7 @@ async function open(routes, opts) {
     }
     return route.fulfill({ status: spec.status, contentType: 'application/json', headers: Object.assign(headers, spec.headers || {}), body: spec.status === 204 ? '' : JSON.stringify(spec.body) });
   });
-  if (opts.script) await context.route('**/assets/js/symphony-panel.js*', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: opts.script }));
+  await context.route('**/assets/js/symphony-panel.js*', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: opts.script || UNCONFIGURED }));
   if (opts.extraRoutes) for (const [pattern, handler] of opts.extraRoutes) await context.route(pattern, handler);
   const page = await context.newPage();
   const errors = [];
@@ -202,8 +206,8 @@ await check('G2: the cost page says in words when sharing is off, when economics
 });
 
 await check('H: "Sign in with GitHub" keeps the token for the tab only when "Keep me signed in" is unticked', async () => {
-  const src = fs.readFileSync('/home/user/openspineconsortium.github.io/assets/js/symphony-panel.js', 'utf8');
-  const patched = src.replace("var SIGNIN_SERVICE = '';", "var SIGNIN_SERVICE = 'https://signin.example';").replace("var CLIENT_ID = '';", "var CLIENT_ID = 'cid';");
+  const src = fs.readFileSync((process.env.SITE || '/home/user/openspineconsortium.github.io') + '/assets/js/symphony-panel.js', 'utf8');
+  const patched = src.replace(/var SIGNIN_SERVICE = '[^']*';/, "var SIGNIN_SERVICE = 'https://signin.example';").replace(/var CLIENT_ID = '[^']*';/, "var CLIENT_ID = 'cid';");
   assert.ok(patched !== src, 'constants not found');
   const exchanges = [];
   const extraRoutes = [
