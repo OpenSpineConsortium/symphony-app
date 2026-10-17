@@ -44,7 +44,8 @@ ghu_TEST or github_pat_X.
    - `e2e2/run-mutants.sh` expects a server already on port 8077 and reports each mutant as
      KILLED, SURVIVED, STALE or ERROR.
 
-The checks turn the gate on by replacing `var SIGNIN_SERVICE = '';` and `var CLIENT_ID = '';`
-in the script. Once the pull request that sets the two real values has merged, change the
-`configured` line near the top of e2e2/signin.test.mjs to match the new lines. Until then the
-suite stops at the start, saying that the two constants were not found.
+The site sets the two constants to the live service and SymphonyBoard's Client ID (site pull
+request #24). The checks set them for themselves, whatever the shipped script holds: the
+configured page gets the mocked service and `Iv1.testclient`, and the unconfigured page, which the
+pasted-token checks of `hostile.test.mjs` and `panel.test.mjs` use, gets both emptied. `SITE`
+names the site's checkout for every check file and for `run-suite.sh`.

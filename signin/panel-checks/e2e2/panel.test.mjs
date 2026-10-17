@@ -1,8 +1,13 @@
 // End-to-end test of the control panel and the cost page against a mocked GitHub API.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 const BASE = process.env.BASE || 'http://localhost:8077';
+// These checks paste a token, which the page shows open only while the sign-in is off, so the
+// page is served the shipped script with its two sign-in constants emptied.
+const SITE = process.env.SITE || '/home/user/openspineconsortium.github.io';
+const UNCONFIGURED = fs.readFileSync(SITE + '/assets/js/symphony-panel.js', 'utf8').replace(/var SIGNIN_SERVICE = '[^']*';/, "var SIGNIN_SERVICE = '';").replace(/var CLIENT_ID = '[^']*';/, "var CLIENT_ID = '';");
 const posts = [];
 const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
 const now = new Date().toISOString();
@@ -70,6 +75,7 @@ const rawRoutes = {
 
 const browser = await chromium.launch();
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+await context.route('**/assets/js/symphony-panel.js*', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: UNCONFIGURED }));
 await context.route('https://api.github.com/**', async (route) => {
   const req = route.request();
   const url = new URL(req.url());
