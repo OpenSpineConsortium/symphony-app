@@ -13,7 +13,7 @@
 // token GitHub gave beside it, and /revoke kills the token at GitHub when the person presses
 // "Forget the token".
 //
-// The drive routes serve the panel's Folders page (/symphony/control/folders.html), which makes
+// The drive routes serve the panel's Folders tab (/symphony/control/#folders), which makes
 // a repository track files and folders of a person's OneDrive (symphony-template's
 // docs/research/drive-sync.md). The same shape as the GitHub sign-in, with Microsoft's token
 // endpoint in GitHub's place: GET /drive/config says which provider is set up, by its public
@@ -39,7 +39,7 @@
 //   GITHUB_CLIENT_SECRET  a client secret generated on the App's settings page (a secret)
 //   MICROSOFT_CLIENT_ID   the Entra app registration's Application (client) ID (a text
 //                         variable); with it and its secret unset, /drive/config lists no
-//                         provider and the Folders page says the owner has not set it up
+//                         provider and the Folders tab says the owner has not set it up
 //   MICROSOFT_CLIENT_SECRET  a client secret of that registration (a secret)
 //   ALLOWED_ORIGIN        the page's origin, https://openspineconsortium.com (a text variable;
 //                         that is the default when unset; a value that is not a bare origin
@@ -56,8 +56,11 @@ const MAX_BODY = 4096;
 // read twice as much
 const MAX_DRIVE_BODY = 8192;
 const ROUTES = ['/exchange', '/refresh', '/revoke', '/drive/config', '/drive/connect', '/drive/token'];
-// the one page whose address a drive's consent may come back to, the Folders page of the panel
-const FOLDERS_PATH = '/symphony/control/folders.html';
+// the one address a drive's consent may come back to: the control panel's own page, the same one
+// GitHub's sign-in returns to, which tells the two returns apart by the state each left with and
+// then opens its Folders tab; the trailing slash is part of it, since Microsoft matches the
+// registered redirect URI exactly and so does this service
+const CONSOLE_PATH = '/symphony/control/';
 // Each drive provider: its token endpoint, the Worker settings that hold its client id and
 // secret, and the scope its tokens are for. Microsoft's v2.0 endpoint for "common" takes any
 // Microsoft account, personal or a tenant's; a Web platform registration must send its client
@@ -244,10 +247,11 @@ function credential(value, max) {
   return /^[\x21-\x7e]+$/.test(value) ? value : null;
 }
 
-/** the page a drive's consent may come back to: the Folders page on the allowed origin, exactly */
-function foldersPage(value, env) {
+/** the page a drive's consent may come back to: the control panel on the allowed origin, exactly,
+ * with no other path, no query and no fragment */
+function consolePage(value, env) {
   const origin = originOf(env);
-  return typeof value === 'string' && origin && value === origin + FOLDERS_PATH ? value : null;
+  return typeof value === 'string' && origin && value === origin + CONSOLE_PATH ? value : null;
 }
 
 /** A provider's token endpoint, asked with the client secret; back come only the fields the page or
@@ -336,9 +340,9 @@ async function handleDrive(request, env, path, fetchImpl) {
   if (path === '/drive/connect') {
     const code = credential(body.code, 4096);
     const verifier = verifierOf(body.code_verifier);
-    const redirect = foldersPage(body.redirect_uri, env);
+    const redirect = consolePage(body.redirect_uri, env);
     if (!code || !verifier || !redirect) {
-      return answer(env, 400, { error: 'bad_request', error_description: 'code, code_verifier and redirect_uri are needed; redirect_uri is the Folders page' });
+      return answer(env, 400, { error: 'bad_request', error_description: 'code, code_verifier and redirect_uri are needed; redirect_uri is the control panel\'s address' });
     }
     const out = await askProvider(provider, { grant_type: 'authorization_code', code, code_verifier: verifier, redirect_uri: redirect, scope: provider.scope },
       ['access_token', 'refresh_token', 'expires_in', 'scope'], fetchImpl);

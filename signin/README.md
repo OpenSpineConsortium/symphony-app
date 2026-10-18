@@ -57,20 +57,24 @@ write" to the App's permissions (every installation is then asked to
 accept the change). A fine-grained token pasted into the page needs none
 of that.
 
-## The drive routes, for the Folders page
+## The drive routes, for the Folders tab
 
-The panel's Folders page, https://openspineconsortium.com/symphony/control/folders.html,
+The control panel's Folders tab, https://openspineconsortium.com/symphony/control/#folders,
 makes a repository track files and folders of a person's OneDrive: one
-press connects the drive, the page draws the drive's folders to pick
+press connects the drive, the tab draws the drive's folders to pick
 from, GitHub's own form makes the repository from the template, and one
 press writes the repository's file `.github/symphony/drive.json` and its
 secret `SYMPHONY_DRIVE_REFRESH` and starts the first sync, which the
 repository's workflow drive-sync.yml then repeats every half hour
-(symphony-template's docs/research/drive-sync.md). Microsoft's consent,
-like GitHub's, comes back to the page as a one-time code, and exchanging
-it takes the app registration's client secret, which no page can hold;
-so this Worker holds that secret too and takes three more routes, in the
-same shape as the GitHub ones. OneDrive is the one provider for now: the
+(symphony-template's docs/research/drive-sync.md). The tab is one of the
+console's, so it uses the console's one sign-in and its one repository
+picker. Microsoft's consent, like GitHub's, comes back as a one-time code
+to the control panel's own address, the page GitHub's sign-in returns to
+as well: the page tells the two returns apart by the state each left
+with, and after Microsoft's it opens the Folders tab itself. Exchanging
+the code takes the app registration's client secret, which no page can
+hold; so this Worker holds that secret too and takes three more routes,
+in the same shape as the GitHub ones. OneDrive is the one provider for now: the
 owner declined the browser API key Google's Picker takes (2026-10-18), so
 Google Drive waits for a way that needs none, and a request naming any
 other provider is answered 400 `unknown_provider`.
@@ -78,15 +82,17 @@ other provider is answered 400 `unknown_provider`.
 - `GET /drive/config` answers `{"microsoft": {"client_id": "..."}}`, the
   public client id the page starts the consent with, or
   `{"microsoft": null}` while the two Microsoft settings below are not
-  both set, which the page says in one line. It needs no origin: the
+  both set, which the Folders tab says in one line. It needs no origin: the
   client id is public anyway.
 - `POST /drive/connect`, from the site's origin alone, with
   `{provider, code, code_verifier, redirect_uri}`: `provider` is
   `microsoft`, `code` what Microsoft sent the page back with,
   `code_verifier` the PKCE secret the page made for this consent, and
-  `redirect_uri` the Folders page's own address, exactly
-  `https://openspineconsortium.com/symphony/control/folders.html` (or the
-  same path on `ALLOWED_ORIGIN`), so the service exchanges no code for any
+  `redirect_uri` the control panel's own address, exactly
+  `https://openspineconsortium.com/symphony/control/` with its trailing
+  slash (or the same path on `ALLOWED_ORIGIN`); any other path, the old
+  `folders.html` and the address without its slash among them, and any
+  query or fragment are refused, so the service exchanges no code for any
   other page. The Worker posts them with the client id, the secret and the
   scope `Files.ReadWrite offline_access` to
   `https://login.microsoftonline.com/common/oauth2/v2.0/token` and hands
@@ -176,29 +182,44 @@ named, and nobody else needs to.
    pull request on openspineconsortium.github.io, which a session makes
    once the owner gives the two values (neither is a secret); "Sign in with
    GitHub", already the pages' first button, can then be pressed.
-6. The Microsoft app registration, for the Folders page. Open
+6. The Microsoft app registration, for the Folders tab. Open
    https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade
    (Microsoft Entra ID, App registrations) and press "New registration":
    name it `Symphony`, under "Supported account types" choose "Accounts
    in any organizational directory (Any Microsoft Entra ID tenant -
    Multitenant) and personal Microsoft accounts (e.g. Skype, Xbox)", and
    under "Redirect URI" choose the platform "Web" and enter
-   `https://openspineconsortium.com/symphony/control/folders.html`; press
-   "Register". On the registration's "Overview" note the "Application
-   (client) ID". Open "Certificates & secrets", press "New client secret",
-   give it a description and the longest expiry offered, press "Add", and
-   copy the secret's "Value" at once (it is shown this once; its "Secret
-   ID" is not the value). Open "API permissions", press "Add a
-   permission", "Microsoft Graph", "Delegated permissions", tick
-   `Files.ReadWrite` (under Files) and `offline_access` (under
-   OpenId permissions), press "Add permissions"; `User.Read` may stay or
-   go, the page never asks for it, and no "Grant admin consent" press is
-   needed: both are permissions a person consents to for themselves.
-   Nothing under "Authentication" needs changing: the "Web" platform is
-   right (a "Single-page application" platform would refuse the client
-   secret), and no implicit grant box is ticked. When the secret runs
-   out, make a new one here and change it in the Worker's settings.
-7. The Worker's drive settings. On the Worker's page in Cloudflare,
+   `https://openspineconsortium.com/symphony/control/`, with its trailing
+   slash, since Microsoft matches the address exactly, as this service
+   does; press "Register". It is the same address step 3 already lists as
+   SymphonyBoard's first callback URL, the control panel's own page, so
+   GitHub's sign-in needs no new callback URL: the page tells Microsoft's
+   return from GitHub's by the state each left with. On the
+   registration's "Overview" note the "Application (client) ID". Open
+   "Certificates & secrets", press "New client secret", give it a
+   description and the longest expiry offered, press "Add", and copy the
+   secret's "Value" at once (it is shown this once; its "Secret ID" is
+   not the value). Open "API permissions", press "Add a permission",
+   "Microsoft Graph", "Delegated permissions", tick `Files.ReadWrite`
+   (under Files) and `offline_access` (under OpenId permissions), press
+   "Add permissions"; `User.Read` may stay or go, the page never asks for
+   it, and no "Grant admin consent" press is needed: both are permissions
+   a person consents to for themselves. Nothing under "Authentication"
+   needs changing: the "Web" platform is right (a "Single-page
+   application" platform would refuse the client secret), and no implicit
+   grant box is ticked. When the secret runs out, make a new one here and
+   change it in the Worker's settings.
+7. The Worker's new code. A Worker deployed before the drive routes
+   merged runs the old code, which answers 404 on `/drive/config` and
+   refuses the console's address for a drive. Open
+   https://github.com/OpenSpineConsortium/symphony-app/blob/main/signin/worker.js
+   once the pull request that brings the drive routes has merged, and
+   press "Copy raw file" (the copy button above the code). In Cloudflare,
+   on the Worker `symphony-signin`'s page, press "Edit code", replace
+   everything in the editor with what you copied, and press "Deploy". The
+   settings of steps 2 and 4 stay as they are: the editor changes the
+   code alone.
+8. The Worker's drive settings. On the Worker's page in Cloudflare,
    "Settings", "Variables and Secrets", "Add": type "Text", name
    `MICROSOFT_CLIENT_ID`, value the Application (client) ID; "Add" again:
    type "Secret", name `MICROSOFT_CLIENT_SECRET`, value the secret's
@@ -206,17 +227,17 @@ named, and nobody else needs to.
    field and nowhere else: not into a chat, a file or a repository.
    `curl https://symphony-signin.<account>.workers.dev/drive/config`
    then answers `{"microsoft":{"client_id":"..."}}`; before this step it
-   answers `{"microsoft":null}` and the Folders page says the owner has
-   not set OneDrive up yet.
-8. The App's third callback URL. On SymphonyBoard's settings page (step
-   3), under "Identifying and authorizing users" press "Add Callback URL"
-   and add `https://openspineconsortium.com/symphony/control/folders.html`,
-   then "Save changes": the Folders page signs in with GitHub as the
-   other two do, and GitHub sends a sign-in back only to a listed page.
-   Saving the repository's secret from the page also needs the Secrets
-   permission (repository, read and write) the Tokens page already waits
-   on; until it is accepted on the installation, the page says so at
-   Track and writes nothing.
+   answers `{"microsoft":null}` and the Folders tab says the owner has
+   not set OneDrive up yet. Saving the repository's secret from the tab
+   also needs SymphonyBoard's repository permission Secrets (read and
+   write), apart from the organization permission Secrets the Tokens tab
+   uses; where the App does not hold it yet, open
+   https://github.com/organizations/OpenSpineConsortium/settings/apps/symphonyboard/permissions,
+   under "Repository permissions" set "Secrets" to "Read and write" and
+   press "Save changes", and each installation is asked to accept the
+   change. Until it is accepted on the installation, the tab says so at
+   Track and writes nothing; a fine-grained token pasted into the page
+   needs the same repository permission.
 
 To check it: `curl https://symphony-signin.<account>.workers.dev/` answers
 `{"service":"symphony-signin","routes":["/exchange","/refresh","/revoke","/drive/config","/drive/connect","/drive/token"],"keeps":"nothing"}`,
@@ -241,8 +262,9 @@ body limits in bytes, the exchange with its verifier, the refresh, the
 revoke, the rate limit when a binding is there, GitHub refusing or
 unreachable, that nothing but the five fields reaches the page, and the
 drive routes: the config's one provider, the connect's form and its four
-fields, the token's two, the run's call with no origin, the Folders page
-as the one redirect, a provider the table lacks, and Microsoft's refusals
+fields, the token's two, the run's call with no origin, the control
+panel's own address as the one redirect (its old Folders page and the
+address without its trailing slash refused), a provider the table lacks, and Microsoft's refusals
 passed through with their status. scripts/check.sh runs it when node
 is on the path, as it is on GitHub's runners; the Python checks need no
 node.
