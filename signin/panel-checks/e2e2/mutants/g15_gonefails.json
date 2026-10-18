@@ -1,0 +1,1 @@
+[["if (e.status === 404 || e.status === 410) return out;", "if (e.status === 404) return out;"]]
