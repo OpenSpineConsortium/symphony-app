@@ -1,0 +1,1 @@
+[["return gh('PATCH', '/repos/' + repo + '/git/refs/heads/' + DRIVE_BRANCH, { sha: head, force: true }, undefined, false, account).catch(", "return Promise.resolve(null).catch("]]

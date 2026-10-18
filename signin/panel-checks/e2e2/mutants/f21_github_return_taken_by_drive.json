@@ -1,1 +1,1 @@
-[["    if (!ours && github) return Promise.resolve(false);\n", ""]]
+[["    if (!ours && github) {\n      // GitHub's own return: a drive connection still pending beside it was abandoned\n      if (kept && github.state === state) forgetDriveState();\n      return Promise.resolve(false);\n    }\n", ""]]

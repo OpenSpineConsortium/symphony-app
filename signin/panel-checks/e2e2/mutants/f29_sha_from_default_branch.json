@@ -1,0 +1,1 @@
+[["return readOne(path + '?ref=' + encodeURIComponent(on)).then(function (have) {", "return readOne(path).then(function (have) {"]]

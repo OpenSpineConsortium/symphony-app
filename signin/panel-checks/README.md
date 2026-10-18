@@ -28,33 +28,57 @@ ghu_TEST or github_pat_X.
   answer, the issue read again before each question and replaced when closed, one press at a time,
   a sign-in changed under the page, a watch read on after a sign-in, and Stop watching; its cadence
   constants are shortened in the served script, and a check may serve its own.
-- `e2e2/folders.test.mjs`: 32 checks of the console's Folders tab, /symphony/control/#folders
+- `e2e2/folders.test.mjs`: 48 checks of the console's Folders tab, /symphony/control/#folders
   (site branch claude/folders-page, 2026-10-18; the tab took the place of the page folders.html
-  before that page shipped), against a mocked Microsoft consent page, a mocked Microsoft Graph and
-  the mocked service's three `/drive` routes. It loads the console signed in, as the other suites
-  do, installs `console-tabs.mjs`, and opens the tab through its rail button or its address. A to
-  L keep the page's checks in meaning: a provider the service has not set up; Connect with PKCE,
-  where every Connect names the console's own address, with its trailing slash, to Microsoft and
-  to /drive/connect, also when the console was opened as index.html, and the code has left the
-  address before it is exchanged; the drive drawn from Graph and ticked, a hostile name as text;
+  before that page shipped), against a mocked Microsoft consent page, a mocked Microsoft Graph,
+  the mocked service's three `/drive` routes and a mocked GitHub that keeps what Track writes as
+  GitHub keeps it: drive.json per branch, read by ?ref, a write over it refused without its sha
+  (422) or with another (409); the secret, set once saved; the branches, one made or set back by
+  force holding the default branch's files; and the open pull requests. The repository is private
+  unless a check says otherwise. It loads the console signed in, as the other suites do, installs
+  `console-tabs.mjs`, and opens the tab through its rail button or its address. A to L keep the
+  page's checks in meaning: a provider the service has not set up, with the three steps and the
+  filled button the next step's; Connect with PKCE, where every Connect names the console's own
+  address, with its trailing slash, to Microsoft and to /drive/connect, also when the console
+  was opened as index.html, and the code has left the address before it is exchanged; the drive
+  drawn from Graph and ticked, a hostile name as text, and Untick clearing the box on view;
   Track sealing the refresh token, writing drive.json exactly as tools/drive_sync.py reads it,
-  starting the sync and dropping the tokens, with its 403s, two presses, refused folder names and
-  a default branch that takes only pull requests; a tracked repository's box; a return nobody
-  here issued, cleaned and not spoken of, as the sign-in's F8 holds; a drive state that differs;
-  Microsoft refusing; "Find the repository I just made", which asks GitHub about each new
-  repository, since GitHub's list of them leaves out the template; no drive-sync.yml; and the
-  renewal through /drive/token. H1 to H4 hold the two returns on one page apart both ways round:
-  a GitHub sign-in is the sign-in handler's and opens Command, a drive return is the tab's and
-  opens Folders, and a state that matches neither is refused once. N1 to N7 are what the tab adds
-  to the console: a drive return opens the tab by itself with the address clean; the tab asks the
-  service and reads its files only once it is opened, and once; Forget the token, or another
-  tab's token for another account, drops the drive; the bar's repository is followed, with
-  nothing of the last one's shown and a late answer about it dropped; hostile names in the drive,
-  the repository's file and GitHub's list stay text; at 1366 x 657 the tab keeps its words inside
-  itself and the window stays at 0 after Connect's return and after Track; and folders.html is
-  gone, linked from nowhere, while #folders opens the tab. Its mutants are `e2e2/mutants/f*.json`,
-  25, each with its `.only`, run as the section below says; every one was caught.
-- `e2e2/mutants/`: 79 mutants of the sign-in checks (`m*.json`), beside the 25 Folders ones
+  dated on either side of midnight, starting the sync and dropping the tokens, with a 403 on the
+  secret's write said as the token's missing permission, two presses, a refused first run whose
+  words point at the runs link drawn in the tab, refused folder names, Track again over a file
+  that is there (D3), a file that cannot be written (E5) and a connection Microsoft gave no
+  refresh token (E6); a sign-in that GitHub refuses even whether the secret is set, told so as
+  the tab opens with Track not offered, in a pasted token's words and in SymphonyBoard's with an
+  organization's installations page or the person's (E2 to E2c); a public repository, written
+  into only once its box, never ticked beforehand, is ticked (P); a tracked repository's box, the
+  connect-again day counted from today, and a connection that ran out or is near its end (F to
+  F4); a return nobody here issued, cleaned and not spoken of, as the sign-in's F8 holds; a drive
+  state that differs; Microsoft refusing; a default branch that takes only pull requests, where
+  symphony/drive is made from its head, set back by force when it is there, never committed on
+  when it cannot be, and an open pull request is linked rather than a second opened (I to I3);
+  "Find the repository I just made", which asks GitHub about each new repository, since GitHub's
+  list of them leaves out the template; no drive-sync.yml; and the renewal through /drive/token.
+  H1 to H4 hold the two returns on one page apart both ways round: a GitHub sign-in is the
+  sign-in handler's and opens Command, a drive return is the tab's and opens Folders, each
+  forgets the other's pending state, and a state that matches neither is refused once. N1 to N8,
+  V1 and V2 are what the tab adds to the console: a drive return opens the tab by itself with the
+  address clean; the tab asks the service and reads its files only once it is opened, and once;
+  Forget the token, another tab's token for another account, or a pasted token GitHub stops
+  taking drops the drive; the bar's repository is followed, with nothing of the last one's shown
+  and a late answer about it dropped; what the person ticked goes with them to another repository
+  while what one repository's file ticked stays with it (V1), and a list drawn before the file
+  comes shows the file's ticks once it does (V2); hostile names in the drive, the repository's
+  file and GitHub's list stay text; with no repository listed, a drive is connected, the
+  repository just made is found and tracked into (N8); at 1366 x 657 the tab keeps its words
+  inside itself and the window stays at 0 after Connect's return and after Track, and a long
+  repository name wraps in the third step's head with Track inside the side column at 1366 x 657
+  and 390 x 844 (N6b, N6c); and folders.html is gone, linked from nowhere, while #folders opens
+  the tab. B, C, D, E3, I and L scan every request, the console, #msg, the markup, the fields, the
+  address and the storage for the drive's tokens, which go only to Graph's Authorization header,
+  to /drive/token and, sealed, into the secret. Its mutants are `e2e2/mutants/f*.json`, 48, each
+  with its `.only`, run as the section below says; every one was caught against the site's
+  script at commit 044b8b3.
+- `e2e2/mutants/`: 79 mutants of the sign-in checks (`m*.json`), beside the 48 Folders ones
   above (`f*.json`). Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it.
   `e2e2/run-mutants.sh` runs them. Every one was caught against master 009109c.
