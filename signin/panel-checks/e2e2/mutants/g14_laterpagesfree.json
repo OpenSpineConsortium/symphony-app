@@ -1,0 +1,1 @@
+[["if (draw.reads >= GRAPH_READS_MAX) {", "if (p === path && draw.reads >= GRAPH_READS_MAX) {"], ["      draw.reads++;\n      return gh('GET', p).then(function (r) {\n        var left", "      if (p === path) draw.reads++;\n      return gh('GET', p).then(function (r) {\n        var left"]]

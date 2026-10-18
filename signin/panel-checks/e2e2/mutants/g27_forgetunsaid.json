@@ -1,0 +1,1 @@
+[["$('cp-summary').textContent = 'No repository listed. Add one below.'; graphReset(GRAPH_NO_REPOSITORY); }", "$('cp-summary').textContent = 'No repository listed. Add one below.'; }"]]
