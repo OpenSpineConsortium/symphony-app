@@ -250,13 +250,25 @@ async function toTab(page, name) {
   await page.waitForFunction((n) => !document.getElementById('tab-' + n).hidden && location.hash === '#' + n, name, { timeout: 8000 });
 }
 // where the console stands, read without opening anything: the address, the tabs shown, the window's
-// offset, and whether the page could scroll at all, which is what makes an offset of 0 mean something
-const where = (page) => page.evaluate(() => ({
+// offset, and whether the page could scroll at all, which is what makes an offset of 0 mean something.
+// The console page fits the window and does not scroll since the layout of site #60 (the owner asked
+// not to scroll past it to the site's foot), so the check gives the page room below it, a block of its
+// own and the body let scroll, for a window that moved to show up as an offset.
+const where = (page) => page.evaluate(() => {
+  if (!document.getElementById('check-room')) {
+    const room = document.createElement('div');
+    room.id = 'check-room';
+    room.style.height = '150vh';
+    document.body.appendChild(room);
+    document.body.style.overflow = 'visible';
+  }
+  return {
   hash: location.hash,
   shown: Array.from(document.querySelectorAll('[data-tab-panel]')).filter((p) => !p.hidden).map((p) => p.getAttribute('data-tab-panel')),
   y: window.pageYOffset,
   scrollable: document.documentElement.scrollHeight > window.innerHeight,
-}));
+  };
+});
 // whether a node lies wholly inside the box its tab scrolls, and that box inside the window
 const inBox = (page, selector) => page.$eval(selector, (node) => {
   const box = node.closest('.console__scroll');
