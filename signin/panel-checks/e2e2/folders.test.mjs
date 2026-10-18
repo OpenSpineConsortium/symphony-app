@@ -140,11 +140,11 @@ function graphRoutes() {
     'GET /v1.0/me/drive': { id: 'drive1', driveType: 'personal', owner: { user: { displayName: 'Greg' } } },
     'GET /v1.0/me/drive/root/children': { value: [
       { id: 'f1', name: 'Papers', folder: { childCount: 2 }, parentReference: { driveId: 'drive1' }, lastModifiedDateTime: now },
-      { id: 'a1', name: 'notes.docx', file: { mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }, size: 1234, parentReference: { driveId: 'drive1' }, lastModifiedDateTime: now },
-      { id: 'h1', name: HOSTILE, file: { mimeType: 'text/plain' }, size: 10, parentReference: { driveId: 'drive1' }, lastModifiedDateTime: now },
+      { id: 'a1', name: 'notes.docx', file: { mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }, size: 1234, parentReference: { driveId: 'drive1', path: '/drive/root:' }, webUrl: 'https://onedrive.live.com/?id=a1', lastModifiedDateTime: now },
+      { id: 'h1', name: HOSTILE, file: { mimeType: 'text/plain' }, size: 10, parentReference: { driveId: 'drive1', path: '/drive/root:' }, webUrl: 'https://onedrive.live.com/?id=h1', lastModifiedDateTime: now },
     ] },
     'GET /v1.0/me/drive/items/f1/children': { value: [
-      { id: 'b1', name: 'one.docx', file: { mimeType: 'x' }, size: 2048, parentReference: { driveId: 'drive1' }, lastModifiedDateTime: now },
+      { id: 'b1', name: 'one.docx', file: { mimeType: 'x' }, size: 2048, parentReference: { driveId: 'drive1', path: '/drive/root:/Papers' }, webUrl: 'https://onedrive.live.com/?id=b1', lastModifiedDateTime: now },
     ], '@odata.nextLink': 'https://graph.microsoft.com/v1.0/me/drive/items/f1/children?$skiptoken=page2' },
     'GET /v1.0/me/drive/items/f1/children?page2': { value: [
       { id: 'b2', name: 'two.docx', file: { mimeType: 'x' }, size: 4096, parentReference: { driveId: 'drive1' }, lastModifiedDateTime: now },
@@ -482,26 +482,26 @@ await check('C: the drive is drawn from Graph with $select and $top, a folder op
   await listed(page);
   const root = graph.find((g) => g.key === 'GET /v1.0/me/drive/root/children');
   assert.ok(root, 'the root was listed');
-  assert.match(root.query, /\$select=id,name,folder,file,size,parentReference,lastModifiedDateTime/);
+  assert.match(root.query, /\$select=id,name,folder,file,size,parentReference,lastModifiedDateTime,webUrl/);
   assert.match(root.query, /\$top=200/);
   assert.equal(root.auth, 'Bearer ' + ACCESS);
-  const rows = await page.$$eval('#fd-items tbody tr', (trs) => trs.map((tr) => tr.children[1].textContent + ' | ' + tr.children[2].textContent + ' | ' + (tr.querySelector('button') ? tr.querySelector('button').textContent : '')));
+  const rows = await page.$$eval('#fd-items tbody tr', (trs) => trs.map((tr) => tr.children[1].textContent + ' | ' + tr.children[3].textContent + ' | ' + tr.children[4].textContent));
   console.log('     ', JSON.stringify(rows));
-  assert.equal(rows[0], 'Papers | folder, 2 items | Open', 'folders first, with Open');
-  assert.equal(rows[1], 'notes.docx | 1 KB | ');
+  assert.equal(rows[0], 'Papers | File folder | 2 items', 'folders first');
+  assert.ok(rows.includes('notes.docx | Word document | 1 KB'), 'the Word file is listed with its type and size');
   assert.equal(await page.evaluate(() => !!window.__hostile), false, 'the hostile name ran');
   assert.equal(await page.$$eval('#fd-items img', (l) => l.length), 0, 'the hostile name made an element');
-  assert.ok(rows[2].startsWith(HOSTILE + ' |'), 'the hostile name is shown as text');
+  assert.ok(rows.includes(HOSTILE + ' | File | 10 B'), 'the hostile name is shown as text');
   // tick a file in the root, open the folder, tick a file there, go up, tick the folder
   await page.check('#fd-items input[data-id="a1"]');
-  await page.click('#fd-items tbody tr:first-child button');
-  await page.waitForFunction(() => /one\.docx/.test(document.getElementById('fd-items').textContent));
+  await page.dblclick('#fd-items tbody tr:first-child .fx__name');
+  await page.waitForFunction(() => /one\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
   assert.equal(graph.filter((g) => g.key === 'GET /v1.0/me/drive/items/f1/children').length, 2, 'the @odata.nextLink page was not asked for');
   assert.match(await page.textContent('#fd-items'), /two\.docx/, 'the second page is not listed');
-  assert.match(await page.textContent('.folders__crumbs'), /My files\/Papers/);
+  assert.match(await page.textContent('.folders__crumbs'), /OneDrive\u203aPapers/);
   await page.check('#fd-items input[data-id="b1"]');
   await page.click('.folders__crumbs button');
-  await page.waitForFunction(() => /notes\.docx/.test(document.getElementById('fd-items').textContent));
+  await page.waitForFunction(() => /notes\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
   assert.equal(await page.isChecked('#fd-items input[data-id="a1"]'), true, 'a tick survives leaving the folder');
   await page.check('#fd-items input[data-id="f1"]');
   assert.match(await page.textContent('#fd-picked-head'), /Ticked, 3 items/);
@@ -1132,8 +1132,8 @@ await check('L: an access token that has run out is renewed through /drive/token
   const { context, page, service, graph, errors } = env;
   await connect(env);
   await listed(page);
-  await page.click('#fd-items tbody tr:first-child button');
-  await page.waitForFunction(() => /one\.docx/.test(document.getElementById('fd-items').textContent));
+  await page.dblclick('#fd-items tbody tr:first-child .fx__name');
+  await page.waitForFunction(() => /one\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
   const renewals = service.filter((s) => s.path === '/drive/token');
   assert.ok(renewals.length >= 1, 'no renewal');
   assert.deepEqual(renewals[0].body, { provider: 'microsoft', refresh_token: REFRESH });
@@ -1504,6 +1504,126 @@ function siteFiles(dir, out) {
   }
   return out;
 }
+// what the page asks the browser to open, recorded instead of opened: an Office address the anchor
+// carries, and a window.open of OneDrive's own page
+async function recordOpens(page) {
+  await page.evaluate(() => {
+    window.__opened = [];
+    const click = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function () { if (/^ms-/.test(this.href)) { window.__opened.push(this.getAttribute('href')); return; } return click.call(this); };
+    window.open = (url) => { window.__opened.push('window:' + url); return null; };
+  });
+}
+await check('X1: the drive is drawn as an explorer: a folder tree, an address with Back, Forward and Up, Details with Name, Date modified, Type and Size, and a status bar', async () => {
+  const env = await open({});
+  const { context, page, errors } = env;
+  await connect(env);
+  await listed(page);
+  const heads = await page.$$eval('#fd-items thead th', (l) => l.map((th) => th.textContent.trim()));
+  assert.deepEqual(heads, ['', 'Name \u25b4', 'Date modified', 'Type', 'Size']);
+  await page.waitForFunction(() => /Papers/.test(document.getElementById('fd-tree').textContent));
+  assert.deepEqual(await page.$$eval('#fd-tree .fx__nodename', (l) => l.map((n) => n.textContent)), ['OneDrive', 'Papers'], 'the tree lists the drive and its one folder');
+  assert.match(await page.textContent('#fd-status'), /^3 items/);
+  const tools = await page.$$eval('.fx__bar .fx__tool', (l) => l.map((b) => b.getAttribute('aria-label') + (b.disabled ? ' (off)' : '')));
+  assert.deepEqual(tools.slice(0, 4), ['Back (Alt+Left) (off)', 'Forward (Alt+Right) (off)', 'Up to the folder above (Backspace) (off)', 'Refresh']);
+  // the tree opens a folder, and Back, Forward and Up walk the path
+  await page.click('#fd-tree .fx__nodename:has-text("Papers")');
+  await page.waitForFunction(() => /one\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
+  assert.equal(await page.getAttribute('#fd-tree .fx__current .fx__nodename', 'class'), 'fx__nodename');
+  assert.match(await page.textContent('#fd-tree .fx__current'), /Papers/, 'the tree marks the folder shown');
+  await page.click('.fx__tool[aria-label^="Back"]');
+  await page.waitForFunction(() => /notes\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
+  await page.click('.fx__tool[aria-label^="Forward"]');
+  await page.waitForFunction(() => /one\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
+  await page.click('.fx__tool[aria-label^="Up"]');
+  await page.waitForFunction(() => /notes\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
+  // the keyboard: Down selects, Enter opens the folder, Backspace goes back up
+  await page.focus('#fd-main');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => /one\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
+  await page.focus('#fd-main');
+  await page.keyboard.press('Backspace');
+  await page.waitForFunction(() => /notes\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('X2: a double click opens a Word file in Word for editing at its d.docs.live.net address on a personal drive, and a right click offers Word, the browser and Tick, which tracks it', async () => {
+  const env = await open({});
+  const { context, page, calls, errors } = env;
+  await connect(env);
+  await listed(page);
+  await page.waitForFunction(() => /\(personal\)/.test(document.getElementById('fd-connect-note').textContent));
+  await recordOpens(page);
+  await page.dblclick('#fd-items tr[data-item="a1"] .fx__name');
+  assert.deepEqual(await page.evaluate(() => window.__opened), ['ms-word:ofe|u|https://d.docs.live.net/drive1/notes.docx']);
+  assert.match(await page.textContent('#msg'), /Opening notes\.docx in Word/);
+  await page.click('#fd-items tr[data-item="a1"] .fx__name', { button: 'right' });
+  assert.deepEqual(await page.$$eval('#fd-menu button', (l) => l.map((b) => b.textContent)), ['Open in Word', 'Open in the browser', 'Tick to track']);
+  await page.click('#fd-menu button:has-text("Open in the browser")');
+  assert.equal(await page.evaluate(() => window.__opened[1]), 'window:https://onedrive.live.com/?id=a1');
+  assert.equal(await page.$('#fd-menu'), null, 'the menu stayed open');
+  await page.click('#fd-items tr[data-item="a1"] .fx__name', { button: 'right' });
+  await page.click('#fd-menu button:has-text("Tick to track")');
+  assert.equal(await page.isChecked('#fd-items input[data-id="a1"]'), true);
+  assert.match(await page.textContent('#fd-status'), /1 ticked/);
+  // a file in a folder is opened at its own path, each segment encoded; a plain file in the browser
+  await page.dblclick('#fd-items tr[data-item="f1"] .fx__name');
+  await page.waitForFunction(() => /one\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
+  await page.dblclick('#fd-items tr[data-item="b1"] .fx__name');
+  assert.equal(await page.evaluate(() => window.__opened[2]), 'ms-word:ofe|u|https://d.docs.live.net/drive1/Papers/one.docx');
+  await page.click('.fx__tool[aria-label^="Back"]');
+  await page.waitForFunction(() => /notes\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
+  await page.dblclick('#fd-items tr[data-item="h1"] .fx__name');
+  assert.equal(await page.evaluate(() => window.__opened[3]), 'window:https://onedrive.live.com/?id=h1', 'a text file opens on OneDrive\'s page');
+  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), [], 'opening a file wrote something');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('X3: on a work or school drive a double click opens the file at the SharePoint address OneDrive gives, and an address that is not https is never opened', async () => {
+  const table = graphRoutes();
+  table['GET /v1.0/me/drive'] = { id: 'b!xyz', driveType: 'business', owner: { user: { displayName: 'Greg' } } };
+  table['GET /v1.0/me/drive/root/children'] = { value: [
+    { id: 'w1', name: 'budget.xlsx', file: { mimeType: 'x' }, size: 5000, parentReference: { driveId: 'b!xyz', path: '/drive/root:' }, webUrl: 'https://wayne0-my.sharepoint.com/personal/g/Documents/budget.xlsx', lastModifiedDateTime: now },
+    { id: 'w2', name: 'deck.pptx', file: { mimeType: 'x' }, size: 5000, parentReference: { driveId: 'b!xyz', path: '/drive/root:' }, webUrl: 'javascript:window.__ran=1', lastModifiedDateTime: now },
+  ] };
+  const env = await open({ graph: table });
+  const { context, page, errors } = env;
+  await connect(env);
+  await listed(page);
+  await page.waitForFunction(() => /\(business\)/.test(document.getElementById('fd-connect-note').textContent));
+  await recordOpens(page);
+  await page.dblclick('#fd-items tr[data-item="w1"] .fx__name');
+  await page.dblclick('#fd-items tr[data-item="w2"] .fx__name');
+  assert.deepEqual(await page.evaluate(() => window.__opened), ['ms-excel:ofe|u|https://wayne0-my.sharepoint.com/personal/g/Documents/budget.xlsx']);
+  assert.match(await page.textContent('#msg'), /OneDrive gave no address for deck\.pptx/);
+  assert.equal(await page.evaluate(() => !!window.__ran), false);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('X4: Large icons draws a tile per item with its tick, the column headings sort with folders kept first, and the search box narrows the folder by name', async () => {
+  const env = await open({});
+  const { context, page, errors } = env;
+  await connect(env);
+  await listed(page);
+  await page.click('.fx__tool[aria-label="Large icons view"]');
+  assert.equal(await page.getAttribute('.fx__tool[aria-label="Large icons view"]', 'aria-pressed'), 'true');
+  assert.deepEqual(await page.$$eval('#fd-items .fx__tile .fx__label', (l) => l.map((n) => n.textContent)), ['Papers', HOSTILE, 'notes.docx'], 'one tile per item, folders first, then by name');
+  await page.check('#fd-items .fx__tile input[data-id="a1"]');
+  assert.match(await page.textContent('#fd-picked-head'), /Ticked, 1 item/);
+  await page.click('.fx__tool[aria-label="Details view"]');
+  assert.equal(await page.isChecked('#fd-items input[data-id="a1"]'), true, 'the tick did not carry across views');
+  await page.click('#fd-items thead .fx__sort:has-text("Size")');
+  await page.click('#fd-items thead .fx__sort:has-text("Size")');
+  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent)).then((l) => [l[0], l[1]]), ['Papers', 'notes.docx'], 'largest first, the folder still first');
+  await page.fill('#fd-search', 'NOTES');
+  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent)), ['notes.docx']);
+  assert.match(await page.textContent('#fd-status'), /^1 item/);
+  await page.fill('#fd-search', 'nothing-here');
+  assert.match(await page.textContent('#fd-main'), /Nothing here matches "nothing-here"/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
 await check('N7: Folders is a tab of the console, at /symphony/control/#folders: the old page folders.html is gone from the site and its build, nothing links it, and the address opens the tab', async () => {
   const answer = await fetch(BASE + PAGE + 'folders.html');
   assert.equal(answer.status, 404, 'the site still serves folders.html');

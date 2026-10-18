@@ -1,0 +1,1 @@
+[["a.href = app + ':ofe|u|' + url;", "a.href = app + ':' + url;"]]

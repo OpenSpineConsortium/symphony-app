@@ -1,0 +1,1 @@
+[["function httpsOnly(url) { return typeof url === 'string' && /^https:\\/\\//.test(url) ? url : ''; }", "function httpsOnly(url) { return typeof url === 'string' ? url : ''; }"]]

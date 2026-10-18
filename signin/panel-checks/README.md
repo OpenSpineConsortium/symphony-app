@@ -74,7 +74,7 @@ ghu_TEST or github_pat_X.
   it reads or presses inside it, and a press that crosses tabs is read at once with page.evaluate,
   which opens nothing, so the page and not console-tabs.mjs is seen opening the tab. A check that
   wants the drawing recorded instead of made serves a stand-in for the library on its route.
-- `e2e2/folders.test.mjs`: 48 checks of the console's Folders tab, /symphony/control/#folders
+- `e2e2/folders.test.mjs`: 52 checks of the console's Folders tab, /symphony/control/#folders
   (site branch claude/folders-page, 2026-10-18; the tab took the place of the page folders.html
   before that page shipped), against a mocked Microsoft consent page, a mocked Microsoft Graph,
   the mocked service's three `/drive` routes and a mocked GitHub that keeps what Track writes as
@@ -122,8 +122,13 @@ ghu_TEST or github_pat_X.
   the tab. B, C, D, E3, I and L scan every request, the console, #msg, the markup, the fields, the
   address and the storage for the drive's tokens, which go only to Graph's Authorization header,
   to /drive/token and, sealed, into the secret. Its mutants
-  are `e2e2/mutants/f*.json`, 48, run as the section below says.
-- `e2e2/mutants/`: 176 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+  are `e2e2/mutants/f*.json`, 55, run as the section below says. X1 to X4 hold the list drawn
+  as a file explorer (site branch claude/folders-explorer, 2026-10-18): the folder tree, Back,
+  Forward, Up and the keyboard, Details' four columns and the status bar; a Word file opened for
+  editing in Word at its d.docs.live.net address on a personal drive and at the address OneDrive
+  gives on a work drive, never an address that is not https, other files on OneDrive's page, and
+  the right-click menu; Large icons, sorting with folders first, and the search box.
+- `e2e2/mutants/`: 183 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The 79 of the sign-in (`m*`) were caught against master
@@ -141,8 +146,10 @@ ghu_TEST or github_pat_X.
   and a Board chart that could not be drawn losing its text (R4); g41, the draw not seeded from the
   open issues' count, was retired, since every read now updates the count it starts from) against
   site branch claude/graph-section on 2026-10-18 after that review's fold, where the 79 were caught
-  again. The 48 of the Folders tab (`f*`, each with a `.json.suite` naming
-  folders.test.mjs) were caught against the site's script at commit 044b8b3.
+  again. The 55 of the Folders tab (`f*`, each with a `.json.suite` naming
+  folders.test.mjs) were caught against site branch claude/folders-explorer on 2026-10-18, the
+  first 48 also against the site's script at commit 044b8b3, f06 rewritten for the explorer's
+  name cell.
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
   and every page action, visibility read and locator action on a selector first opens the tab that

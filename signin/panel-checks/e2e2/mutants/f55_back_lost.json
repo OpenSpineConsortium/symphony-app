@@ -1,0 +1,1 @@
+[["explorer.back.push(crumbs.slice());\n    explorer.forward = [];", "explorer.forward = [];"]]
