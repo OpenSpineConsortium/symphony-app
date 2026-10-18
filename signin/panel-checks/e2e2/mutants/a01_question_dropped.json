@@ -1,1 +1,1 @@
-[["var whole = (text ? text + '\\n\\n' : '') + askInClaudeContext();", "var whole = askInClaudeContext();"]]
+[["whole = text + (text && room > 0 ? '\\n\\n' : '') + (room > 0 ? ownCut(context, room) : '');", "whole = (room > 0 ? ownCut(context, room) : '');"]]

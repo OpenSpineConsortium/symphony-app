@@ -1,1 +1,1 @@
-[["if (whole.length > OWN_CLAUDE_MAX) {", "if (whole.length > OWN_CLAUDE_MAX * 100) {"]]
+[["if (Array.from(text).length > OWN_CLAUDE_MAX) {", "if (Array.from(text).length > OWN_CLAUDE_MAX * 100) {"]]

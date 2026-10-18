@@ -1,0 +1,1 @@
+[["while (encodeURIComponent(cps.join('')).length > OWN_CLAUDE_ENCODED_MAX) {", "while (encodeURIComponent(cps.join('')).length > OWN_CLAUDE_ENCODED_MAX * 100) {"]]

@@ -142,12 +142,12 @@ ghu_TEST or github_pat_X.
   suite alone), and holds that the storage is asked one plain read with no token and no header of
   GitHub's. XP9 switches the repository while the tab is open, and XP10 holds that an epic whose
   sub-issues could not be read says so.
-- `e2e2/mutants/`: 211 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/mutants/`: 214 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
-  `e2e2/run-mutants.sh` runs them. The four of the Ask Claude bar's button "Ask in claude.ai"
+  `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
   (`a*`, check O of assistant.test.mjs: the question dropped, the same tab, the state dropped, no
-  cut) were caught against the site branch claude/ask-in-claude. The 79 of the sign-in (`m*`) were caught against master
+  cut, the encoded form unbounded, the referrer sent, a cut by code unit) were caught against the site branch claude/ask-in-claude. The 79 of the sign-in (`m*`) were caught against master
   009109c; the 49 of the Dependencies tab (`g*`, five of them for the tab: show dependencies
   opening no tab and leaving the charts' box where it was, the message line unsaid, the focus
   opening no tab, and the window not put back; eleven from the tab's second review: the message

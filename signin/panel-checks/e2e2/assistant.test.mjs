@@ -1034,7 +1034,7 @@ await check('O: Ask in claude.ai opens the question and the page\'s state in a n
   let u = new URL(got[0][0]);
   assert.equal(u.origin + u.pathname, 'https://claude.ai/new');
   assert.match(u.searchParams.get('q'), /^I am looking at the Symphony control panel for acme\/demo \(https:\/\/github\.com\/acme\/demo\), on its [A-Za-z ]+ tab\.$/);
-  assert.deepEqual([got[0][1], got[0][2]], ['_blank', 'noopener']);
+  assert.deepEqual([got[0][1], got[0][2]], ['_blank', 'noopener,noreferrer'], 'the tab is not a new one with no opener and no referrer');
   assert.equal(posts(first.calls).length, 0, 'something was written: ' + posts(first.calls).map((c) => c.key));
   assert.deepEqual(first.errors, []);
   await first.context.close();
@@ -1053,13 +1053,28 @@ await check('O: Ask in claude.ai opens the question and the page\'s state in a n
   assert.ok(q.startsWith('What is blocked?\n\nI am looking at the Symphony control panel for acme/demo'), 'the question does not lead: ' + q.slice(0, 90));
   assert.ok(q.endsWith(', on its ' + tasksName + ' tab.'), 'the tab shown is not named: ' + q.slice(-60));
   assert.equal(await page.inputValue('#cp-as-q'), 'What is blocked?', 'the question was cleared from the box');
-  // a question longer than an address carries is cut, and the state line says so
+  // a question longer than an address carries is cut, the page's lines left out, and the message line says so
   await page.fill('#cp-as-q', 'x'.repeat(2500));
   await page.click('#cp-as-own');
   got = await opened(page);
   assert.equal(got.length, 2, 'the long question opened ' + (got.length - 1) + ' tabs');
-  assert.equal(new URL(got[1][0]).searchParams.get('q').length, 2000, 'the question was not cut to 2000');
-  assert.match(await stateText(page), /first 2000 of the question/);
+  assert.equal(new URL(got[1][0]).searchParams.get('q'), 'x'.repeat(2000), 'the question was not cut to its first 2000 alone');
+  assert.match(await page.textContent('#msg'), /cut to its first 2000, and what the page shows is left out/);
+  // a question of 1500 characters outside ASCII fits the bound but not the address, since each encodes to nine: the encoded form is held to 6000
+  await page.fill('#cp-as-q', '\u3042'.repeat(1500));
+  await page.click('#cp-as-own');
+  got = await opened(page);
+  assert.equal(got.length, 3, 'the non-ASCII question opened ' + (got.length - 2) + ' tabs');
+  const enc = new URL(got[2][0]).search.slice(3);
+  assert.ok(enc.length <= 6000 && enc.length > 5900, 'the encoded question is ' + enc.length + ' characters, not held to 6000');
+  assert.ok(/^(%E3%81%82)+$/.test(enc), 'the cut split a character: ' + enc.slice(-20));
+  assert.match(await page.textContent('#msg'), /cut to fit/);
+  // the cut falls by code points: a question whose 2000th character is an emoji keeps it whole (a split pair would make the address malformed and open nothing)
+  await page.fill('#cp-as-q', 'x'.repeat(1999) + '\uD83D\uDE00'.repeat(2));
+  await page.click('#cp-as-own');
+  got = await opened(page);
+  assert.equal(got.length, 4, 'the question ending in emoji opened ' + (got.length - 3) + ' tabs');
+  assert.equal(new URL(got[3][0]).searchParams.get('q'), 'x'.repeat(1999) + '\uD83D\uDE00', 'the cut did not keep the 2000th character whole');
   assert.equal(posts(calls).length, 0, 'something was written: ' + posts(calls).map((c) => c.key));
   assert.deepEqual(errors, []);
   await context.close();
