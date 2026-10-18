@@ -18,6 +18,16 @@ ghu_TEST or github_pat_X.
   run both ways in, Sign in with GitHub and a pasted token.
 - `e2e2/panel.test.mjs`: the panel's walkthrough on both pages.
 - `e2e2/hostile.test.mjs`: 13 hostile-input checks.
+- `e2e2/assistant.test.mjs`: 20 checks of the panel's assistant (site branch claude/assistant-panel,
+  2026-10-18): who may ask (write access, and the repository's workflow carrying
+  .github/symphony/assistant.md), the label and the issue made once and only on a press, the
+  question's state block and its size, the conditional polling (If-None-Match and a 304) and where
+  it stops (a 403, three failed reads, the time limit), the action's three comment shapes as its
+  source writes them (the first comment, Claude's checklist, the header that ends a run or says it
+  failed), the answer's vocabulary and what the renderer never lets through, whose comment is the
+  answer, the issue read again before each question and replaced when closed, one press at a time,
+  a sign-in changed under the page, a watch read on after a sign-in, and Stop watching; its cadence
+  constants are shortened in the served script, and a check may serve its own.
 - `e2e2/mutants/`: 79 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it.
   `e2e2/run-mutants.sh` runs them. Every one was caught against master 009109c.
