@@ -1,0 +1,1 @@
+[["add(tile, tickBox(it), kindIcon(it, 56), el('span', 'fx__label', String(it.name || '')));", "var lab = el('span', 'fx__label'); lab.innerHTML = String(it.name || ''); add(tile, tickBox(it), kindIcon(it, 56), lab);"]]
