@@ -127,9 +127,10 @@ async function gateFacts(page) {
 }
 
 // A wait on #msg in a tab that is loading a new document starts once that document has loaded, as
-// page.goto does for every other check: until the parser reaches #msg there is no element to read,
-// and a wait whose test throws ends at once. The script runs at the end of the body, so by the
-// load the console is set up as well.
+// the other checks' waits do after page.goto: until the parser reaches #msg, in the console's
+// status line at the foot of the body, there is no element to read, and a wait whose test throws
+// ends at once. The panel's script runs after it, at the end of the body, so by the load the
+// console is set up as well.
 const ORIGIN = new URL(BASE).origin;
 // Sign in with GitHub leaves for GitHub's authorize page, which sends the tab back with the state
 const pressSigninAndReturn = (page) => Promise.all([page.waitForURL((u) => u.origin === ORIGIN && u.searchParams.has('state')), page.click('#cp-signin')]);
