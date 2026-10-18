@@ -28,7 +28,26 @@ ghu_TEST or github_pat_X.
   answer, the issue read again before each question and replaced when closed, one press at a time,
   a sign-in changed under the page, a watch read on after a sign-in, and Stop watching; its cadence
   constants are shortened in the served script, and a check may serve its own.
-- `e2e2/mutants/`: 79 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/folders.test.mjs`: 16 checks of the panel's Folders page (site branch claude/folders-page,
+  2026-10-18), against a mocked Microsoft consent page, a mocked Microsoft Graph and the mocked
+  service's three `/drive` routes: a provider the service has not set up (Connect unpressable, said
+  in one line); Connect with PKCE and the page as the redirect, the return exchanged at
+  /drive/connect with the verifier the challenge was made from, the code gone from the address, the
+  tokens in no storage, and the GitHub sign-in's handler never seeing the drive's code (a GitHub
+  return on the same page still reaches /exchange); the drive drawn from Graph with $select and
+  $top, a folder opened, files and folders ticked and unticked, a hostile name shown as text; Track
+  sealing the refresh token for the repository's public key (a sealed box of the right length,
+  never the token), writing drive.json exactly as tools/drive_sync.py reads it, starting the sync
+  and dropping the tokens; a 403 on the secret's write or its public key said as the Secrets
+  permission waiting on the owner with nothing else written; a default branch that takes only pull
+  requests getting the file on symphony/drive with a pull request; a tracked repository's box with
+  the connect-again day 90 days on, Sync now, and the Run workflow link on a 403; a return with a
+  state the page never issued, one whose state differs, and Microsoft refusing the consent; Refresh
+  listing a repository made from the template; a repository with no drive-sync.yml; and an access
+  token that ran out renewed through /drive/token. Its mutants are `e2e2/mutants/f0*.json`, eight,
+  each with its `.only`, run by hand as the section below says; every one was caught.
+- `e2e2/mutants/`: 79 mutants of the sign-in checks (`m*.json`), beside the eight Folders ones
+  above (`f0*.json`). Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it.
   `e2e2/run-mutants.sh` runs them. Every one was caught against master 009109c.
 - `e2e2/shots.mjs`: the screenshots of the gate, before and after the two constants are set.
@@ -52,7 +71,9 @@ ghu_TEST or github_pat_X.
      a colon.
    - `MUTANT=mutants/m33_noended.json` runs the checks against that mutant.
    - `e2e2/run-mutants.sh` expects a server already on port 8077 and reports each mutant as
-     KILLED, SURVIVED, STALE or ERROR.
+     KILLED, SURVIVED, STALE or ERROR. It drives signin.test.mjs alone; a Folders mutant runs as
+     `MUTANT=mutants/f01_state_unchecked.json ONLY=$(cat mutants/f01_state_unchecked.json.only)
+     node folders.test.mjs` from e2e2 with the server up, and is caught when a check prints FAIL.
 
 The site sets the two constants to the live service and SymphonyBoard's Client ID (site pull
 request #24). The checks set them for themselves, whatever the shipped script holds: the
