@@ -1,0 +1,1 @@
+[["if (rec.blockedByTotal === 0 || Object.prototype.hasOwnProperty.call(draw.blockedBy, number)) return Promise.resolve();", "if (rec.blockedByTotal === 0) return Promise.resolve();"]]

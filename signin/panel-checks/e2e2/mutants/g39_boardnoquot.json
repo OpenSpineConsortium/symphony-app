@@ -1,0 +1,1 @@
+[["data-chart=\"' + chart.join('\\n') + '\">", "data-chart=\"' + chart.join('\\n').replace(/#quot;/g, '') + '\">"]]

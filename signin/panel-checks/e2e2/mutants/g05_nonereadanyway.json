@@ -1,0 +1,1 @@
+[["return isPlain(s) && typeof s.total === 'number' && s.total === 0; }", "return false; }"]]
