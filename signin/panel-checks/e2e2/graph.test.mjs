@@ -681,7 +681,7 @@ await check('K: switching repositories mid-draw never shows the earlier reposito
   await sleep(3500);
   const state = await stateText(page);
   const text = await page.textContent('#cp-graph');
-  console.log('     repo:', await page.textContent('#cp-repo-name'), '| state:', state.slice(0, 60), '| graph text:', JSON.stringify(text.slice(0, 60)), '| demo reads after the switch:', dependencyReads(calls).filter((k) => /acme\/demo/.test(k)).length);
+  console.log('     repo:', await page.textContent('#cp-repo-shown'), '| state:', state.slice(0, 60), '| graph text:', JSON.stringify(text.slice(0, 60)), '| demo reads after the switch:', dependencyReads(calls).filter((k) => /acme\/demo/.test(k)).length);
   assert.match(state, /^Nothing to draw/);
   assert.equal(text, '');
   assert.equal(await page.evaluate(() => (window.__charts || []).length), 0);
@@ -1197,8 +1197,9 @@ await check('S: the page says there is nothing to draw while no repository is ch
   assert.equal(await stateText(page), 'Nothing to draw yet: no repository is chosen.');
   await signIn(page);
   await waitGraph(page, /^Drawn from 4 reads/);
-  // the button is in the Repositories tab, which the press opens; the words are read back here
-  await page.click('#cp-forget-repo');
+  // the X on the repository's card in + Add repository's list takes it off; the words are read back here
+  await page.click('#cp-repo-browse');
+  await page.click('#rp-list [data-repo="acme/demo"] .repos__x');
   await toTab(page, 'dependencies');
   await waitGraph(page, /^Nothing to draw yet: no repository is chosen\.$/);
   await sleep(300);

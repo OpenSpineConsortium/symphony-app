@@ -83,7 +83,7 @@ await check('A: switching repositories mid-load never shows the earlier reposito
   await sleep(3500);
   const pulls = (await page.textContent('#cp-pulls tbody')).trim();
   const summary = await page.textContent('#cp-summary');
-  console.log('     repo shown:', await page.textContent('#cp-repo-name'), '| pulls table:', pulls.slice(0, 60), '| summary:', summary.replace(/.*Open pull requests/, 'Open pull requests').slice(0, 40));
+  console.log('     repo shown:', await page.textContent('#cp-repo-shown'), '| pulls table:', pulls.slice(0, 60), '| summary:', summary.replace(/.*Open pull requests/, 'Open pull requests').slice(0, 40));
   assert.ok(!/acme\/demo/.test(pulls), 'acme/demo\'s pull request is shown under acme/beta: ' + pulls.slice(0, 60) + ' / ' + summary.replace(/.*Open pull requests/, 'Open pull requests').slice(0, 40));
   await context.close();
 });

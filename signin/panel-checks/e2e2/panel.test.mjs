@@ -66,6 +66,11 @@ const routes = {
   'POST /repos/acme/demo/actions/workflows/workers.yml/dispatches': null,
   'PUT /repos/acme/demo/pulls/7/merge': { merged: true },
   'GET /repos/acme/demo/contents/METRICS.json': { encoding: 'base64', content: b64(JSON.stringify(metrics)) },
+  'GET /user/repos': [{ full_name: 'acme/demo', topics: ['symphony'], private: false, pushed_at: now }, { full_name: 'acme/other', topics: [], private: true, pushed_at: now, description: 'Not yet adopted' }],
+  'GET /repos/acme/demo/collaborators': [{ login: 'tester', role_name: 'admin' }, { login: 'friend', role_name: 'write' }],
+  'GET /repos/acme/demo/invitations': [{ id: 3, invitee: { login: 'pal' }, permissions: 'write', created_at: now }],
+  'DELETE /repos/acme/demo/collaborators/friend': null,
+  'DELETE /repos/acme/demo/invitations/3': null,
 };
 
 const rawRoutes = {
@@ -200,12 +205,36 @@ await page.click('#cp-pulls tbody .admin__act button');
 await page.waitForFunction(() => /#7 is merged/.test(document.getElementById('msg').textContent));
 assert.ok(posts.find((p) => p.key === 'PUT /repos/acme/demo/pulls/7/merge' && p.body.merge_method === 'merge' && p.body.sha === 'abc123'));
 
-// add a repository without the topic
+// + Add repository lists what the token reaches, the list's own first, and the search narrows it
+await page.click('#cp-repo-browse');
+await page.waitForFunction(() => /acme\/other/.test(document.getElementById('rp-list').textContent));
+const listed = await page.textContent('#rp-list');
+assert.match(listed, /On your list/);
+assert.match(listed, /Not set up yet/);
+await page.fill('#cp-add-name', 'oth');
+assert.equal((await page.$$('#rp-list .repos__card')).length, 1, 'the search narrows the list');
 await page.fill('#cp-add-name', 'acme/other');
 await page.click('#cp-add');
 await page.waitForFunction(() => /does not carry the topic/.test(document.getElementById('cp-add-answer').textContent));
 const install = await page.getAttribute('#cp-add-answer a', 'href');
 assert.equal(install, 'https://github.com/apps/symphonyboard/installations/new/permissions?target_id=77&suggested_target_id=77&repository_ids[]=124&state=acme%2Fother');
+
+// Share lists who has access, the owner of a personal repository first; X takes access away or withdraws an invitation
+page.on('dialog', (d) => d.accept());
+await page.click('.console__rail [data-tab="share"]');
+await page.waitForFunction(() => /pal/.test(document.querySelector('#sh-people tbody').textContent));
+const people = await page.textContent('#sh-people tbody');
+assert.match(people, /acme.*Owner/);
+assert.match(people, /friend.*Write/);
+assert.match(people, /Invited/);
+assert.equal(await page.$$eval('#sh-people tbody tr', (rows) => rows.filter((r) => /tester/.test(r.textContent) && r.querySelector('.card__x')).length), 0, 'no X on yourself');
+posts.length = 0;
+await page.click('#sh-people tbody tr:has-text("friend") .card__x');
+await page.waitForFunction(() => /friend no longer has access/.test(document.getElementById('msg').textContent));
+assert.ok(posts.find((p) => p.key === 'DELETE /repos/acme/demo/collaborators/friend'));
+await page.click('#sh-people tbody tr:has-text("pal") .card__x');
+await page.waitForFunction(() => /invitation of pal is withdrawn/.test(document.getElementById('msg').textContent));
+assert.ok(posts.find((p) => p.key === 'DELETE /repos/acme/demo/invitations/3'));
 await page.screenshot({ path: 'control.png', fullPage: true });
 
 // the cost page, signed in already (shared storage)

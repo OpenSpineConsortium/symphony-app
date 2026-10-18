@@ -1108,7 +1108,7 @@ await check('J: "Find the repository I just made" asks GitHub about each new one
   await ready(page, 'acme/fresh');
   assert.equal(await page.inputValue('#cp-repo'), 'acme/fresh');
   assert.equal(await page.evaluate(() => location.search), '?repo=acme%2Ffresh');
-  assert.equal(await page.textContent('#cp-repo-name'), 'acme/fresh');
+  assert.equal(await page.textContent('#cp-repo-shown'), 'acme/fresh');
   assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.getItem('symphony_panel_repos'))), ['acme/demo', 'acme/fresh']);
   assert.equal(await page.evaluate(() => localStorage.getItem('symphony_panel_repo')), 'acme/fresh');
   await page.waitForFunction(() => /acme\/fresh tracks no drive yet/.test(document.getElementById('fd-tracked').textContent));

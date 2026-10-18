@@ -854,7 +854,7 @@ await check('M: the bar sits outside every tab, frozen on each, and the answer o
   }));
   assert.deepEqual(placed, { inTab: false, inBar: true, drawerInStage: true, drawerInBar: false });
   // on every tab the box is on screen, inside the window, and the page does not scroll
-  for (const tab of ['command', 'board', 'tasks', 'pulls', 'runs', 'workers', 'agents', 'tokens', 'share', 'repos', 'about']) {
+  for (const tab of ['command', 'board', 'tasks', 'pulls', 'runs', 'workers', 'agents', 'tokens', 'share', 'about']) {
     await page.evaluate((t) => document.querySelector('.console__rail [data-tab="' + t + '"]').click(), tab);
     const r = await page.evaluate(() => { const b = document.getElementById('cp-as-q').getBoundingClientRect(); return { top: b.top, bottom: b.bottom, h: window.innerHeight, y: window.pageYOffset }; });
     assert.ok(r.top > 0 && r.bottom <= r.h, 'the box is off screen on ' + tab + ': ' + JSON.stringify(r));
