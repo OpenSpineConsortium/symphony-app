@@ -1776,6 +1776,86 @@ await check('CAT6: a hostile file name in the catalog is drawn as text, never as
   assert.deepEqual(errors, []);
   await context.close();
 });
+await check('CAT7: in the saved catalog the keyboard Space never ticks, since the whole catalog is read-only', async () => {
+  const env = await open({ routes: catalogRoutes() });
+  const { context, page, calls, errors } = env;
+  await ready(page);
+  await page.click('#rail-folders');
+  await listed(page);
+  // select a file row by clicking its name, then focus the list and press Space, the keyboard's tick
+  await page.click('#fd-items tr[data-item="c-a1"] .fx__name');
+  await page.focus('#fd-main');
+  await page.keyboard.press('Space');
+  // nothing is ticked: the keyboard path respects the read-only catalog as the disabled boxes do
+  assert.equal(await page.$$eval('#fd-picked li', (l) => l.length), 0, 'the keyboard Space ticked a catalog item');
+  assert.match(await page.textContent('#fd-picked-head'), /Nothing ticked yet/);
+  assert.match(await page.textContent('#fd-status'), /From the saved catalog/);
+  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), [], 'the saved catalog wrote to GitHub');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('CAT8: choosing another private repository reads and draws that repository\'s own saved catalog, and a late answer about the last one is dropped', async () => {
+  const catalogOther = {
+    provider: 'microsoft', made: today + 'T09:00:00Z', complete: true, problems: [], totals: { folders: 1, files: 1 },
+    folders: [{ path: 'OneDrive/Grants', id: 'og1', drive: 'drive1', web: 'https://onedrive.live.com/?id=og1', files: 1, bytes: 10, latest: now }],
+    files: [{ path: 'OneDrive/budget.xlsx', id: 'o-a1', drive: 'drive1', name: 'budget.xlsx', mime: '', size: 99, modified: now, web: 'https://onedrive.live.com/?id=o-a1', kind: 'sheet', native: true }],
+  };
+  const routes = repoRoutes({}, ['acme/demo', 'acme/other']);
+  let slow = false;
+  // acme/demo's catalog can be made slow, to answer after the chosen repository has changed
+  routes['GET /repos/acme/demo/contents/catalog.json'] = async () => { if (slow) await sleep(1500); return { raw: JSON.stringify(catalogData) }; };
+  routes['GET /repos/acme/other/contents/catalog.json'] = { raw: JSON.stringify(catalogOther) };
+  const env = await open({ routes, repos: ['acme/demo', 'acme/other'] });
+  const { context, page, calls, errors } = env;
+  await ready(page);
+  await page.click('#rail-folders');
+  await listed(page);
+  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent)), ['Papers', HOSTILE, 'notes.docx']);
+  // choose acme/other: its own catalog is read from its drive-catalog branch, with the token, and drawn
+  await page.selectOption('#cp-repo', 'acme/other');
+  await page.waitForFunction(() => /budget\.xlsx/.test((document.getElementById('fd-items') || {}).textContent || ''), null, { timeout: 15000 });
+  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent)), ['Grants', 'budget.xlsx']);
+  assert.doesNotMatch(await page.textContent('#fd-items'), /notes\.docx|Papers/, 'the last repository\'s catalog is still shown');
+  const read = calls.find((c) => c.key === 'GET /repos/acme/other/contents/catalog.json');
+  assert.ok(read && /[?&]ref=drive-catalog/.test(read.url) && /github_pat/.test(read.auth), 'acme/other\'s catalog was not read from its drive-catalog branch with the person\'s token');
+  // back to acme/demo, whose catalog is slow, and on to acme/other before it comes: the late answer is dropped
+  slow = true;
+  await page.selectOption('#cp-repo', 'acme/demo');
+  await page.selectOption('#cp-repo', 'acme/other');
+  await page.waitForFunction(() => /budget\.xlsx/.test((document.getElementById('fd-items') || {}).textContent || ''), null, { timeout: 15000 });
+  await sleep(2200);
+  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent)), ['Grants', 'budget.xlsx'], 'acme/demo\'s late catalog overwrote acme/other\'s');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('CAT9: two catalog folders that share an id keep their own children and never merge or loop', async () => {
+  const dupData = {
+    provider: 'microsoft', made: today + 'T09:00:00Z', complete: true, problems: [], totals: { folders: 2, files: 2 },
+    folders: [
+      { path: 'OneDrive/Alpha', id: 'dup', drive: 'drive1', web: '', files: 1, bytes: 1, latest: now },
+      { path: 'OneDrive/Beta', id: 'dup', drive: 'drive1', web: '', files: 1, bytes: 1, latest: now },
+    ],
+    files: [
+      { path: 'OneDrive/Alpha/a.docx', id: 'd-a', drive: 'drive1', name: 'a.docx', mime: '', size: 1, modified: now, web: '', kind: 'doc', native: true },
+      { path: 'OneDrive/Beta/b.docx', id: 'd-b', drive: 'drive1', name: 'b.docx', mime: '', size: 1, modified: now, web: '', kind: 'doc', native: true },
+    ],
+  };
+  const routes = repoRoutes({}, ['acme/demo']);
+  routes['GET /repos/acme/demo/contents/catalog.json'] = { raw: JSON.stringify(dupData) };
+  const env = await open({ routes });
+  const { context, page, errors } = env;
+  await ready(page);
+  await page.click('#rail-folders');
+  await listed(page);
+  // the root lists both folders despite the shared id
+  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent).sort()), ['Alpha', 'Beta']);
+  // opening Alpha shows only its own child, never Beta's: the shared id did not merge the two
+  await page.dblclick('#fd-items .fx__name:has-text("Alpha")');
+  await page.waitForFunction(() => /a\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''), null, { timeout: 15000 });
+  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent)), ['a.docx'], 'Alpha showed another folder\'s children');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
 
 await browser.close();
 console.log('\n' + results.join('\n'));
