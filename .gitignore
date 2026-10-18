@@ -7,3 +7,5 @@
 # Python caches
 __pycache__/
 *.pyc
+# The checks link their node_modules in by hand (README.md): never committed.
+signin/panel-checks/e2e2/node_modules
