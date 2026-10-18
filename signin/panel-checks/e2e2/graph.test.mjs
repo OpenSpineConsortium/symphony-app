@@ -715,6 +715,43 @@ await check('G4: a read that finds the token under the reserve stops the draw th
   await context.close();
 });
 
+await check('G6: the reserve follows the newest count GitHub gives on any of the console\'s reads, and a draw that then succeeds takes its earlier failure off the summary', async () => {
+  const f = fixture();
+  const routes = fixtureRoutes(f);
+  const expose = 'ETag, Link, X-RateLimit-Remaining';
+  let issuesLeft = 150, pullsLeft = 60;
+  routes['GET /repos/acme/demo/issues'] = () => resp(200, f.open, { headers: { 'X-RateLimit-Remaining': String(issuesLeft), 'Access-Control-Expose-Headers': expose } });
+  // the pull requests answer while the first sub-issue read is still out, with a count the draw
+  // began above, so the read after it is the one the newer count stops
+  routes['GET /repos/acme/demo/pulls'] = () => resp(200, [], { delayMs: 600, headers: { 'X-RateLimit-Remaining': String(pullsLeft), 'Access-Control-Expose-Headers': expose } });
+  routes['GET /repos/acme/demo/issues/20/sub_issues'] = resp(200, f.subIssues[20], { delayMs: 1500 });
+  const { context, page, calls, errors } = await open(routes);
+  await signIn(page);
+  await waitGraph(page, /^Not drawn: GitHub says/);
+  await sleep(500);
+  const state = await stateText(page);
+  console.log('     state:', state, '| reads:', JSON.stringify(dependencyReads(calls)));
+  assert.equal(state, 'Not drawn: GitHub says this token has 60 calls left this hour, and the page keeps the last 100 for the rest of the console; stopped at the issues blocking #22. Press Refresh once GitHub\'s hourly limit has reset.');
+  assert.deepEqual(dependencyReads(calls), EXPECTED_READS.slice(0, 1));
+  await page.waitForFunction(() => /Not read: the dependencies/.test(document.getElementById('cp-summary').textContent), null, { timeout: 8000 });
+  // a task queued redraws on the same state, as Give to, a mention and a merge do, so only the
+  // draw itself can take its earlier failure off the summary
+  issuesLeft = 4000; pullsLeft = 4000;
+  routes['POST /repos/acme/demo/issues'] = resp(201, { number: 99, html_url: 'https://github.com/acme/demo/issues/99', title: 'Task: x' });
+  await toTab(page, 'tasks');
+  await page.fill('#cp-task-title', 'x');
+  await page.fill('#cp-task-goal', 'g');
+  await page.fill('#cp-task-acceptance', 'a');
+  await page.click('#cp-task-queue');
+  await waitGraph(page, /^Drawn /, 15000);
+  await sleep(500);
+  const summary = await page.textContent('#cp-summary');
+  console.log('     after the task:', await stateText(page), '| summary:', summary.slice(0, 120));
+  assert.doesNotMatch(summary, /the dependencies/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 await check('G5: once the open issues\' answer says the token is under the reserve, a draw reads nothing, and a Refresh under it reads nothing either', async () => {
   const f = fixture();
   const routes = fixtureRoutes(f);
@@ -1030,6 +1067,17 @@ await check('R2: the text the Board tab hands the drawing for every block the bo
   assert.deepEqual(seen.charts, BOARD_BLOCKS.map((b) => b[1]));
   assert.deepEqual(seen.errors, []);
 });
+await check('R4: a board chart the drawing script cannot draw keeps its text under the words in the Board tab', async () => {
+  const { context, page, errors } = await open(boardOnlyRoutes(boardWith([['Goals', GOALS_TEXT]])), { extraRoutes: [missingRoute] });
+  await signIn(page, null);
+  await page.waitForFunction(() => /could not be drawn/.test((document.getElementById('cp-board') || {}).textContent || ''), null, { timeout: 8000 });
+  const seen = await page.evaluate(() => ({ lead: Array.from(document.querySelectorAll('#cp-board p.admin__lead')).map((p) => p.textContent), text: Array.from(document.querySelectorAll('#cp-board pre.admin__text')).map((pre) => pre.textContent) }));
+  console.log('     lead:', JSON.stringify(seen.lead));
+  assert.ok(seen.lead.some((l) => /^This chart could not be drawn \(.+\); it is shown here as text\.$/.test(l)), 'no words for the undrawn chart');
+  assert.deepEqual(seen.text, [GOALS_TEXT]);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
 if (process.env.SYMPHONY_PROTOCOL) {
   await check('R3: the Board tab hands the drawing, unchanged, the block the library named writes now for the gate\'s titles', async () => {
     const fresh = libraryBlock(GATE_ISSUES);
@@ -1054,6 +1102,7 @@ const PLANTED = [
   ['Planted: a link', 'flowchart TD\n  i1["#1 a"]\n  click i1 href "https://evil.example/a"'],
   ['Planted: a raw label', 'flowchart TD\n  i1["#1 <b>bold</b> $$x$$"]:::todo'],
   ['Planted: another number', 'flowchart TD\n  i1["#2 a"]:::todo'],
+  ['Planted: a raw hash', 'flowchart TD\n  i1["#1 a#60;b #lt;img#gt;"]:::todo'],
 ];
 await check('X: the Board tab draws a block of the board\'s text only where every line is one the board writes, shows any other as text that reads on its ground, and nothing planted makes an element or a request', async () => {
   const text = boardWith([['Goals', GOALS_TEXT], ['Epic #20: Draw the board (1/3)', EPIC_20_TEXT]].concat(PLANTED));

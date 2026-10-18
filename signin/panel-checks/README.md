@@ -28,7 +28,7 @@ ghu_TEST or github_pat_X.
   answer, the issue read again before each question and replaced when closed, one press at a time,
   a sign-in changed under the page, a watch read on after a sign-in, and Stop watching; its cadence
   constants are shortened in the served script, and a check may serve its own.
-- `e2e2/graph.test.mjs`: 35 checks of the panel's Dependencies tab (site branch
+- `e2e2/graph.test.mjs`: 37 checks of the panel's Dependencies tab (site branch
   claude/graph-section, 2026-10-18; a section of the long page until the console): the chart text
   the page hands the drawing, byte for byte the two blocks symphony-protocol's board writes for its
   fixture board-epics.json (board-epics-STATE.md, copied into the check from symphony-protocol
@@ -74,11 +74,11 @@ ghu_TEST or github_pat_X.
   it reads or presses inside it, and a press that crosses tabs is read at once with page.evaluate,
   which opens nothing, so the page and not console-tabs.mjs is seen opening the tab. A check that
   wants the drawing recorded instead of made serves a stand-in for the library on its route.
-- `e2e2/mutants/`: 125 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/mutants/`: 128 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The 79 of the sign-in (`m*`) were caught against master
-  009109c; the 46 of the Dependencies tab (`g*`, five of them for the tab: show dependencies
+  009109c; the 49 of the Dependencies tab (`g*`, five of them for the tab: show dependencies
   opening no tab and leaving the charts' box where it was, the message line unsaid, the focus
   opening no tab, and the window not put back; eleven from the tab's second review: the message
   line said only when the press leaves the tab, a press always opening the Tasks tab, the board's
@@ -86,8 +86,12 @@ ghu_TEST or github_pat_X.
   to the drawing, the ASCII fold dropped, a draw not started from the open issues' count, a
   comment stripped across lines, a heading's escaped pipe left escaped, and the section unsaid;
   two from its third review: a block shown as text keeping the chart's light ground and dark ink,
-  and the Board tab's gate narrowed to refuse brackets, the backslash, braces and the tilde)
-  against site branch claude/graph-section at 95df3c0 on 2026-10-18, where the 79 were caught
+  and the Board tab's gate narrowed to refuse brackets, the backslash, braces and the tilde; four
+  from its fourth: the reserve held to the count the draw began from and not the newest any read
+  gave (G6), an earlier draw's failure left in the summary (G6), a raw "#" let through the gate (X),
+  and a Board chart that could not be drawn losing its text (R4); g41, the draw not seeded from the
+  open issues' count, was retired, since every read now updates the count it starts from) against
+  site branch claude/graph-section on 2026-10-18 after that review's fold, where the 79 were caught
   again.
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
