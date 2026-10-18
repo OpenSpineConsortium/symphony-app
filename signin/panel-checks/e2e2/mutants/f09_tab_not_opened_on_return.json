@@ -1,0 +1,1 @@
+[["return enter(start).then(function () { if (fromDrive) showTab('folders'); });", "return enter(start);"]]

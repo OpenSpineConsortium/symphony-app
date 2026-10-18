@@ -1,0 +1,1 @@
+[["    foldersFor = null;\n    if (consoleTab === 'folders' && consoleOnOpen.folders) consoleOnOpen.folders();\n    return loadMeta(s)", "    foldersFor = null;\n    return loadMeta(s)"]]

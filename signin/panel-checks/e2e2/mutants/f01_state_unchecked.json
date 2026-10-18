@@ -1,1 +1,1 @@
-[["if (!kept || !state || kept.state !== state || !kept.verifier) {\n      if (github) return Promise.resolve(false);", "if (!kept || !state || !kept.verifier) {\n      if (github) return Promise.resolve(false);"]]
+[["var ours = !!(kept && state && kept.state === state && kept.verifier);", "var ours = !!(kept && state && kept.verifier);"]]
