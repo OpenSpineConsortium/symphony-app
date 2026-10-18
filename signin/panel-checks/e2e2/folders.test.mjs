@@ -83,6 +83,8 @@ function folderRoutes(repo, o) {
   const copyOfMain = () => (files.main ? Object.assign({}, files.main) : null);
   return {
     ['GET ' + r]: { full_name: repo, default_branch: 'main', private: !o.public, visibility: o.public ? 'public' : 'private', topics: ['symphony'], id: 123, owner: { id: 77, login: repo.split('/')[0], type: o.org ? 'Organization' : 'User' } },
+    // the repository's top, as a copy of the template holds it, with the folder it tracks once synced
+    ['GET ' + r + '/contents']: [{ name: '.github', type: 'dir' }, { name: 'scripts', type: 'dir' }, { name: 'tools', type: 'dir' }, { name: 'README.md', type: 'file' }].concat(o.tracked ? [{ name: 'papers', type: 'dir' }] : []),
     ['GET ' + r + '/contents/.github/workflows/drive-sync.yml']: o.noWorkflow ? undefined : { name: 'drive-sync.yml', sha: 'w1', type: 'file' },
     ['GET ' + r + '/contents/.github/symphony/drive.json']: (req) => {
       const f = files[refOf(req)];
@@ -688,6 +690,55 @@ await check('E4: a folder that is not one plain name is refused in words before 
   await page.click('#fd-track');
   await page.waitForFunction(() => /acme\/demo tracks 1 item of OneDrive in my papers 2026\//.test(document.getElementById('msg').textContent));
   assert.equal(JSON.parse(Buffer.from(calls.find((c) => c.key === 'PUT /repos/acme/demo/contents/.github/symphony/drive.json').body.content, 'base64').toString('utf8')).folder, 'my papers 2026');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('E7: a folder the repository already holds at its top, in any case, is refused before the secret is sealed, and one of its own is tracked', async () => {
+  const env = await open({});
+  const { context, page, calls, errors } = env;
+  await connect(env);
+  await tabRead(page);
+  await listed(page);
+  await page.check('#fd-items input[data-id="a1"]');
+  for (const taken of ['scripts', 'Tools', 'README.md']) {
+    calls.length = 0;
+    await page.$eval('#fd-folder', (box, v) => { box.value = v; }, taken);
+    await page.$eval('#msg', (m) => { m.textContent = ''; });
+    await page.click('#fd-track');
+    await page.waitForFunction(() => /already has .+ at its top/.test(document.getElementById('msg').textContent), null, { timeout: 8000 });
+    console.log('     ' + taken + ':', await page.textContent('#msg'));
+    assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), [], 'a write for the folder ' + taken);
+    assert.equal(calls.filter((c) => c.key === 'GET /repos/acme/demo/actions/secrets/public-key').length, 0, 'the key was read for the folder ' + taken);
+    assert.equal(await page.isDisabled('#fd-track'), false, 'Track stayed pressed after the refusal');
+  }
+  await page.$eval('#fd-folder', (box) => { box.value = 'papers'; });
+  await page.click('#fd-track');
+  await page.waitForFunction(() => /acme\/demo tracks 1 item of OneDrive in papers\//.test(document.getElementById('msg').textContent), null, { timeout: 15000 });
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('E8: an item the repository tracked from another OneDrive than the one connected is refused by name before anything is written, and unticked it tracks', async () => {
+  const other = Object.assign({}, driveJson, { items: [{ id: 'z9', name: 'elsewhere.docx', drive: 'DRIVE9' }] });
+  const env = await open({ tracked: true, secret: true, driveJson: other });
+  const { context, page, calls, errors } = env;
+  await connect(env);
+  await listed(page);
+  await page.waitForFunction(() => /tracks 1 item/.test(document.getElementById('fd-tracked').textContent));
+  // the connected drive's own id is read with its owner's name, which the connection's line shows
+  await page.waitForFunction(() => /Connected to OneDrive as Greg/.test(document.body.textContent), null, { timeout: 8000 });
+  calls.length = 0;
+  await page.click('#fd-track');
+  await page.waitForFunction(() => /from another OneDrive than the one connected now \(elsewhere\.docx\)/.test(document.getElementById('msg').textContent), null, { timeout: 8000 });
+  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), []);
+  await page.click('#fd-picked li:has(code:text-is("elsewhere.docx")) button');
+  await page.check('#fd-items input[data-id="a1"]');
+  await page.$eval('#msg', (m) => { m.textContent = ''; });
+  await page.click('#fd-track');
+  await page.waitForFunction(() => /acme\/demo tracks 1 item of OneDrive in papers\//.test(document.getElementById('msg').textContent), null, { timeout: 15000 });
+  const write = calls.find((c) => c.key === 'PUT /repos/acme/demo/contents/.github/symphony/drive.json');
+  assert.deepEqual(JSON.parse(Buffer.from(write.body.content, 'base64').toString('utf8')).items.map((i) => i.id), ['a1']);
   assert.deepEqual(errors, []);
   await context.close();
 });
