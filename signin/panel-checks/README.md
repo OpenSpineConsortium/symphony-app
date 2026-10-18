@@ -28,32 +28,44 @@ ghu_TEST or github_pat_X.
   answer, the issue read again before each question and replaced when closed, one press at a time,
   a sign-in changed under the page, a watch read on after a sign-in, and Stop watching; its cadence
   constants are shortened in the served script, and a check may serve its own.
-- `e2e2/graph.test.mjs`: 24 checks of the panel's Dependencies section (site branch
-  claude/graph-section, 2026-10-18): the chart text the page hands the drawing, byte for byte the
-  two blocks symphony-protocol's board writes for its fixture board-epics.json (board-epics-STATE.md
-  at fea34c6, copied into the check, and compared with a checkout by A0 where `SYMPHONY_PROTOCOL`
-  names one), and the four blocks the library writes for a wider scenario (M: a second page of
-  sub-issues, a pull request and another repository's issues listed under an epic, a deleted
-  issue, a task under two epics, an issue labelled goal and epic), the reads made and never made
-  (one sub_issues read per page per open epic or goal with sub-issues, one blocked_by read per
-  sub-issue of an epic whose summary counts a blocker, none for a goal's children or an epic whose
-  summary says none, nothing written), the vendored Mermaid loaded from the served site only when
-  there is a chart and drawing both charts with their nodes and classes, a node pressed and Centre
-  its row centring the task's row, the tables alone when the drawing script cannot load, a hostile
-  title inert and a title holding a Mermaid directive drawn whole, a 403, a 429, the cap and the
-  rate limit's reserve each said in words with nothing half drawn (the cap lowered in the served
-  script), nothing drawn without an epic, Refresh redrawing the new count, a goal listed with the
-  epics, a repository switched mid-draw, the tables' words, the repository's record unread, a
-  repository renamed, a claim shown by its open pull request (and a fork's not), one chart that
-  cannot be drawn among others, the board's own charts drawn in the Board box, the last repository
-  taken off the list, and an open list cut short. A check that wants the drawing recorded instead
-  of made serves a stand-in for the library on its route.
-- `e2e2/mutants/`: 107 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/graph.test.mjs`: 28 checks of the panel's Dependencies tab (site branch
+  claude/graph-section, 2026-10-18; a section of the long page until the console): the chart text
+  the page hands the drawing, byte for byte the two blocks symphony-protocol's board writes for its
+  fixture board-epics.json (board-epics-STATE.md at 34c5586, copied into the check, and compared
+  with a checkout by A0 where `SYMPHONY_PROTOCOL` names one), the block it writes for a hostile
+  title and four titles that spell a Mermaid directive, "%" written as `#37;` by both (F2, and A1,
+  which renders it again with that checkout's own `board.mermaid_block`), and the four blocks the
+  library writes for a wider scenario (M: a second page of sub-issues, a pull request and another
+  repository's issues listed under an epic, a deleted issue, a task under two epics, an issue
+  labelled goal and epic), the reads made and never made (one sub_issues read per page per open
+  epic or goal with sub-issues, one blocked_by read per sub-issue of an epic whose summary counts a
+  blocker, none for a goal's children or an epic whose summary says none, nothing written), the
+  vendored Mermaid loaded from the served site only when there is a chart, drawing both charts
+  while the tab is hidden and showing them whole once it opens, the tab itself (U: in the rail
+  right after Tasks, with its ARIA, opened on load by the address #dependencies, by its rail
+  button, by the arrow keys and by a link), a node pressed and Centre its row opening the Tasks tab
+  with the task's row centred inside that tab's own box and the words on the message line too, the
+  board's own charts drawn in the Board tab and a node there doing the same (R), the assistant's
+  "show dependencies" opening this tab at its first chart (V), the window left at 0 in each of
+  those presses at 1366 x 657, where the page could scroll, the tables alone when the drawing
+  script cannot load, a hostile title inert and a title holding a Mermaid directive drawn whole, a
+  403, a 429, the cap and the rate limit's reserve each said in words with nothing half drawn (the
+  cap lowered in the served script), nothing drawn without an epic, Refresh redrawing the new
+  count, a goal listed with the epics, a repository switched mid-draw, the tables' words, the
+  repository's record unread, a repository renamed, a claim shown by its open pull request (and a
+  fork's not), one chart that cannot be drawn among others, the last repository taken off the
+  list, and an open list cut short. Each check opens the Dependencies tab by its rail button before
+  it reads or presses inside it, and a press that crosses tabs is read at once with page.evaluate,
+  which opens nothing, so the page and not console-tabs.mjs is seen opening the tab. A check that
+  wants the drawing recorded instead of made serves a stand-in for the library on its route.
+- `e2e2/mutants/`: 112 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The 79 of the sign-in (`m*`) were caught against master
-  009109c; the 28 of the Dependencies section (`g*`) against site branch claude/graph-section on
-  2026-10-18.
+  009109c; the 33 of the Dependencies tab (`g*`, five of them for the tab: show dependencies
+  opening no tab and leaving the charts' box where it was, the message line unsaid, the focus
+  opening no tab, and the window not put back) against site branch claude/graph-section at
+  288a53f on 2026-10-18.
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
   and every page action, visibility read and locator action on a selector first opens the tab that
@@ -81,7 +93,7 @@ ghu_TEST or github_pat_X.
    - `e2e2/run-mutants.sh` expects a server already on port 8077, or on the address `BASE`
      names, and reports each mutant as KILLED, SURVIVED, STALE or ERROR; name mutants to run only
      those, by their paths from e2e2/ (`bash run-mutants.sh mutants/g*.json` there runs the
-     Dependencies section's).
+     Dependencies tab's).
 
 The site sets the two constants to the live service and SymphonyBoard's Client ID (site pull
 request #24). The checks set them for themselves, whatever the shipped script holds: the

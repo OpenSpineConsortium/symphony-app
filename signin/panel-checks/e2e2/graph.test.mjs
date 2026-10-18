@@ -1,24 +1,38 @@
-// Checks of the control panel's Dependencies section (site branch claude/graph-section, 2026-10-18)
+// Checks of the control panel's Dependencies tab (site branch claude/graph-section, 2026-10-18; a
+// section of the one long page until the page became a console of tabs, site pull request #40)
 // against a mocked GitHub API: the chart text the page builds from GitHub's REST objects, byte for
 // byte the two blocks the protocol's board writes for the same state (symphony-protocol
-// tests/fixtures/board-epics.json and board-epics-STATE.md at fea34c6, copied below), the reads it
-// makes and the ones it never makes, the vendored Mermaid loaded from the site only when there is a
-// chart and drawing both charts with their nodes and classes, a node pressed centring the task's
-// row, the tables alone when the drawing script cannot load, a hostile title inert, each stop said
-// in words with nothing half drawn (a 403, a 429, the cap, the rate limit's reserve), nothing drawn
-// without an epic, a Refresh redrawing the new count, a goal listed with the epics and not as an
-// other issue, a repository switched mid-load, a second page of sub-issues read and counted, pull
-// requests and another repository's issues left out, a deleted issue read as none, the repository's
-// record unread, a repository renamed, a claim shown by its pull request, one chart that cannot be
-// drawn, the board's own charts drawn in the Board box, the last repository taken off the list and
-// an open list cut short. Each check states what the page promises; a FAIL is a defect. Every token
-// is a stand-in.
+// tests/fixtures/board-epics.json and board-epics-STATE.md at 34c5586, copied below) and the block it
+// writes for hostile titles and titles that spell a Mermaid directive, the reads it makes and the
+// ones it never makes, the vendored Mermaid loaded from the site only when there is a chart and
+// drawing both charts with their nodes and classes, a tab of its own in the console's rail after
+// Tasks, with its ARIA and its address, the charts drawn while the tab is hidden and shown whole
+// when it opens, a node pressed in this tab or in the Board tab opening the Tasks tab with the
+// task's row centred inside that tab's own box and the window left where it was, the assistant's
+// "show dependencies" opening this tab at its first chart, the tables alone when the drawing script
+// cannot load, a hostile title inert, each stop said in words with nothing half drawn (a 403, a
+// 429, the cap, the rate limit's reserve), nothing drawn without an epic, a Refresh redrawing the
+// new count, a goal listed with the epics and not as an other issue, a repository switched
+// mid-load, a second page of sub-issues read and counted, pull requests and another repository's
+// issues left out, a deleted issue read as none, the repository's record unread, a repository
+// renamed, a claim shown by its pull request, one chart that cannot be drawn, the board's own charts
+// drawn in the Board tab, the last repository taken off the list and an open list cut short. Each
+// check states what the page promises; a FAIL is a defect. Every token is a stand-in.
+//
+// The console shows one tab at a time, so each check opens the Dependencies tab by its rail button
+// before it reads or presses inside it, and console-tabs.mjs opens any other tab a press names, as
+// the other suites do. A press that crosses tabs is read right after it with page.evaluate, which
+// opens nothing, so the page and not the helper is what opened the tab. The window is a laptop's,
+// 1366 x 657, where the console fills the window and the site's foot lies below it, so the page
+// could scroll and no press may move it.
 //
 // The mutants that prove the checks bite are e2e2/mutants/g*.json, each with the checks that must
 // catch it (.only) and this file named as its suite (.suite); e2e2/run-mutants.sh runs them.
 import { chromium } from 'playwright';
+import { consoleTabs } from './console-tabs.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8077';
 const SITE = process.env.SITE || '/home/user/openspineconsortium.github.io';
@@ -85,7 +99,7 @@ function fixture(completed) {
 // what the page must hand the drawing for the goals and for epic #20. Check A0 compares them with a
 // checkout of symphony-protocol where SYMPHONY_PROTOCOL names one, so a change to the library's
 // fixture is seen before the page drifts from the board; the commit says where to diff from.
-const FIXTURE_COMMIT = 'fea34c6';
+const FIXTURE_COMMIT = '34c5586';
 const GOALS_TEXT = [
   'flowchart TD',
   '  i20["#20 Draw the board (1/3)"]',
@@ -143,6 +157,9 @@ const EXPECTED_READS = [
 ];
 
 const browser = await chromium.launch();
+await consoleTabs(browser);
+// a laptop's window, where the console holds the window and the tabs scroll inside themselves
+const VIEW = { width: 1366, height: 657 };
 // the mocked API records every call; a route may be a function of the url, the request, the record
 // and the route itself, may answer later (delayMs), and answers 204 and 304 with no body; the
 // drawing script is served from the site unless a check routes it (opts.extraRoutes); every request
@@ -150,7 +167,7 @@ const browser = await chromium.launch();
 async function open(routes, opts) {
   opts = opts || {};
   const served = opts.constants ? withConstants(script, opts.constants) : script;
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const context = await browser.newContext({ viewport: VIEW });
   const calls = [];
   await context.route('https://api.github.com/**', async (route) => {
     const req = route.request();
@@ -200,11 +217,39 @@ async function open(routes, opts) {
   return { context, page, calls, errors, requests, dialogs, opened };
 }
 function safeJson(req) { try { return req.postDataJSON(); } catch (e) { return req.postData(); } }
-async function signIn(page) {
+// signs in with the pasted token and opens the tab named, the Dependencies tab unless a check wants
+// to stay where the console opened (null)
+async function signIn(page, tab) {
   await page.fill('#cp-token', 'github_pat_TEST');
   await page.click('#cp-open');
   await page.waitForSelector('#cp-app:not(.hidden)', { timeout: 8000 });
+  if (tab !== null) await toTab(page, tab || 'dependencies');
 }
+// a tab opened as a person opens it, by its rail button
+async function toTab(page, name) {
+  await page.click('#rail-' + name);
+  await page.waitForFunction((n) => !document.getElementById('tab-' + n).hidden && location.hash === '#' + n, name, { timeout: 8000 });
+}
+// where the console stands, read without opening anything: the address, the tabs shown, the window's
+// offset, and whether the page could scroll at all, which is what makes an offset of 0 mean something
+const where = (page) => page.evaluate(() => ({
+  hash: location.hash,
+  shown: Array.from(document.querySelectorAll('[data-tab-panel]')).filter((p) => !p.hidden).map((p) => p.getAttribute('data-tab-panel')),
+  y: window.pageYOffset,
+  scrollable: document.documentElement.scrollHeight > window.innerHeight,
+}));
+// whether a node lies wholly inside the box its tab scrolls, and that box inside the window
+const inBox = (page, selector) => page.$eval(selector, (node) => {
+  const box = node.closest('.console__scroll');
+  if (!box) return 'in no tab\'s box';
+  const a = node.getBoundingClientRect(), b = box.getBoundingClientRect();
+  if (!(a.height > 0)) return 'not drawn';
+  if (a.top < b.top - 1 || a.bottom > b.bottom + 1) return 'outside its box: ' + Math.round(a.top) + '..' + Math.round(a.bottom) + ' against ' + Math.round(b.top) + '..' + Math.round(b.bottom);
+  if (b.bottom > window.innerHeight + 1) return 'its box runs past the window';
+  return 'in view';
+});
+// the page's message line, outside every tab, which every tab shows
+const msgText = (page) => page.textContent('#msg');
 const stateText = (page) => page.textContent('#cp-graph-state');
 const waitGraph = (page, re, timeout) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById('cp-graph-state').textContent), re.source, { timeout: timeout || 8000 });
 const vendorLoads = (requests) => requests.filter((u) => /\/assets\/js\/vendor\/mermaid\.min\.js/.test(u)).length;
@@ -218,6 +263,35 @@ if (process.env.SYMPHONY_PROTOCOL) {
     assert.deepEqual(mermaidBlocks(golden), [GOALS_TEXT, EPIC_20_TEXT], 'the library\'s fixture moved since ' + FIXTURE_COMMIT + ': paste its blocks again');
   });
 } else console.log('SKIP A0: SYMPHONY_PROTOCOL names no checkout of symphony-protocol; the pasted blocks are from ' + FIXTURE_COMMIT);
+
+// Check F's epic #41: a hostile title and four that spell a Mermaid directive, %%{ ... }%%, which
+// Mermaid looks for anywhere in the text before it reads the entities. The board writes "%" as the
+// entity #37; since symphony-protocol 34c5586, as the page's graphLabel does, so the block below is
+// what the library at FIXTURE_COMMIT writes for these titles (board.mermaid_block over them, all
+// labelled todo, with no relation), and check A1 renders it again with the checkout named.
+const HOSTILE = '<img src=x onerror=alert(1)> "] <script>alert(2)</script> and more';
+const PERCENT_TITLES = { 43: '%%{init:{ broken', 44: '%%{init:{"theme":"dark"}}%% x', 45: 'Opens %%{init', 46: 'closes it }%% later' };
+const F_EPIC_41_TEXT = [
+  'flowchart TD',
+  '  i42["#42 #lt;img src=x onerror=alert(1)#gt; #quot;] #lt;scri..."]:::todo',
+  '  i43["#43 #37;#37;{init:{ broken"]:::todo',
+  '  i44["#44 #37;#37;{init:{#quot;theme#quot;:#quot;dark#quot;}}#37;#37; x"]:::todo',
+  '  i45["#45 Opens #37;#37;{init"]:::todo',
+  '  i46["#46 closes it }#37;#37; later"]:::todo',
+  '  classDef todo fill:#ffffff,stroke:#0e8a16,color:#000000',
+  '  classDef claimed fill:#fff8d6,stroke:#fbca04,color:#000000',
+  '  classDef review fill:#e3f0ff,stroke:#1d76db,color:#000000',
+  '  classDef blocked fill:#ffe7e7,stroke:#e99695,color:#000000',
+  '  classDef closed fill:#eeeeee,stroke:#999999,color:#666666',
+].join('\n');
+if (process.env.SYMPHONY_PROTOCOL) {
+  await check('A1: the block pasted for check F\'s titles is the library\'s own, as the checkout named renders it', async () => {
+    const titles = Object.assign({ 42: HOSTILE }, PERCENT_TITLES);
+    const code = 'import json, sys\nfrom sdlc_protocol import board\ntitles = json.loads(sys.argv[1])\nprint(board.mermaid_block([board.Issue(int(n), t, labels=["todo"]) for n, t in titles.items()], [], set()))\n';
+    const out = execFileSync('python3', ['-c', code, JSON.stringify(titles)], { cwd: process.env.SYMPHONY_PROTOCOL, encoding: 'utf8' });
+    assert.deepEqual(mermaidBlocks(out.trimEnd()), [F_EPIC_41_TEXT], 'the library writes these titles otherwise since ' + FIXTURE_COMMIT + ': paste its block again');
+  });
+} else console.log('SKIP A1: SYMPHONY_PROTOCOL names no checkout of symphony-protocol; the pasted block is from ' + FIXTURE_COMMIT);
 
 await check('A: the chart text handed to the drawing is byte for byte the board\'s two blocks for the fixture', async () => {
   const { context, page, errors } = await open(fixtureRoutes(fixture()), { extraRoutes: [stubRoute] });
@@ -250,17 +324,27 @@ await check('B: exactly one sub_issues read per open epic or goal with sub-issue
   await context.close();
 });
 
-await check('C: the vendored Mermaid, loaded once from the site, draws both charts with their nodes and classes', async () => {
+await check('C: the vendored Mermaid, loaded once from the site, draws both charts with their nodes and classes while the tab is hidden, and they show whole once it opens', async () => {
   const { context, page, errors, requests } = await open(fixtureRoutes(fixture()));
-  await signIn(page);
-  await page.waitForSelector('#cp-graph svg', { timeout: 15000 });
+  // the console opens on its first tab, so the charts are drawn into the hidden Dependencies tab
+  await signIn(page, null);
+  await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
   await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  const drawnHidden = await page.evaluate(() => document.getElementById('tab-dependencies').hidden);
+  await toTab(page, 'dependencies');
   const svgs = await page.$$eval('#cp-graph .control__chart svg', (list) => list.map((svg) => ({
-    nodes: Array.from(svg.querySelectorAll('g.node')).map((g) => ({ id: g.id, classes: g.getAttribute('class'), text: g.textContent.trim() })),
+    nodes: Array.from(svg.querySelectorAll('g.node')).map((g) => {
+      const label = g.querySelector('foreignObject, text');
+      return { id: g.id, classes: g.getAttribute('class'), text: g.textContent.trim(), width: g.getBoundingClientRect().width, labelWidth: label ? label.getBoundingClientRect().width : 0 };
+    }),
     edges: svg.querySelectorAll('.edgePaths path').length,
     minWidth: svg.style.minWidth,
+    size: [svg.getBoundingClientRect().width, svg.getBoundingClientRect().height],
   })));
-  console.log('     vendor loads:', vendorLoads(requests), '| charts:', svgs.length, '| nodes:', svgs.map((s) => s.nodes.length).join(','), '| first node:', JSON.stringify(svgs[0] && svgs[0].nodes[0]));
+  console.log('     drawn while hidden:', drawnHidden, '| vendor loads:', vendorLoads(requests), '| charts:', svgs.length, '| nodes:', svgs.map((s) => s.nodes.length).join(','), '| sizes:', JSON.stringify(svgs.map((s) => s.size.map(Math.round))), '| first node:', JSON.stringify(svgs[0] && svgs[0].nodes[0]));
+  assert.equal(drawnHidden, true, 'the tab was open while the charts were drawn, so this check says nothing of a hidden one');
+  assert.ok(svgs.every((s) => s.size[0] > 0 && s.size[1] > 0), 'a chart has no size once its tab opens: ' + JSON.stringify(svgs.map((s) => s.size)));
+  assert.ok(svgs.every((s) => s.nodes.every((n) => n.width > 0 && n.labelWidth > 0)), 'a node or its label was laid out with no width: ' + JSON.stringify(svgs.map((s) => s.nodes.map((n) => [n.id, n.width, n.labelWidth]))));
   assert.equal(vendorLoads(requests), 1);
   assert.equal(svgs.length, 2);
   assert.equal(svgs[0].nodes.length, 2);
@@ -280,28 +364,50 @@ await check('C: the vendored Mermaid, loaded once from the site, draws both char
   await context.close();
 });
 
-await check('D: a node pressed centres and marks the task\'s row in the tables above, and opens nothing', async () => {
+await check('D: a node pressed opens the Tasks tab with the task\'s row centred and marked inside that tab\'s box, says so on the message line, leaves the window where it was, and opens nothing', async () => {
   const { context, page, errors, opened } = await open(fixtureRoutes(fixture()));
   await signIn(page);
   await page.waitForSelector('#cp-graph svg', { timeout: 15000 });
   await waitGraph(page, /^Drawn from 4 reads/, 15000);
   await page.evaluate(() => { window.__scrolled.length = 0; });
+  const before = await where(page);
+  assert.deepEqual([before.hash, before.shown, before.y], ['#dependencies', ['dependencies'], 0]);
   await page.click('#cp-graph g.node[id*="-flowchart-i22-"]');
+  // read at once, before any call that would open a tab itself
+  const after = await where(page);
+  await sleep(800);
+  const settled = await where(page);
+  const view = await inBox(page, '#cp-claimed tr[data-number="22"]');
+  console.log('     before:', JSON.stringify(before), '| after the press:', JSON.stringify(after), '| a moment later:', settled.y, '| row:', view);
+  assert.deepEqual([after.hash, after.shown, after.y], ['#tasks', ['tasks'], 0], 'the press did not open the Tasks tab alone, or moved the window');
+  assert.equal(settled.y, 0, 'the window moved once the press settled');
+  assert.equal(view, 'in view');
   await page.waitForSelector('#cp-claimed tr[data-number="22"].control__focus', { timeout: 8000 });
   const said = await page.textContent('#cp-graph-said');
   const scrolled = await page.evaluate(() => window.__scrolled);
-  console.log('     said:', said, '| scrolled:', JSON.stringify(scrolled), '| pages:', context.pages().length);
+  console.log('     said:', said, '| message line:', await msgText(page), '| scrolled:', JSON.stringify(scrolled), '| pages:', context.pages().length, '| the page could scroll:', before.scrollable);
   assert.equal(said, 'Focused #22 (under Claimed).');
+  // the said line is in the Dependencies tab, which the press hid, so the words are on the message line too
+  assert.equal(await msgText(page), 'Focused #22 (under Claimed).');
   assert.ok(scrolled.some((s) => /^TR:#22/.test(s)), 'the row was not centred: ' + JSON.stringify(scrolled));
-  await sleep(800);
   assert.deepEqual(opened.map((p) => p.url()), []);
   assert.equal(context.pages().length, 1);
   assert.equal(await page.$$eval('#cp-app tr.control__focus', (rows) => rows.length), 1);
-  // Centre its row, the button under the chart, does the same for a browsing Claude
+  // Centre its row, the button under the chart, does the same for a browsing Claude, from the
+  // Dependencies tab opened again by its rail button
+  await toTab(page, 'dependencies');
   await page.click('#cp-graph tr:has(a[href$="/issues/23"]) button');
+  const centred = await where(page);
+  await sleep(800);
+  const centredLater = await where(page);
+  const view23 = await inBox(page, '#cp-queue tr[data-number="23"]');
+  console.log('     after Centre its row:', JSON.stringify(centred), '| a moment later:', centredLater.y, '| row:', view23);
+  assert.deepEqual([centred.hash, centred.shown, centred.y, centredLater.y], ['#tasks', ['tasks'], 0, 0]);
+  assert.equal(view23, 'in view');
   await page.waitForFunction(() => /#23/.test(document.getElementById('cp-graph-said').textContent), null, { timeout: 8000 });
   console.log('     said after Centre its row:', await page.textContent('#cp-graph-said'), '| focused rows:', JSON.stringify(await page.$$eval('#cp-app tr.control__focus', (rows) => rows.map((r) => r.closest('table').id + ':' + r.getAttribute('data-number')))));
   assert.equal(await page.textContent('#cp-graph-said'), 'Focused #23 (under Queue).');
+  assert.equal(await msgText(page), 'Focused #23 (under Queue).');
   await page.waitForSelector('#cp-queue tr[data-number="23"].control__focus', { timeout: 8000 });
   assert.deepEqual(errors, []);
   await context.close();
@@ -322,19 +428,21 @@ await check('E: when the drawing script cannot be loaded, the tables stand alone
   await context.close();
 });
 
-// Mermaid looks for a directive, %%{ ... }%%, anywhere in the text before it reads the entities, so a
-// "%" goes as an entity too, the one the board does not write yet (the page's graphLabel): one title
-// opening a directive, one holding a whole one, and a pair that opens one and closes it in a later
-// node, each of which broke the chart or erased what lay between before.
-const PERCENT_TITLES = { 43: '%%{init:{ broken', 44: '%%{init:{"theme":"dark"}}%% x', 45: 'Opens %%{init', 46: 'closes it }%% later' };
-await check('F: a hostile title is drawn as text, makes no element, runs nothing and fetches nothing', async () => {
+// Check F's repository: the fixture and epic #41 over the hostile title and the four "%" titles (above,
+// before A1): one opening a directive, one holding a whole one, and a pair that opens one and closes
+// it in a later node, each of which broke the chart or erased what lay between before the "%" went
+// as an entity.
+function scenarioF() {
   const f = fixture();
-  const hostile = '<img src=x onerror=alert(1)> "] <script>alert(2)</script> and more';
-  const i42 = issue(42, hostile, ['todo']);
+  const i42 = issue(42, HOSTILE, ['todo']);
   const percent = Object.entries(PERCENT_TITLES).map(([n, title]) => issue(Number(n), title, ['todo']));
   f.open.push(issue(41, 'An epic " with a quote', ['epic'], subs(0, 5)), i42, ...percent);
   f.subIssues[41] = [i42, ...percent];
-  const { context, page, errors, requests, dialogs } = await open(fixtureRoutes(f));
+  return fixtureRoutes(f);
+}
+await check('F: a hostile title is drawn as text, makes no element, runs nothing and fetches nothing', async () => {
+  const hostile = HOSTILE;
+  const { context, page, errors, requests, dialogs } = await open(scenarioF());
   await signIn(page);
   await page.waitForSelector('#cp-graph svg', { timeout: 15000 });
   await waitGraph(page, /^Drawn from 5 reads/, 15000);
@@ -356,6 +464,18 @@ await check('F: a hostile title is drawn as text, makes no element, runs nothing
     const text = await page.$eval('#cp-graph g.node[id*="-flowchart-i' + n + '-"]', (g) => g.textContent.trim());
     assert.equal(text, '#' + n + ' ' + title);
   }
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('F2: the text handed the drawing for a hostile title and the "%" titles is byte for byte the board\'s block, with no "%" left in it', async () => {
+  const { context, page, errors } = await open(scenarioF(), { extraRoutes: [stubRoute] });
+  await signIn(page);
+  await waitGraph(page, /^Drawn from 5 reads/);
+  const charts = await page.evaluate(() => window.__charts);
+  console.log('     epic #41 handed:', JSON.stringify(charts[2] && charts[2].split('\n').slice(1, 6)));
+  assert.deepEqual(charts, [GOALS_TEXT, EPIC_20_TEXT, F_EPIC_41_TEXT]);
+  assert.ok(charts.every((text) => !text.includes('%')), 'a "%" reached the drawing');
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -617,7 +737,7 @@ await check('M: every page of a sub-issue list is read and counted, a pull reque
   await capped.context.close();
 });
 
-await check('N: a repository whose record cannot be read leaves the section saying so, never reading', async () => {
+await check('N: a repository whose record cannot be read leaves the tab saying so, never reading', async () => {
   const routes = fixtureRoutes(fixture());
   delete routes['GET /repos/acme/demo'];
   const { context, page, calls, errors } = await open(routes);
@@ -651,7 +771,7 @@ await check('O: a repository named by its old name is read under the name GitHub
 await check('P: a task whose claim branch has an open pull request is shaded claimed, as the board shades it, the pull requests waited for and a fork\'s branch not counted', async () => {
   const routes = fixtureRoutes(fixture());
   const pull = (number, ref, fullName) => ({ number, title: 'Work on it', html_url: 'https://github.com/acme/demo/pull/' + number, draft: true, updated_at: now, user: { login: 'bob' }, base: { ref: 'main' }, head: { ref, sha: 'a'.repeat(40), repo: { full_name: fullName } } });
-  // the pull requests answer after the reads of the section, so the chart is drawn only once they are in
+  // the pull requests answer after the tab's reads, so the chart is drawn only once they are in
   routes['GET /repos/acme/demo/pulls'] = resp(200, [pull(80, 'claude/23', 'acme/demo'), pull(81, 'claude/99', 'mallory/demo')], { delayMs: 2500 });
   const { context, page, errors } = await open(routes, { extraRoutes: [stubRoute] });
   await signIn(page);
@@ -687,14 +807,21 @@ await check('Q: one chart that cannot be drawn leaves the others drawn, and the 
   await context.close();
 });
 
-await check('R: the board\'s own charts are drawn in the Board box, never shown as text, and a node there centres its row', async () => {
+await check('R: the board\'s own charts are drawn in the Board tab while it is hidden, never shown as text, show whole when it opens, and a node there opens the Tasks tab with its row centred in that tab\'s box', async () => {
   const routes = fixtureRoutes(fixture());
   const withCharts = board + '\n## Dependencies\n\nEach open epic\'s tasks as GitHub\'s sub-issues and blocked-by relations hold them.\n\n### Goals\n\n```mermaid\n' + GOALS_TEXT + '\n```\n\n### Epic #20: Draw the board (1/3)\n\n```mermaid\n' + EPIC_20_TEXT + '\n```\n';
   routes['GET /repos/acme/demo/contents/STATE.md'] = { encoding: 'base64', content: b64(withCharts) };
   const { context, page, errors, requests } = await open(routes);
   await signIn(page);
+  // drawn while the Dependencies tab is shown and the Board tab hidden
   await page.waitForFunction(() => document.querySelectorAll('#cp-board .control__chart svg').length === 2, null, { timeout: 15000 });
   await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  const drawnHidden = await page.evaluate(() => document.getElementById('tab-board').hidden);
+  await toTab(page, 'board');
+  const sizes = await page.$$eval('#cp-board .control__chart svg', (list) => list.map((svg) => [svg.getBoundingClientRect().width, svg.getBoundingClientRect().height]));
+  console.log('     drawn while hidden:', drawnHidden, '| sizes once shown:', JSON.stringify(sizes.map((x) => x.map(Math.round))));
+  assert.equal(drawnHidden, true);
+  assert.ok(sizes.every((x) => x[0] > 0 && x[1] > 0), 'a board chart has no size once its tab opens');
   // the box's words, the drawn pictures left out, whose own styles name their classes
   const text = await page.$eval('#cp-board', (box) => { const copy = box.cloneNode(true); copy.querySelectorAll('svg').forEach((svg) => svg.remove()); return copy.textContent; });
   console.log('     board charts:', await page.$$eval('#cp-board .control__chart svg', (l) => l.length), '| raw text shown:', /flowchart|classDef/.test(text), '| vendor loads:', vendorLoads(requests));
@@ -702,9 +829,21 @@ await check('R: the board\'s own charts are drawn in the Board box, never shown 
   assert.equal(await page.$$eval('#cp-board pre', (l) => l.length), 0);
   assert.deepEqual(await page.$$eval('#cp-board h4, #cp-board h3', (hs) => hs.map((h) => h.textContent)).then((hs) => hs.filter((h) => /Goals|Epic/.test(h))), ['Goals', 'Epic #20: Draw the board (1/3)']);
   assert.equal(vendorLoads(requests), 1);
+  const before = await where(page);
+  assert.deepEqual([before.hash, before.shown, before.y], ['#board', ['board'], 0]);
   await page.click('#cp-board g.node[id*="-flowchart-i22-"]');
+  // read at once, before any call that would open a tab itself
+  const after = await where(page);
+  await sleep(800);
+  const settled = await where(page);
+  const view = await inBox(page, '#cp-claimed tr[data-number="22"]');
+  console.log('     after the press:', JSON.stringify(after), '| a moment later:', settled.y, '| row:', view, '| message line:', await msgText(page));
+  assert.deepEqual([after.hash, after.shown, after.y, settled.y], ['#tasks', ['tasks'], 0, 0], 'the press did not open the Tasks tab alone, or moved the window');
+  assert.equal(view, 'in view');
   await page.waitForSelector('#cp-claimed tr[data-number="22"].control__focus', { timeout: 8000 });
   assert.equal(await page.textContent('#cp-graph-said'), 'Focused #22 (under Claimed).');
+  // pressed from the Board tab, the person sees neither tab's said line, so the message line says it
+  assert.equal(await msgText(page), 'Focused #22 (under Claimed).');
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -714,7 +853,9 @@ await check('S: the page says there is nothing to draw while no repository is ch
   assert.equal(await stateText(page), 'Nothing to draw yet: no repository is chosen.');
   await signIn(page);
   await waitGraph(page, /^Drawn from 4 reads/);
+  // the button is in the Repositories tab, which the press opens; the words are read back here
   await page.click('#cp-forget-repo');
+  await toTab(page, 'dependencies');
   await waitGraph(page, /^Nothing to draw yet: no repository is chosen\.$/);
   await sleep(300);
   console.log('     state:', await stateText(page), '| graph children:', await page.$$eval('#cp-graph > *', (l) => l.length));
@@ -737,7 +878,102 @@ await check('T: an open list cut at its last page read says that an epic beyond 
   await waitGraph(page, /^Drawn from 4 reads/, 15000);
   const state = await stateText(page);
   console.log('     state:', state);
-  assert.equal(state, 'Drawn from 4 reads of GitHub: 1 goal and 1 epic with sub-issues. A node\'s shade is its state; click one to centre its row in the tasks above. Only the first 500 open issues were read, so an epic or goal beyond them is not drawn.');
+  assert.equal(state, 'Drawn from 4 reads of GitHub: 1 goal and 1 epic with sub-issues. A node\'s shade is its state; click one to centre its row in the Tasks tab. Only the first 500 open issues were read, so an epic or goal beyond them is not drawn.');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('U: the rail holds the Dependencies tab right after Tasks, with its ARIA, and the address #dependencies opens it on load', async () => {
+  const { context, page, errors } = await open(fixtureRoutes(fixture()), { extraRoutes: [stubRoute], path: '/symphony/control/?repo=acme/demo#dependencies' });
+  // no press: the address alone names the tab
+  await signIn(page, null);
+  const loaded = await where(page);
+  const rail = await page.$$eval('.console__rail [data-tab]', (buttons) => buttons.map((b) => b.getAttribute('data-tab')));
+  const aria = await page.evaluate(() => {
+    const b = document.getElementById('rail-dependencies'), p = document.getElementById('tab-dependencies');
+    return {
+      role: b.getAttribute('role'), controls: b.getAttribute('aria-controls'), selected: b.getAttribute('aria-selected'), tabIndex: b.tabIndex,
+      name: b.querySelector('.rail__name').textContent, panelRole: p.getAttribute('role'), labelledBy: p.getAttribute('aria-labelledby'), panel: p.getAttribute('data-tab-panel'),
+      inside: ['h-dependencies', 'cp-graph-state', 'cp-graph-said', 'cp-graph'].filter((id) => document.getElementById(id) && document.getElementById(id).closest('#tab-dependencies')),
+      // an element the address names would be scrolled to by the browser, so none may be called dependencies
+      named: !!document.getElementById('dependencies'),
+    };
+  });
+  console.log('     loaded:', JSON.stringify(loaded), '| rail:', rail.join(' '), '| aria:', JSON.stringify(aria));
+  assert.deepEqual([loaded.hash, loaded.shown, loaded.y], ['#dependencies', ['dependencies'], 0]);
+  assert.ok(rail.indexOf('tasks') >= 0 && rail.indexOf('dependencies') === rail.indexOf('tasks') + 1, 'Dependencies is not the tab after Tasks: ' + rail.join(' '));
+  assert.equal(rail.filter((t) => t === 'dependencies').length, 1);
+  assert.deepEqual(aria, {
+    role: 'tab', controls: 'tab-dependencies', selected: 'true', tabIndex: 0, name: 'Dependencies', panelRole: 'tabpanel', labelledBy: 'rail-dependencies', panel: 'dependencies',
+    inside: ['h-dependencies', 'cp-graph-state', 'cp-graph-said', 'cp-graph'], named: false,
+  });
+  await waitGraph(page, /^Drawn from 4 reads/);
+  assert.equal(await inBox(page, '#cp-graph h3'), 'in view');
+  // the arrow keys walk the rail in its order: down from Tasks is Dependencies
+  await toTab(page, 'tasks');
+  await page.focus('#rail-tasks');
+  await page.keyboard.press('ArrowDown');
+  const keyed = await page.evaluate(() => [location.hash, document.activeElement && document.activeElement.id, document.getElementById('tab-dependencies').hidden, document.getElementById('rail-dependencies').getAttribute('aria-selected')]);
+  console.log('     ArrowDown from Tasks:', JSON.stringify(keyed));
+  assert.deepEqual(keyed, ['#dependencies', 'rail-dependencies', false, 'true']);
+  // its rail button opens it from another tab, and the address follows
+  await toTab(page, 'board');
+  await toTab(page, 'dependencies');
+  // a link to #dependencies on the page already open opens it too
+  await toTab(page, 'tasks');
+  await page.evaluate(() => { location.hash = '#dependencies'; });
+  await page.waitForFunction(() => !document.getElementById('tab-dependencies').hidden, null, { timeout: 8000 });
+  const linked = await where(page);
+  assert.deepEqual([linked.hash, linked.shown, linked.y], ['#dependencies', ['dependencies'], 0]);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// Check V's assistant: the repository's workflow carries it, the person may write, the page
+// remembers issue #50, and the answer, after the header the action writes when a run ends, asks for
+// the Dependencies tab in the vocabulary's own words.
+const RUN = 'https://github.com/acme/demo/actions/runs/9';
+const FINISHED = '**Claude finished @tester\'s task in 1m 2s** \u2014\u2014 [View job](' + RUN + ')\n\n---\n\n';
+const QUESTION_AT = '2026-10-18T10:02:00Z';
+function assistantRoutes(routes) {
+  routes['GET /repos/acme/demo/contents/.github/symphony/assistant.md'] = { encoding: 'base64', content: b64('# The assistant\n') };
+  routes['GET /repos/acme/demo/collaborators/tester/permission'] = { permission: 'write', role_name: 'write', user: { login: 'tester' } };
+  routes['GET /repos/acme/demo/issues/50'] = issue(50, 'Assistant: tester', ['assistant']);
+  routes['GET /repos/acme/demo/labels/assistant'] = { name: 'assistant' };
+  routes['POST /repos/acme/demo/issues/50/comments'] = (url, req, call) => ({ id: 1001, created_at: QUESTION_AT, updated_at: QUESTION_AT, user: { login: 'tester', type: 'User' }, body: call.body.body });
+  const answer = { id: 2001, created_at: '2026-10-18T10:02:20Z', updated_at: '2026-10-18T10:03:30Z', user: { login: 'claude[bot]', type: 'Bot' }, body: FINISHED + 'Epic #20 waits on #22, which waits on #99.\n\n```symphony\nshow dependencies\n```\n' };
+  routes['GET /repos/acme/demo/issues/50/comments'] = resp(200, [{ id: 1001, created_at: QUESTION_AT, updated_at: QUESTION_AT, user: { login: 'tester', type: 'User' }, body: 'x' }, answer], { headers: { ETag: 'W/"a"' } });
+  return routes;
+}
+await check('V: the assistant\'s "show dependencies" opens the Dependencies tab at its first chart and leaves the window where it was', async () => {
+  const { context, page, errors } = await open(assistantRoutes(fixtureRoutes(fixture())), {
+    storage: { symphony_panel_assistant: '{"acme/demo":50}' },
+    constants: { ASSISTANT_POLL_MS: 400, ASSISTANT_SLOW_MS: 400, ASSISTANT_AFTER_MS: 1500 },
+  });
+  await signIn(page);
+  await page.waitForSelector('#cp-graph svg', { timeout: 15000 });
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  // the charts' box scrolled to its end, as a person who read the last chart leaves it
+  const left = await page.evaluate(() => { const box = document.getElementById('cp-graph').closest('.console__scroll'); box.scrollTop = box.scrollHeight; return box.scrollTop; });
+  assert.ok(left > 0, 'the charts fit their box, so where the answer leaves it says nothing');
+  await page.waitForFunction(() => /The assistant issue is #50/.test(document.getElementById('cp-as-state').textContent), null, { timeout: 8000 });
+  // the question box is in the Ask tab, which the fill opens
+  await page.fill('#cp-as-q', 'What blocks what?');
+  await page.click('#cp-as-ask');
+  const asked = await where(page);
+  assert.deepEqual(asked.shown, ['ask']);
+  await page.waitForFunction(() => /Showing the Dependencies tab/.test(document.getElementById('cp-as-actions').textContent), null, { timeout: 10000 });
+  const shown = await where(page);
+  const top = await page.evaluate(() => document.getElementById('cp-graph').closest('.console__scroll').scrollTop);
+  await sleep(800);
+  const settled = await where(page);
+  const view = await inBox(page, '#cp-graph h3');
+  const actions = await page.textContent('#cp-as-actions');
+  console.log('     after the answer:', JSON.stringify(shown), '| charts box at', top, '| a moment later:', settled.y, '| first chart\'s heading:', view, '| actions:', actions);
+  assert.deepEqual([shown.hash, shown.shown, shown.y, settled.y], ['#dependencies', ['dependencies'], 0, 0], 'the answer did not open the Dependencies tab, or moved the window');
+  assert.equal(top, 0, 'the charts\' box was not put back at its first chart');
+  assert.equal(view, 'in view');
+  assert.match(actions, /Showing the Dependencies tab, which this page draws\./);
   assert.deepEqual(errors, []);
   await context.close();
 });

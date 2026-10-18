@@ -1,0 +1,1 @@
+[["    revealTab(row);\n    scrollInDeck(row, { block: 'center' });\n", "    row.scrollIntoView({ block: 'center' });\n"]]
