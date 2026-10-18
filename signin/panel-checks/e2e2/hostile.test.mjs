@@ -1,6 +1,7 @@
 // Extended end-to-end probes of the control panel and the cost page against a mocked GitHub API.
 // Each check states the behaviour the page promises; a FAIL demonstrates a defect.
 import { chromium } from 'playwright';
+import { consoleTabs } from './console-tabs.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
@@ -31,6 +32,7 @@ function baseRoutes(repo) {
   };
 }
 const browser = await chromium.launch();
+await consoleTabs(browser);
 async function open(routes, opts) {
   opts = opts || {};
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
