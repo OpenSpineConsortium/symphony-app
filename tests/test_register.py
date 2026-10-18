@@ -257,10 +257,15 @@ class SetupAppTest(unittest.TestCase):
         return registration
 
     def test_the_setup_manifest_asks_for_administration_and_nothing_else(self):
+        """The repository's Administration for the six settings and, as the Apps'
+        privacy statement says since version 14, the organization's Administration
+        for the one box "Allow GitHub Actions to create and approve pull requests"
+        that a new organization holds off."""
         manifest = register.manifest_for(path=register.MANIFEST_SETUP)
         self.assertEqual(manifest["name"], "Symphony Setup")
         self.assertTrue(manifest["public"])
-        self.assertEqual(manifest["default_permissions"], {"administration": "write", "metadata": "read"})
+        self.assertEqual(manifest["default_permissions"], {"administration": "write", "metadata": "read",
+                                                           "organization_administration": "write"})
         self.assertEqual(manifest["default_events"], [])
         self.assertEqual(manifest["hook_attributes"], {"url": "https://example.invalid/webhook", "active": False})
 
