@@ -1496,9 +1496,11 @@ await check('H13: both writes of Give go out for the account the page named when
   routes['POST /repos/acme/demo/labels'] = { name: 'worker:nightly' };
   routes['POST /repos/acme/demo/issues/9/labels'] = [{ name: 'worker:nightly' }];
   const { context, tab1, tab2, calls, errors } = await twoTabs(false, routes);
-  await tab1.waitForFunction(() => !!document.querySelector('#cp-queue tbody select'), null, { timeout: 5000 });
+  await tab1.waitForFunction(() => !!document.querySelector('#cp-queue tbody .card__gear'), null, { timeout: 5000 });
+  await tab1.click('#cp-queue tbody .card__gear');
+  await tab1.selectOption('#dlg-give', 'nightly');
   held.armed = true;
-  await tab1.selectOption('#cp-queue tbody select', 'nightly');
+  await tab1.click('#dlg-give-go');
   for (let i = 0; i < 100 && !calls.some((c) => c.key === 'GET /repos/acme/demo/labels/worker%3Anightly'); i++) await sleep(20);
   await pasteIn(tab2, 'github_pat_OTHER', true);
   await tab1.waitForFunction(() => /other-person/.test(document.getElementById('cp-who').textContent), null, { timeout: 5000 });

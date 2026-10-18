@@ -129,7 +129,7 @@ await check('D: Merge stays disabled on a draft with green checks and on a ready
   const { context, page } = await open(routes);
   await signIn(page);
   await page.waitForFunction(() => /1 of 1 passed/.test(document.querySelector('#cp-pulls tbody').textContent) && /1 failed/.test(document.querySelector('#cp-pulls tbody').textContent));
-  const states = await page.$$eval('#cp-pulls tbody button', (bs) => bs.map((b) => b.disabled));
+  const states = await page.$$eval('#cp-pulls tbody .admin__act button', (bs) => bs.map((b) => b.disabled));
   console.log('     merge buttons disabled:', states);
   assert.deepEqual(states, [true, true]);
   await context.close();
