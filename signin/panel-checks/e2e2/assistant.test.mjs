@@ -7,7 +7,10 @@
 // in front of the answer or the error), the few lines of the answer's fenced block the page acts
 // on, what the page renders and what it never renders, whose comment counts as the answer, the
 // issue read again before each question and replaced when closed, one press at a time, a sign-in
-// that changed under the page, and Stop watching. Each check states what the page promises; a FAIL
+// that changed under the page, and Stop watching; and, since the assistant became the Ask Claude bar
+// frozen at the console's foot (site branch claude/ask-claude-bar, 2026-10-18), the bar on every tab,
+// its drawer, and the lines of the answer that would change something, offered as buttons that run
+// the panel's own handlers only on a press (M, N). Each check states what the page promises; a FAIL
 // is a defect. Every token is a stand-in.
 //
 // The mutants that prove the checks bite, each a [text, replacement] pair on the served script as
@@ -362,7 +365,9 @@ await check('B: the first question makes the label and the issue, posts the ques
   assert.match(actions, /Focused #7 \(under Blocked, and blockers\)\./);
   assert.match(actions, /Filtered the task tables to the tasks labelled blocked or blocker: 1 of 4/);
   assert.match(actions, /Showing the board's Blockers section\./);
-  assert.match(actions, /Not acted on, shown as written: merge #9/);
+  // merge #9 names an issue, not a pull request the page lists, so no button is offered for it
+  assert.match(actions, /Not offered: #9 is not an open pull request the page lists\./);
+  assert.equal(await page.$$eval('#cp-as-actions button', (b) => b.length), 0, 'a button was offered for an issue that is no pull request');
   assert.equal(posts(calls).length, 3, 'more than the label, the issue and the question were written: ' + posts(calls).map((c) => c.key));
   assert.equal(await remembered(page), '{"acme/demo":50}', 'the issue is not remembered');
   // the watch ends by itself a while after the answer
@@ -530,7 +535,9 @@ await check('E: Stop watching stops the reads, says where the question is, and o
 });
 
 await check('E2: a run that failed is said as failed, its comment shown and not acted on, and the grace is said in seconds', async () => {
-  const routes = issueRoutes(baseRoutes(), 1, (url, req, call) => call.ifNoneMatch === 'W/"e"' ? resp(304, null) : resp(200, [questionComment(1, 'x'), bot(FAILED + '\n\n```symphony\nfilter todo\n```\n', undefined, '2026-10-18T10:03:00Z')], { headers: { ETag: 'W/"e"' } }));
+  // the page says how long ago the run ended from the comment's last edit, so the edit is stamped
+  // as the read is answered, and the words read "just now" whatever day the check runs
+  const routes = issueRoutes(baseRoutes(), 1, (url, req, call) => call.ifNoneMatch === 'W/"e"' ? resp(304, null) : resp(200, [questionComment(1, 'x'), bot(FAILED + '\n\n```symphony\nfilter todo\n```\n', undefined, new Date().toISOString())], { headers: { ETag: 'W/"e"' } }));
   const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' }, constants: { ASSISTANT_AFTER_MS: 90000 } });
   await signIn(page);
   await waitState(page, /The assistant issue is #50/);
@@ -804,6 +811,205 @@ await check('L: a watch whose read failed while the tab signed out is read on wh
   assert.ok(await page.isVisible('#cp-as-stop'), 'Stop watching is not offered for the watch that goes on');
   await page.click('#cp-as-stop');
   await waitState(page, /^Watching stopped\./);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// the answer that proposes changes: each that holds together is a button, the rest are said
+const OFFERS = FINISHED + 'Run the workers, give #9 to nightly, and merge #12 once you have looked.\n\n```symphony\nrun workers\ngive #9 to nightly\ngive #5 to nightly\ngive #9 to nobody\nmerge #12\nmerge #13\ntask Write the README\nask #9 Please add tests\ntab tokens\ndelete everything\n```\n';
+function offerRoutes(answerBody) {
+  const routes = issueRoutes(baseRoutes(), 1, (url, req, call) => resp(200, [questionComment(1, 'x'), bot(answerBody, '2026-10-18T10:02:20Z', '2026-10-18T10:03:30Z')], { headers: { ETag: 'W/"a"' } }));
+  routes['GET /repos/acme/demo/contents/.github/symphony/workers'] = [{ type: 'file', name: 'nightly.json' }];
+  routes['GET /repos/acme/demo/contents/.github/symphony/workers/nightly.json'] = { encoding: 'base64', content: b64(JSON.stringify({ name: 'nightly', runs: 'actions', about: 'the nightly worker' })) };
+  routes['GET /repos/acme/demo/pulls'] = [
+    { number: 12, title: 'Add the README', html_url: 'https://github.com/acme/demo/pull/12', draft: false, head: { ref: 'claude/9', sha: 'abc12' }, base: { ref: 'main' }, updated_at: now },
+    { number: 13, title: 'Half done', html_url: 'https://github.com/acme/demo/pull/13', draft: true, head: { ref: 'claude/7', sha: 'abc13' }, base: { ref: 'main' }, updated_at: now },
+  ];
+  routes['GET /repos/acme/demo/commits/abc12/check-runs'] = { total_count: 1, check_runs: [{ status: 'completed', conclusion: 'success' }] };
+  routes['GET /repos/acme/demo/commits/abc13/check-runs'] = { total_count: 1, check_runs: [{ status: 'completed', conclusion: 'success' }] };
+  routes['POST /repos/acme/demo/actions/workflows/workers.yml/dispatches'] = resp(204, null);
+  routes['GET /repos/acme/demo/labels/worker%3Anightly'] = { name: 'worker:nightly' };
+  routes['POST /repos/acme/demo/issues/9/labels'] = [{ name: 'todo' }, { name: 'worker:nightly' }];
+  routes['PUT /repos/acme/demo/pulls/12/merge'] = { merged: true };
+  return routes;
+}
+const actButton = (page, re) => page.evaluateHandle((src) => Array.prototype.filter.call(document.querySelectorAll('#cp-as-actions button'), (b) => new RegExp(src).test(b.textContent))[0] || null, re.source);
+async function press(page, re) {
+  const b = await actButton(page, re);
+  assert.ok(await b.evaluate((x) => !!x), 'no button ' + re);
+  await b.evaluate((x) => x.click());
+}
+
+await check('M: the bar sits outside every tab, frozen on each, and the answer opens in a drawer over the stage', async () => {
+  const routes = issueRoutes(baseRoutes(), 1, (url, req, call) => resp(200, [questionComment(1, 'x'), finalComment], { headers: { ETag: 'W/"a"' } }));
+  const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
+  assert.equal(await page.$eval('#cp-askbar', (b) => getComputedStyle(b).display), 'none', 'the bar shows on the sign-in gate');
+  await signIn(page);
+  await waitState(page, /The assistant issue is #50/);
+  const placed = await page.evaluate(() => ({
+    inTab: !!document.getElementById('cp-as-q').closest('[data-tab-panel]'),
+    inBar: !!document.getElementById('cp-as-q').closest('#cp-askbar'),
+    drawerInStage: !!document.getElementById('cp-as-drawer').closest('.console__stage'),
+    drawerInBar: !!document.getElementById('cp-as-drawer').closest('#cp-askbar'),
+  }));
+  assert.deepEqual(placed, { inTab: false, inBar: true, drawerInStage: true, drawerInBar: false });
+  // on every tab the box is on screen, inside the window, and the page does not scroll
+  for (const tab of ['command', 'board', 'tasks', 'pulls', 'runs', 'workers', 'ask', 'tokens', 'share', 'repos', 'about']) {
+    await page.evaluate((t) => document.querySelector('.console__rail [data-tab="' + t + '"]').click(), tab);
+    const r = await page.evaluate(() => { const b = document.getElementById('cp-as-q').getBoundingClientRect(); return { top: b.top, bottom: b.bottom, h: window.innerHeight, y: window.pageYOffset }; });
+    assert.ok(r.top > 0 && r.bottom <= r.h, 'the box is off screen on ' + tab + ': ' + JSON.stringify(r));
+    assert.equal(r.y, 0, 'opening ' + tab + ' moved the window');
+  }
+  assert.equal(await page.isVisible('#cp-as-drawer'), false, 'the drawer is open before any answer');
+  assert.equal(await page.isVisible('#cp-as-toggle'), false, 'Answer is offered before any answer');
+  // Enter sends; the drawer opens with the answer, Close and Escape shut it, Answer opens it again
+  await page.fill('#cp-as-q', 'What is blocked?');
+  await page.press('#cp-as-q', 'Enter');
+  await page.waitForFunction(() => /blocked on the schema/.test(document.getElementById('cp-as-answer').textContent), null, { timeout: 8000 });
+  assert.ok(posts(calls).some((c) => c.key === 'POST /repos/acme/demo/issues/50/comments'), 'Enter did not send the question');
+  assert.ok(await page.isVisible('#cp-as-drawer'), 'the drawer did not open with the answer');
+  await page.click('#cp-as-close');
+  assert.equal(await page.isVisible('#cp-as-drawer'), false, 'Close left the drawer open');
+  assert.equal(await page.textContent('#cp-as-toggle'), 'Answer');
+  await page.click('#cp-as-toggle');
+  assert.ok(await page.isVisible('#cp-as-drawer'), 'Answer did not open the drawer');
+  await page.press('#cp-as-close', 'Escape');
+  assert.equal(await page.isVisible('#cp-as-drawer'), false, 'Escape left the drawer open');
+  // Shift+Enter is a new line, not a question
+  const before = posts(calls).length;
+  await page.click('#cp-as-q');
+  await page.keyboard.type('one');
+  await page.keyboard.press('Shift+Enter');
+  await page.keyboard.type('two');
+  assert.equal(await page.inputValue('#cp-as-q'), 'one\ntwo');
+  assert.equal(posts(calls).length, before, 'Shift+Enter sent something');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('N: the lines that would change something are buttons that write nothing until pressed, each press runs the panel\'s own handler once', async () => {
+  const { context, page, calls, errors } = await open(offerRoutes(OFFERS), { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
+  await signIn(page);
+  await waitState(page, /The assistant issue is #50/);
+  await page.waitForFunction(() => /Add the README/.test(document.getElementById('cp-pulls').textContent) && /nightly/.test(document.getElementById('cp-workers').textContent), null, { timeout: 8000 });
+  await ask(page, 'What now?');
+  await page.waitForFunction(() => document.querySelectorAll('#cp-as-actions button').length >= 6, null, { timeout: 8000 });
+  // SHOT=<file.png> keeps a picture of the bar with its drawer open, for the notes
+  if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
+  const actions = await page.textContent('#cp-as-actions');
+  console.log('     actions:', actions);
+  const labels = await page.$$eval('#cp-as-actions button', (b) => b.map((x) => x.textContent));
+  assert.deepEqual(labels, ['Run the workers now', 'Give #9 to nightly', 'Merge #12...', 'Merge #13...', 'Draft the task', 'Draft @claude on #9']);
+  assert.match(actions, /Not offered: #5 is not an issue the page can give/);
+  assert.match(actions, /Not offered: no worker named nobody is registered\./);
+  assert.match(actions, /Opened the Tokens tab\./);
+  assert.match(actions, /Not acted on, shown as written: delete everything/);
+  assert.equal(await page.getAttribute('[data-tab="tokens"]', 'aria-selected'), 'true', 'tab tokens did not open the Tokens tab');
+  // nothing beyond the question is written by the answer itself
+  const written = () => posts(calls).filter((c) => c.key !== 'POST /repos/acme/demo/issues/50/comments');
+  assert.deepEqual(written().map((c) => c.key), [], 'the answer wrote by itself');
+
+  await press(page, /^Run the workers now$/);
+  await page.waitForFunction(() => /the workers is queued/.test(document.getElementById('msg').textContent), null, { timeout: 5000 });
+  assert.deepEqual(written().map((c) => c.key), ['POST /repos/acme/demo/actions/workflows/workers.yml/dispatches']);
+  assert.ok(await (await actButton(page, /^Run the workers now$/)).evaluate((x) => x.disabled), 'the button can be pressed twice');
+
+  await press(page, /^Give #9 to nightly$/);
+  await page.waitForFunction(() => /#9 is given to nightly/.test(document.getElementById('msg').textContent), null, { timeout: 5000 });
+  const label = written().find((c) => c.key === 'POST /repos/acme/demo/issues/9/labels');
+  assert.deepEqual(label && label.body, { labels: ['worker:nightly'] });
+
+  // merge arms the row's own Merge on the Pull requests tab; the merge waits for its Confirm
+  await press(page, /^Merge #12/);
+  assert.equal(await page.getAttribute('[data-tab="pulls"]', 'aria-selected'), 'true', 'merge did not open the Pull requests tab');
+  assert.equal(await page.isVisible('#cp-as-drawer'), false, 'the drawer stays over the row to confirm');
+  assert.match(await page.textContent('#msg'), /Press "Confirm: merge #12 into main" beside #12/);
+  assert.ok(!written().some((c) => /merge$/.test(c.key)), 'the merge ran without its confirm');
+  await page.click('#tab-pulls button:has-text("Confirm: merge #12")');
+  await page.waitForFunction(() => /#12 is merged/.test(document.getElementById('msg').textContent), null, { timeout: 5000 });
+  assert.deepEqual(written().find((c) => c.key === 'PUT /repos/acme/demo/pulls/12/merge').body, { merge_method: 'merge', sha: 'abc12' });
+  await page.click('#cp-as-toggle');
+  await press(page, /^Merge #13/);
+  assert.match(await page.textContent('#msg'), /#13 cannot be merged from here yet: it is a draft\./);
+
+  // the drafts fill a form and send nothing
+  const n = written().length;
+  await page.click('#cp-as-toggle');
+  await press(page, /^Draft the task$/);
+  assert.equal(await page.inputValue('#cp-task-title'), 'Write the README');
+  assert.equal(await page.getAttribute('[data-tab="tasks"]', 'aria-selected'), 'true');
+  await page.click('#cp-as-toggle');
+  await press(page, /^Draft @claude on #9$/);
+  assert.equal(await page.inputValue('#cp-prompt'), 'Please add tests');
+  assert.equal(await page.inputValue('#cp-prompt-target'), '9');
+  assert.equal(await page.getAttribute('[data-tab="ask"]', 'aria-selected'), 'true');
+  assert.equal(written().length, n, 'a draft wrote something');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('N2: a button kept across a Refresh still runs once, and one from before another sign-in runs nothing', async () => {
+  const routes = offerRoutes(FINISHED + 'Run them.\n\n```symphony\nrun workers\nrun board\n```\n');
+  routes['GET /user'] = (url, req, call) => ({ login: /OTHER/.test(call.auth) ? 'other' : 'tester' });
+  routes['POST /repos/acme/demo/actions/workflows/board.yml/dispatches'] = resp(204, null);
+  const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
+  await page.check('#cp-keep');
+  await signIn(page);
+  await waitState(page, /The assistant issue is #50/);
+  await ask(page, 'Run?');
+  await page.waitForFunction(() => document.querySelectorAll('#cp-as-actions button').length === 2, null, { timeout: 8000 });
+  // a Refresh reads the repository again for the same person: the answer's buttons still work
+  await page.evaluate(() => document.getElementById('cp-refresh').click());
+  await sleep(400);
+  await press(page, /^Run the workers now$/);
+  await page.waitForFunction(() => /the workers is queued/.test(document.getElementById('msg').textContent), null, { timeout: 5000 });
+  assert.equal(posts(calls).filter((c) => /workers\.yml\/dispatches$/.test(c.key)).length, 1);
+  // another account's token comes in from another tab: the old answer's button refuses
+  await page.evaluate(() => { localStorage.setItem('symphony_panel_token', 'github_pat_OTHER'); window.dispatchEvent(new StorageEvent('storage', { key: 'symphony_panel_token', newValue: 'github_pat_OTHER' })); });
+  await page.waitForFunction(() => /Signed in as other/.test(document.getElementById('cp-who').textContent), null, { timeout: 5000 });
+  const kept = await actButton(page, /^Rewrite the board$/);
+  if (await kept.evaluate((x) => !!x)) await kept.evaluate((x) => x.click());
+  await sleep(400);
+  assert.ok(!posts(calls).some((c) => /board\.yml\/dispatches$/.test(c.key)), 'a button from before the sign-in started a workflow');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('N3: a merge pressed before the checks are read is refused in words and the button comes back', async () => {
+  const routes = offerRoutes(FINISHED + 'Merge it.\n\n```symphony\nmerge #12\n```\n');
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  routes['GET /repos/acme/demo/commits/abc12/check-runs'] = () => gate.then(() => ({ total_count: 1, check_runs: [{ status: 'completed', conclusion: 'success' }] }));
+  const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
+  await signIn(page);
+  await waitState(page, /The assistant issue is #50/);
+  await ask(page, 'Merge?');
+  await page.waitForFunction(() => document.querySelectorAll('#cp-as-actions button').length === 1, null, { timeout: 8000 });
+  await press(page, /^Merge #12/);
+  assert.match(await page.textContent('#msg'), /#12 cannot be merged from here yet: its checks have not all passed, or are still being read\./);
+  assert.equal(await (await actButton(page, /^Merge #12/)).evaluate((x) => x.disabled), false, 'the refused button stayed disabled');
+  release();
+  await page.waitForFunction(() => { const b = Array.prototype.filter.call(document.querySelectorAll('#tab-pulls button'), (x) => /^Merge$/.test(x.textContent))[0]; return b && !b.disabled; }, null, { timeout: 5000 });
+  await press(page, /^Merge #12/);
+  assert.match(await page.textContent('#msg'), /Press "Confirm: merge #12 into main"/);
+  assert.ok(!posts(calls).some((c) => /merge$/.test(c.key)), 'the merge ran without its confirm');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// the block the page hides from the rendered answer is exactly the block it acts on
+await check('N4: the symphony block is hidden from the answer and nothing else is', async () => {
+  const body = FINISHED + 'Before.\r\n\r\n```symphony\r\nrun workers\r\n```\r\n\r\nAfter the block.\n\n```symphony-state\nrepository: acme/demo\n```\n';
+  const { context, page, errors } = await open(offerRoutes(body), { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
+  await signIn(page);
+  await waitState(page, /The assistant issue is #50/);
+  await ask(page, 'Block?');
+  await page.waitForFunction(() => document.querySelectorAll('#cp-as-actions button').length === 1, null, { timeout: 8000 });
+  const text = await page.textContent('#cp-as-answer');
+  assert.ok(!/run workers/.test(text), 'the block the page acts on is shown as code');
+  assert.match(text, /Before\./);
+  assert.match(text, /After the block\./);
+  assert.match(text, /repository: acme\/demo/, 'another fenced block was hidden');
   assert.deepEqual(errors, []);
   await context.close();
 });
