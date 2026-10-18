@@ -64,7 +64,7 @@ installations may use the App.
 | app/envfile.py | The env file register.py writes and the server reads |
 | app/vendor/ | protocol_check.py and claims.py from symphony-protocol, with its `__init__.py` and vendoring.py, and VENDORED, the record they are held to (vendor/README.md) |
 | manifest.json | The App's manifest: name, permissions, events |
-| manifest-setup.json | The setup App's manifest: Administration and Metadata, public, no webhook (The Setup App for the front door) |
+| manifest-setup.json | The setup App's manifest: Administration and Metadata, the organization's Administration, public, no webhook (The Setup App for the front door) |
 | scripts/register.py | Registers the App, or with `--setup` the setup App, for an organization by GitHub's manifest flow |
 | scripts/collect.py | Collects the field metrics projects share, daily from .github/workflows/collect.yml (Field metrics) |
 | scripts/check.sh | The checks; CI's job `check` runs it |
@@ -192,7 +192,11 @@ one thing only since 2026-10-18: the control panel's Share tab invites a
 person as a collaborator, as the person signed in (the owner's choice;
 the Apps' privacy statement, version 17). No adoption run uses it there,
 so the setup App holds Administration (write) and Metadata
-(read) and nothing else, no webhook and no events, and an adopter
+(read) and, on an organization, the organization's Administration
+(write), for the one box "Allow GitHub Actions to create and approve
+pull requests" that a new organization holds off for its repositories
+(the owner's choice of 2026-10-18; the Apps' privacy statement, version
+14), and nothing else, no webhook and no events, and an adopter
 installs it on the one repository for that one run and uninstalls it
 afterwards; the run mints its token for that repository alone, and the
 repository's settings need no step by hand.
