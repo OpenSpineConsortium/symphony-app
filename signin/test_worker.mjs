@@ -258,8 +258,11 @@ test('/drive/connect sends Microsoft the code, the verifier, the secret, the sco
   assert.equal(form.get('redirect_uri'), PAGE);
   assert.equal(form.get('scope'), 'Files.ReadWrite offline_access');
   assert.equal(form.has('refresh_token'), false);
-  // the GitHub settings play no part: the GitHub secret never reaches Microsoft
-  assert.equal(form.has('secret-value'), false);
+  // the GitHub settings play no part: the GitHub secret and client id never reach Microsoft,
+  // under any field's name, so the check reads every value the form carries
+  const sent = [...form.values()];
+  assert.ok(!sent.includes(env.GITHUB_CLIENT_SECRET), 'the GitHub secret reached Microsoft');
+  assert.ok(!sent.includes(env.GITHUB_CLIENT_ID), 'the GitHub client id reached Microsoft');
   assert.equal(ms.calls[0].init.headers.Origin, undefined, 'no Origin header reaches Microsoft, which refuses a secret beside one');
 });
 

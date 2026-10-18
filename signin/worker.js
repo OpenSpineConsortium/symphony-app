@@ -31,8 +31,12 @@
 // Origin at all, the repository's run, which is no browser. The Origin header is the browser's
 // word, which a script elsewhere cannot forge but a program can; what binds a code to the page
 // that asked for it is PKCE: the page sends the provider a hash of a secret it made, and only the
-// holder of that secret can exchange the code, through this service or anywhere. The refresh
-// token a run sends is the repository's own secret, which the run alone can read.
+// holder of that secret can exchange the code, through this service or anywhere. /drive/token
+// redeems whatever refresh token it is sent, for any caller, so the repository's secret that a run
+// sends is a bearer credential: whoever can run a workflow on the repository can read it and,
+// through this route, reach the whole drive until it lapses or the person withdraws Symphony's
+// access at Microsoft (README.md, the drive routes). Binding it to the one repository, by a token
+// wrapped here and a GitHub Actions OIDC check on this route, is a change of its own.
 //
 // Settings (Cloudflare, Workers & Pages, the Worker, Settings, Variables and Secrets):
 //   GITHUB_CLIENT_ID      the App's client id (a text variable; it is public anyway)

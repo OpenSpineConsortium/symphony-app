@@ -97,8 +97,9 @@ By hand, at `https://github.com/organizations/<org>/settings/apps/new`:
 - Webhook: untick Active (stage 2 turns it on).
 - Repository permissions: Contents read and write, Issues read and write,
   Pull requests read and write, Checks read and write, Workflows read and
-  write, Actions read and write, Administration read and write; Metadata
-  read-only comes with them.
+  write, Actions read and write, Administration read and write, Secrets
+  read and write (the control panel's Folders tab, and the Tokens tab on a
+  personal account's repository); Metadata read-only comes with them.
 - Organization permissions: Secrets read and write, Variables read and
   write, for the control panel's Tokens page.
 - Events: Issues, Issue comment, Pull request, Push, Check suite. GitHub

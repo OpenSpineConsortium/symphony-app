@@ -16,6 +16,7 @@
     "workflows": "write",
     "actions": "write",
     "administration": "write",
+    "secrets": "write",
     "metadata": "read",
     "organization_secrets": "write",
     "organization_actions_variables": "write"
