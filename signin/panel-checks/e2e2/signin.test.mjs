@@ -1,6 +1,7 @@
 // End-to-end checks of "Sign in with GitHub" as the panel's first way in, against a mocked GitHub
 // and a mocked sign-in service. Each check states what the page promises; a FAIL is a defect.
 import { chromium } from 'playwright';
+import { consoleTabs } from './console-tabs.mjs';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -45,6 +46,7 @@ function repoRoutes(repo) {
 }
 
 const browser = await chromium.launch();
+await consoleTabs(browser);
 // one fresh browser profile per check; the service and GitHub's authorize page are mocked
 async function open(opts) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });

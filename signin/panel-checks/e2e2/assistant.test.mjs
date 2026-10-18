@@ -20,6 +20,7 @@
 // GitHub left a link (H), the focus said as centred while hidden (G), any task labelled assistant
 // hidden (C2).
 import { chromium } from 'playwright';
+import { consoleTabs } from './console-tabs.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
@@ -133,6 +134,7 @@ function issueRoutes(routes, n, answer) {
   return routes;
 }
 const browser = await chromium.launch();
+await consoleTabs(browser);
 // the mocked API records every call with the conditional header it carried; a route may be a
 // function of the url, the request, the record and the route itself, may answer later (a promise),
 // may hold the request open ('HOLD', the check then answers or aborts the route), and answers 304
