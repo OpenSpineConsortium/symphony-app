@@ -535,7 +535,9 @@ await check('E: Stop watching stops the reads, says where the question is, and o
 });
 
 await check('E2: a run that failed is said as failed, its comment shown and not acted on, and the grace is said in seconds', async () => {
-  const routes = issueRoutes(baseRoutes(), 1, (url, req, call) => call.ifNoneMatch === 'W/"e"' ? resp(304, null) : resp(200, [questionComment(1, 'x'), bot(FAILED + '\n\n```symphony\nfilter todo\n```\n', undefined, '2026-10-18T10:03:00Z')], { headers: { ETag: 'W/"e"' } }));
+  // the page says how long ago the run ended from the comment's last edit, so the edit is stamped
+  // as the read is answered, and the words read "just now" whatever day the check runs
+  const routes = issueRoutes(baseRoutes(), 1, (url, req, call) => call.ifNoneMatch === 'W/"e"' ? resp(304, null) : resp(200, [questionComment(1, 'x'), bot(FAILED + '\n\n```symphony\nfilter todo\n```\n', undefined, new Date().toISOString())], { headers: { ETag: 'W/"e"' } }));
   const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' }, constants: { ASSISTANT_AFTER_MS: 90000 } });
   await signIn(page);
   await waitState(page, /The assistant issue is #50/);
