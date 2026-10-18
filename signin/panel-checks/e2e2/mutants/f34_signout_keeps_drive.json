@@ -1,0 +1,1 @@
+[["    state = emptyState(state.repo);\n    // a drive connected under this sign-in goes with it, whatever ended it\n    dropDrive();", "    state = emptyState(state.repo);"]]

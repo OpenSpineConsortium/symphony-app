@@ -1,0 +1,1 @@
+[["      if (!answer.refresh_token) throw new Error('Microsoft gave no refresh token, so the sync could not run: the consent did not include keeping access when you are away.');\n", ""]]

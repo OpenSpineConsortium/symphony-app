@@ -1,0 +1,1 @@
+[["if (open.length) return { branch: DRIVE_BRANCH, pull: open[0].html_url };", ""]]

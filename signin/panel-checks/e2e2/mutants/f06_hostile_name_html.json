@@ -1,0 +1,1 @@
+[["add(tr, add(el('td'), el(it.folder ? 'strong' : 'span', '', String(it.name || ''))));", "var nameCell = el('td'); nameCell.innerHTML = String(it.name || ''); add(tr, nameCell);"]]

@@ -74,7 +74,56 @@ ghu_TEST or github_pat_X.
   it reads or presses inside it, and a press that crosses tabs is read at once with page.evaluate,
   which opens nothing, so the page and not console-tabs.mjs is seen opening the tab. A check that
   wants the drawing recorded instead of made serves a stand-in for the library on its route.
-- `e2e2/mutants/`: 128 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/folders.test.mjs`: 48 checks of the console's Folders tab, /symphony/control/#folders
+  (site branch claude/folders-page, 2026-10-18; the tab took the place of the page folders.html
+  before that page shipped), against a mocked Microsoft consent page, a mocked Microsoft Graph,
+  the mocked service's three `/drive` routes and a mocked GitHub that keeps what Track writes as
+  GitHub keeps it: drive.json per branch, read by ?ref, a write over it refused without its sha
+  (422) or with another (409); the secret, set once saved; the branches, one made or set back by
+  force holding the default branch's files; and the open pull requests. The repository is private
+  unless a check says otherwise. It loads the console signed in, as the other suites do, installs
+  `console-tabs.mjs`, and opens the tab through its rail button or its address. A to L keep the
+  page's checks in meaning: a provider the service has not set up, with the three steps and the
+  filled button the next step's; Connect with PKCE, where every Connect names the console's own
+  address, with its trailing slash, to Microsoft and to /drive/connect, also when the console
+  was opened as index.html, and the code has left the address before it is exchanged; the drive
+  drawn from Graph and ticked, a hostile name as text, and Untick clearing the box on view;
+  Track sealing the refresh token, writing drive.json exactly as tools/drive_sync.py reads it,
+  dated on either side of midnight, starting the sync and dropping the tokens, with a 403 on the
+  secret's write said as the token's missing permission, two presses, a refused first run whose
+  words point at the runs link drawn in the tab, refused folder names, Track again over a file
+  that is there (D3), a file that cannot be written (E5) and a connection Microsoft gave no
+  refresh token (E6); a sign-in that GitHub refuses even whether the secret is set, told so as
+  the tab opens with Track not offered, in a pasted token's words and in SymphonyBoard's with an
+  organization's installations page or the person's (E2 to E2c); a public repository, written
+  into only once its box, never ticked beforehand, is ticked (P); a tracked repository's box, the
+  connect-again day counted from today, and a connection that ran out or is near its end (F to
+  F4); a return nobody here issued, cleaned and not spoken of, as the sign-in's F8 holds; a drive
+  state that differs; Microsoft refusing; a default branch that takes only pull requests, where
+  symphony/drive is made from its head, set back by force when it is there, never committed on
+  when it cannot be, and an open pull request is linked rather than a second opened (I to I3);
+  "Find the repository I just made", which asks GitHub about each new repository, since GitHub's
+  list of them leaves out the template; no drive-sync.yml; and the renewal through /drive/token.
+  H1 to H4 hold the two returns on one page apart both ways round: a GitHub sign-in is the
+  sign-in handler's and opens Command, a drive return is the tab's and opens Folders, each
+  forgets the other's pending state, and a state that matches neither is refused once. N1 to N8,
+  V1 and V2 are what the tab adds to the console: a drive return opens the tab by itself with the
+  address clean; the tab asks the service and reads its files only once it is opened, and once;
+  Forget the token, another tab's token for another account, or a pasted token GitHub stops
+  taking drops the drive; the bar's repository is followed, with nothing of the last one's shown
+  and a late answer about it dropped; what the person ticked goes with them to another repository
+  while what one repository's file ticked stays with it (V1), and a list drawn before the file
+  comes shows the file's ticks once it does (V2); hostile names in the drive, the repository's
+  file and GitHub's list stay text; with no repository listed, a drive is connected, the
+  repository just made is found and tracked into (N8); at 1366 x 657 the tab keeps its words
+  inside itself and the window stays at 0 after Connect's return and after Track, and a long
+  repository name wraps in the third step's head with Track inside the side column at 1366 x 657
+  and 390 x 844 (N6b, N6c); and folders.html is gone, linked from nowhere, while #folders opens
+  the tab. B, C, D, E3, I and L scan every request, the console, #msg, the markup, the fields, the
+  address and the storage for the drive's tokens, which go only to Graph's Authorization header,
+  to /drive/token and, sealed, into the secret. Its mutants
+  are `e2e2/mutants/f*.json`, 48, run as the section below says.
+- `e2e2/mutants/`: 176 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The 79 of the sign-in (`m*`) were caught against master
@@ -92,7 +141,8 @@ ghu_TEST or github_pat_X.
   and a Board chart that could not be drawn losing its text (R4); g41, the draw not seeded from the
   open issues' count, was retired, since every read now updates the count it starts from) against
   site branch claude/graph-section on 2026-10-18 after that review's fold, where the 79 were caught
-  again.
+  again. The 48 of the Folders tab (`f*`, each with a `.json.suite` naming
+  folders.test.mjs) were caught against the site's script at commit 044b8b3.
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
   and every page action, visibility read and locator action on a selector first opens the tab that
@@ -120,7 +170,7 @@ ghu_TEST or github_pat_X.
    - `e2e2/run-mutants.sh` expects a server already on port 8077, or on the address `BASE`
      names, and reports each mutant as KILLED, SURVIVED, STALE or ERROR; name mutants to run only
      those, by their paths from e2e2/ (`bash run-mutants.sh mutants/g*.json` there runs the
-     Dependencies tab's).
+     Dependencies tab's, `mutants/f*.json` the Folders tab's).
 
 The site sets the two constants to the live service and SymphonyBoard's Client ID (site pull
 request #24). The checks set them for themselves, whatever the shipped script holds: the
