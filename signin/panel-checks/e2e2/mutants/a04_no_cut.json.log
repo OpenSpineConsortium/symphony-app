@@ -1,7 +1,0 @@
-FAIL O: Ask in claude.ai opens the question and the page's state in a new tab's address, writes nothing, and needs no write access 
-     the question was not cut to 2000
-     
-     2608 !== 2000
-     
-
-FAIL O: Ask in claude.ai opens the question and the page's state in a new tab's address, writes nothing, and needs no write access :: the question was not cut to 2000

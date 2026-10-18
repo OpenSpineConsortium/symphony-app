@@ -1,4 +1,0 @@
-FAIL O: Ask in claude.ai opens the question and the page's state in a new tab's address, writes nothing, and needs no write access 
-     the question does not lead: I am looking at the Symphony control panel for acme/demo (https://github.com/acme/demo), o
-
-FAIL O: Ask in claude.ai opens the question and the page's state in a new tab's address, writes nothing, and needs no write access :: the question does not lead: I am looking at the Symphony control panel for acme/demo (https://github.com/acme/demo), o
