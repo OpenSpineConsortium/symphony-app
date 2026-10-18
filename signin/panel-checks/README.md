@@ -28,7 +28,7 @@ ghu_TEST or github_pat_X.
   answer, the issue read again before each question and replaced when closed, one press at a time,
   a sign-in changed under the page, a watch read on after a sign-in, and Stop watching; its cadence
   constants are shortened in the served script, and a check may serve its own.
-- `e2e2/graph.test.mjs`: 33 checks of the panel's Dependencies tab (site branch
+- `e2e2/graph.test.mjs`: 35 checks of the panel's Dependencies tab (site branch
   claude/graph-section, 2026-10-18; a section of the long page until the console): the chart text
   the page hands the drawing, byte for byte the two blocks symphony-protocol's board writes for its
   fixture board-epics.json (board-epics-STATE.md, copied into the check from symphony-protocol
@@ -48,8 +48,12 @@ ghu_TEST or github_pat_X.
   button, by the arrow keys and by a link), a node pressed and Centre its row opening the Tasks tab
   with the task's row centred inside that tab's own box and the words on the message line too, the
   board's own charts drawn in the Board tab and a node there doing the same (R), handed to the
-  drawing as the board's own bytes (R2), drawn only where every line of a block is one the board
-  writes, any other block shown as text and nothing planted on the branch board (a picture or a
+  drawing as the board's own bytes (R2: the fixture's two blocks, F's and M's, and a block whose
+  titles hold every printable ASCII character between them, a node of each class and the fold's
+  percent and dollar signs, pasted and compared with the checkout by A2; R3 hands the Board tab
+  that checkout's own render of it, so the tab's gate is held to the lines the library writes now),
+  drawn only where every line of a block is one the board writes, any other block shown as text
+  that reads on its ground (4.5 to 1) and nothing planted on the branch board (a picture or a
   form from elsewhere, fields under the page's own ids, a directive, a link) making an element or a
   request (X), a title opening an HTML comment hiding nothing after it and a heading's escaped
   pipe read as a pipe (Y), the charts' edges, arrowheads and words showing on their ground inside
@@ -70,18 +74,20 @@ ghu_TEST or github_pat_X.
   it reads or presses inside it, and a press that crosses tabs is read at once with page.evaluate,
   which opens nothing, so the page and not console-tabs.mjs is seen opening the tab. A check that
   wants the drawing recorded instead of made serves a stand-in for the library on its route.
-- `e2e2/mutants/`: 123 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/mutants/`: 125 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The 79 of the sign-in (`m*`) were caught against master
-  009109c; the 44 of the Dependencies tab (`g*`, five of them for the tab: show dependencies
+  009109c; the 46 of the Dependencies tab (`g*`, five of them for the tab: show dependencies
   opening no tab and leaving the charts' box where it was, the message line unsaid, the focus
   opening no tab, and the window not put back; eleven from the tab's second review: the message
   line said only when the press leaves the tab, a press always opening the Tasks tab, the board's
   blocks drawn whatever they hold, "$" written raw, the board's classes or quotes lost on the way
   to the drawing, the ASCII fold dropped, a draw not started from the open issues' count, a
-  comment stripped across lines, a heading's escaped pipe left escaped, and the section unsaid)
-  against site branch claude/graph-section at e8f7103 on 2026-10-18, where the 79 were caught
+  comment stripped across lines, a heading's escaped pipe left escaped, and the section unsaid;
+  two from its third review: a block shown as text keeping the chart's light ground and dark ink,
+  and the Board tab's gate narrowed to refuse brackets, the backslash, braces and the tilde)
+  against site branch claude/graph-section at 95df3c0 on 2026-10-18, where the 79 were caught
   again.
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,

@@ -17,8 +17,9 @@
 // mid-load, a second page of sub-issues read and counted, pull requests and another repository's
 // issues left out, a deleted issue read as none, the repository's record unread, a repository
 // renamed, a claim shown by its pull request, one chart that cannot be drawn, the board's own charts
-// drawn in the Board tab as the board's own bytes and only where every line is one the board
-// writes, a board whose title opens an HTML comment shown whole, the charts on a ground their edges
+// drawn in the Board tab as the board's own bytes, for titles of every printable character too, and
+// only where every line is one the board writes, any other block shown as text that reads on its
+// ground, a board whose title opens an HTML comment shown whole, the charts on a ground their edges
 // show on, a press on a task the tables do not hold staying in this tab, a draw that reads nothing
 // once the open issues' answer says the token is under the reserve, the last repository taken off
 // the list and an open list cut short. Each check states what the page promises; a FAIL is a
@@ -56,7 +57,10 @@ async function check(name, fn) {
 // is served the shipped script with its two sign-in constants emptied. A check that needs another
 // cap serves its own copy (open's opts.constants).
 let script = fs.readFileSync(SITE + '/assets/js/symphony-panel.js', 'utf8');
-if (process.env.MUTANT) for (const [a, b] of JSON.parse(fs.readFileSync(process.env.MUTANT, 'utf8'))) { assert.ok(script.includes(a), 'mutant text not found: ' + a.slice(0, 60)); script = script.replace(a, b); }
+// A mutant's replacement goes in as written: given as a string, replace() would read "$'" and the
+// like in it as patterns, and g01's "['$', ..." put the rest of the script there, so the page broke
+// on load and the mutant was caught for that and not for its change.
+if (process.env.MUTANT) for (const [a, b] of JSON.parse(fs.readFileSync(process.env.MUTANT, 'utf8'))) { assert.ok(script.includes(a), 'mutant text not found: ' + a.slice(0, 60)); script = script.replace(a, () => b); }
 script = script.replace(/var SIGNIN_SERVICE = '[^']*';/, "var SIGNIN_SERVICE = '';").replace(/var CLIENT_ID = '[^']*';/, "var CLIENT_ID = '';");
 function withConstants(source, constants) {
   for (const [name, value] of Object.entries(constants)) {
@@ -269,20 +273,25 @@ const stateText = (page) => page.textContent('#cp-graph-state');
 const waitGraph = (page, re, timeout) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById('cp-graph-state').textContent), re.source, { timeout: timeout || 8000 });
 const vendorLoads = (requests) => requests.filter((u) => /\/assets\/js\/vendor\/mermaid\.min\.js/.test(u)).length;
 const headings = (page) => page.$$eval('#cp-graph h3', (hs) => hs.map((h) => h.textContent));
-// for each drawn chart in a box, the contrast against the ground it is drawn on (the nearest box
-// with a colour of its own) of its first edge, its first arrowhead and its host's own words, as
-// WCAG's relative luminance gives it; a ratio, not a colour, so the console's shades may change
-const chartContrast = (page, scope) => page.$$eval(scope + ' .control__chart', (hosts) => {
+// for each node the selector names, the contrast against the ground it sits on (the nearest box,
+// itself first, with a colour of its own) of its own words and, where it holds a drawn chart, of
+// the chart's first edge and first arrowhead, as WCAG's relative luminance gives it; a ratio, not a
+// colour, so the console's shades may change
+const contrastOf = (page, selector) => page.$$eval(selector, (nodes) => {
   const rgb = (c) => { const m = /rgba?\(([^)]+)\)/.exec(c || ''); return m ? m[1].split(',').map((x) => parseFloat(x)) : null; };
   const lum = (c) => [0, 1, 2].map((i) => { const v = c[i] / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
   const ratio = (a, b) => (a && b) ? Math.round(100 * (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05)) / 100 : 0;
   const ground = (node) => { for (let n = node; n; n = n.parentElement) { const c = rgb(getComputedStyle(n).backgroundColor); if (c && (c.length < 4 || c[3] > 0)) return c; } return [255, 255, 255]; };
   const paint = (node, prop) => { if (!node) return null; const v = getComputedStyle(node)[prop]; return v && v !== 'none' ? rgb(v) : null; };
-  return hosts.filter((h) => h.querySelector('svg')).map((h) => {
-    const g = ground(h), edge = h.querySelector('.edgePaths path'), arrow = h.querySelector('marker path');
-    return { ground: g, edge: ratio(paint(edge, 'stroke'), g), arrow: ratio(paint(arrow, 'fill') || paint(arrow, 'stroke'), g), words: ratio(rgb(getComputedStyle(h).color), g) };
+  return nodes.map((h) => {
+    const g = ground(h), seen = { tag: h.tagName, ground: g, words: ratio(rgb(getComputedStyle(h).color), g) };
+    if (!h.querySelector('svg')) return seen;
+    const edge = h.querySelector('.edgePaths path'), arrow = h.querySelector('marker path');
+    return Object.assign(seen, { edge: ratio(paint(edge, 'stroke'), g), arrow: ratio(paint(arrow, 'fill') || paint(arrow, 'stroke'), g) });
   });
 });
+// for each drawn chart in a box, its edges', its arrowheads' and its host's own words' contrast
+const chartContrast = (page, scope) => contrastOf(page, scope + ' .control__chart').then((seen) => seen.filter((c) => 'edge' in c));
 // the edges and arrowheads show on their ground (3 to 1, WCAG's floor for a graphic), and the host's
 // own words, "Drawing the chart..." and a failure, read on it (4.5 to 1)
 function assertContrast(seen) {
@@ -341,12 +350,18 @@ const F_EPIC_41_TEXT = [
   '  classDef blocked fill:#ffe7e7,stroke:#e99695,color:#000000',
   '  classDef closed fill:#eeeeee,stroke:#999999,color:#666666',
 ].join('\n');
+// the block the library checkout named writes for the issues given, number to title, labels, state
+// and the sub-issues' progress: board.mermaid_block over them, with no relation
+function libraryBlock(issues) {
+  const code = 'import json, sys\nfrom sdlc_protocol import board\nspec = json.loads(sys.argv[1])\n' +
+    'print(board.mermaid_block([board.Issue(int(n), s["title"], labels=s["labels"], state=s.get("state", "open"), progress=tuple(s["progress"]) if s.get("progress") else None) for n, s in spec.items()], [], set()))\n';
+  const out = execFileSync('python3', ['-c', code, JSON.stringify(issues)], { cwd: process.env.SYMPHONY_PROTOCOL, encoding: 'utf8' });
+  return mermaidBlocks(out.trimEnd());
+}
 if (process.env.SYMPHONY_PROTOCOL) {
   await check('A1: the block pasted for check F\'s titles is the library\'s own, as the checkout named renders it', async () => {
-    const titles = F_TITLES;
-    const code = 'import json, sys\nfrom sdlc_protocol import board\ntitles = json.loads(sys.argv[1])\nprint(board.mermaid_block([board.Issue(int(n), t, labels=["todo"]) for n, t in titles.items()], [], set()))\n';
-    const out = execFileSync('python3', ['-c', code, JSON.stringify(titles)], { cwd: process.env.SYMPHONY_PROTOCOL, encoding: 'utf8' });
-    assert.deepEqual(mermaidBlocks(out.trimEnd()), [F_EPIC_41_TEXT], 'the library writes these titles otherwise since ' + FIXTURE_COMMIT + ': paste its block again');
+    const issues = Object.fromEntries(Object.entries(F_TITLES).map(([n, title]) => [n, { title, labels: ['todo'] }]));
+    assert.deepEqual(libraryBlock(issues), [F_EPIC_41_TEXT], 'the library writes these titles otherwise since ' + FIXTURE_COMMIT + ': paste its block again');
   });
 } else console.log('SKIP A1: SYMPHONY_PROTOCOL names no checkout of symphony-protocol; the pasted block is from ' + FIXTURE_COMMIT);
 
@@ -956,17 +971,76 @@ function boardOnlyRoutes(text) {
   routes['GET /repos/acme/demo/contents/STATE.md'] = { encoding: 'base64', content: b64(text) };
   return routes;
 }
-await check('R2: the text the Board tab hands the drawing for the board\'s own blocks is byte for byte the board\'s', async () => {
-  const { context, page, errors } = await open(boardOnlyRoutes(boardWith([['Goals', GOALS_TEXT], ['Epic #20: Draw the board (1/3)', EPIC_20_TEXT]])), { extraRoutes: [stubRoute] });
+// Issues whose titles hold every printable ASCII character between them, each short enough that the
+// cut leaves it whole, one holding the fullwidth and small percent and dollar signs the fold turns
+// into the plain ones, and a node of each class and of none: the node lines the Board tab's gate
+// (BOARD_NODE_LINE in the site's script) must let through when the board writes them. GATE_TEXT is
+// the block the library at FIXTURE_COMMIT writes for them; A2 renders it again with the checkout
+// named, and R3 hands the Board tab that fresh render, so a change to the library's labels that the
+// gate does not follow fails here before a board's chart is shown as text.
+const PRINTABLE = Array.from({ length: 94 }, (x, i) => String.fromCharCode(33 + i)).join('');
+const GATE_ISSUES = {
+  61: { title: PRINTABLE.slice(0, 15) + ' ' + PRINTABLE.slice(15, 32), labels: ['todo'] },
+  62: { title: PRINTABLE.slice(32, 48) + ' ' + PRINTABLE.slice(48, 64), labels: ['claimed'] },
+  63: { title: PRINTABLE.slice(64, 79) + ' ' + PRINTABLE.slice(79), labels: ['in-review'] },
+  64: { title: 'a \uff05\uff05{init} \ufe6a b \uff04\uff04x\ufe69\ufe69', labels: ['blocked'] },
+  65: { title: 'Closed long ago', labels: ['todo'], state: 'closed' },
+  66: { title: 'In no state', labels: [], progress: [2, 5] },
+};
+const GATE_TEXT = [
+  'flowchart TD',
+  '  i61["#61 !#quot;#35;#36;#37;&\'()*+,-./ 0123456789:;#lt;=#gt;?@"]:::todo',
+  '  i62["#62 ABCDEFGHIJKLMNOP QRSTUVWXYZ[\\]^_`"]:::claimed',
+  '  i63["#63 abcdefghijklmno pqrstuvwxyz{#124;}~"]:::review',
+  '  i64["#64 a #37;#37;{init} #37; b #36;#36;x#36;#36;"]:::blocked',
+  '  i65["#65 Closed long ago"]:::closed',
+  '  i66["#66 In no state (2/5)"]',
+].concat(CLASS_LINES).join('\n');
+if (process.env.SYMPHONY_PROTOCOL) {
+  await check('A2: the block pasted for the gate\'s titles is the library\'s own, as the checkout named renders it', async () => {
+    assert.deepEqual(libraryBlock(GATE_ISSUES), [GATE_TEXT], 'the library writes these titles otherwise since ' + FIXTURE_COMMIT + ': paste its block again, and widen the Board tab\'s gate if R3 fails');
+  });
+} else console.log('SKIP A2: SYMPHONY_PROTOCOL names no checkout of symphony-protocol; the pasted block is from ' + FIXTURE_COMMIT);
+// the blocks a board's Dependencies section may hold as the board writes them: the fixture's two,
+// check F's hostile, directive, math and folded titles, check M's four, and the gate's titles above
+const BOARD_BLOCKS = [
+  ['Goals', GOALS_TEXT],
+  ['Epic #20: Draw the board (1/3)', EPIC_20_TEXT],
+  ['Epic #41: An epic with hard titles (0/5)', F_EPIC_41_TEXT],
+  ['Goals of another board', M_GOALS_TEXT],
+  ['Epic #60: Second epic (1/6)', M_EPIC_60_TEXT],
+  ['Epic #70: A goal that is an epic (0/1)', M_EPIC_70_TEXT],
+  ['Epic #67: Every printable character', GATE_TEXT],
+];
+// hands the Board tab a board of the blocks given and waits until each is either handed the stand-in
+// or shown as text, then says which
+async function boardHands(blocks) {
+  const { context, page, errors } = await open(boardOnlyRoutes(boardWith(blocks)), { extraRoutes: [stubRoute] });
   await signIn(page, null);
-  await page.waitForFunction(() => (window.__charts || []).length === 2, null, { timeout: 8000 });
+  await page.waitForFunction((n) => (window.__charts || []).length + document.querySelectorAll('#cp-board pre').length >= n, blocks.length, { timeout: 8000 });
   await sleep(300);
-  const charts = await page.evaluate(() => window.__charts);
-  console.log('     handed:', charts.length, '| first lines:', JSON.stringify(charts.map((c) => c.split('\n')[1])));
-  assert.deepEqual(charts, [GOALS_TEXT, EPIC_20_TEXT]);
-  assert.deepEqual(errors, []);
+  const seen = await page.evaluate(() => ({ charts: window.__charts || [], shownAsText: Array.from(document.querySelectorAll('#cp-board pre')).map((pre) => pre.textContent) }));
   await context.close();
+  return Object.assign(seen, { errors });
+}
+await check('R2: the text the Board tab hands the drawing for every block the board writes is byte for byte the board\'s, hostile, directive, math, folded and every printable character among them', async () => {
+  const seen = await boardHands(BOARD_BLOCKS);
+  console.log('     handed:', seen.charts.length, '| shown as text:', seen.shownAsText.length, '| first lines:', JSON.stringify(seen.charts.map((c) => c.split('\n')[1])));
+  assert.deepEqual(seen.shownAsText, [], 'the Board tab refused a block the board writes');
+  assert.deepEqual(seen.charts, BOARD_BLOCKS.map((b) => b[1]));
+  assert.deepEqual(seen.errors, []);
 });
+if (process.env.SYMPHONY_PROTOCOL) {
+  await check('R3: the Board tab hands the drawing, unchanged, the block the library named writes now for the gate\'s titles', async () => {
+    const fresh = libraryBlock(GATE_ISSUES);
+    assert.equal(fresh.length, 1);
+    const seen = await boardHands([['Epic #67: Every printable character', fresh[0]]]);
+    console.log('     handed:', seen.charts.length, '| shown as text:', seen.shownAsText.length);
+    assert.deepEqual(seen.shownAsText, [], 'the Board tab refuses a block the library writes: widen its gate (BOARD_NODE_LINE) to the library\'s labels');
+    assert.deepEqual(seen.charts, fresh);
+    assert.deepEqual(seen.errors, []);
+  });
+} else console.log('SKIP R3: SYMPHONY_PROTOCOL names no checkout of symphony-protocol; R2 hands the pasted block');
 
 // What anyone who may push the branch board could put in its charts: a picture fetched from
 // elsewhere, a form posting elsewhere, fields under the ids the page's own forms are read by, a
@@ -981,7 +1055,7 @@ const PLANTED = [
   ['Planted: a raw label', 'flowchart TD\n  i1["#1 <b>bold</b> $$x$$"]:::todo'],
   ['Planted: another number', 'flowchart TD\n  i1["#2 a"]:::todo'],
 ];
-await check('X: the Board tab draws a block of the board\'s text only where every line is one the board writes, shows any other as text, and nothing planted makes an element or a request', async () => {
+await check('X: the Board tab draws a block of the board\'s text only where every line is one the board writes, shows any other as text that reads on its ground, and nothing planted makes an element or a request', async () => {
   const text = boardWith([['Goals', GOALS_TEXT], ['Epic #20: Draw the board (1/3)', EPIC_20_TEXT]].concat(PLANTED));
   const { context, page, errors, requests, dialogs } = await open(boardOnlyRoutes(text));
   await signIn(page, null);
@@ -1013,6 +1087,13 @@ await check('X: the Board tab draws a block of the board\'s text only where ever
   assert.equal(seen.ids, '1:1', 'a planted field took one of the page\'s ids');
   assert.deepEqual(elsewhere, []);
   assert.equal(vendorLoads(requests), 1);
+  // shown as text, a block reads: its words and its text on the ground each sits on, in the Board
+  // tab's own colours and not a drawing's (4.5 to 1, WCAG's floor for text)
+  await toTab(page, 'board');
+  const reads = await contrastOf(page, '#cp-board p:has(+ pre.admin__text), #cp-board pre.admin__text');
+  console.log('     shown as text, contrast:', JSON.stringify(reads.slice(0, 2)));
+  assert.equal(reads.length, 2 * PLANTED.length);
+  for (const r of reads) assert.ok(r.words >= 4.5, 'a block shown as text barely reads on its ground: ' + JSON.stringify(r));
   assert.deepEqual(dialogs, []);
   assert.deepEqual(errors, []);
   await context.close();

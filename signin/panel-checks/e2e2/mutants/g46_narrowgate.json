@@ -1,0 +1,1 @@
+[["var BOARD_NODE_LINE = /^  i([1-9][0-9]{0,8})\\[\"#\\1(?: [ !#&-;=?-{}~]*)?\"\\](?::::(?:todo|claimed|review|blocked|closed))?$/;", "var BOARD_NODE_LINE = /^  i([1-9][0-9]{0,8})\\[\"#\\1(?: [ !#&-;=?-Z^-z]*)?\"\\](?::::(?:todo|claimed|review|blocked|closed))?$/;"]]
