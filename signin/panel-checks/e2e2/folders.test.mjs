@@ -57,7 +57,7 @@ function repoRoutes(opts) {
     'GET /user/repos': o.newRepos || [],
   };
 }
-const HOSTILE = '<img src=x onerror=window.__hostile=1>';
+const HOSTILE = '"quoted" <img src=x onerror=window.__hostile=1> a/b\\c \'x\'';
 function graphRoutes() {
   return {
     'GET /v1.0/me/drive': { id: 'drive1', driveType: 'personal', owner: { user: { displayName: 'Greg' } } },
@@ -68,6 +68,8 @@ function graphRoutes() {
     ] },
     'GET /v1.0/me/drive/items/f1/children': { value: [
       { id: 'b1', name: 'one.docx', file: { mimeType: 'x' }, size: 2048, parentReference: { driveId: 'drive1' }, lastModifiedDateTime: now },
+    ], '@odata.nextLink': 'https://graph.microsoft.com/v1.0/me/drive/items/f1/children?$skiptoken=page2' },
+    'GET /v1.0/me/drive/items/f1/children?page2': { value: [
       { id: 'b2', name: 'two.docx', file: { mimeType: 'x' }, size: 4096, parentReference: { driveId: 'drive1' }, lastModifiedDateTime: now },
     ] },
   };
@@ -117,7 +119,7 @@ async function open(opts) {
     const u = new URL(req.url());
     const key = req.method() + ' ' + u.pathname;
     graph.push({ key, auth: req.headers()['authorization'] || '', query: u.search });
-    const r = graphTable[key];
+    const r = graphTable[/skiptoken/.test(u.search) ? key + '?page2' : key];
     if (r === undefined) return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: { code: 'itemNotFound', message: 'not found' } }) });
     if (r && r.status) return route.fulfill({ status: r.status, contentType: 'application/json', body: JSON.stringify(r.body || {}) });
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(r) });
@@ -220,8 +222,8 @@ await check('B: Connect goes to Microsoft with PKCE and the page as redirect, co
   await context.close();
 });
 
-await check('C: the drive is drawn from Graph with $select and $top, a folder opens, files and folders tick, a hostile name stays text', async () => {
-  const { context, page, graph, errors } = await open({});
+await check('C: the drive is drawn from Graph with $select and $top, a folder opens, its second page follows, files and folders tick, a hostile name stays text, nothing is written', async () => {
+  const { context, page, calls, graph, errors } = await open({});
   await connect(page);
   await page.waitForSelector('#fd-items tbody tr');
   const root = graph.find((g) => g.key === 'GET /v1.0/me/drive/root/children');
@@ -240,7 +242,8 @@ await check('C: the drive is drawn from Graph with $select and $top, a folder op
   await page.check('#fd-items input[data-id="a1"]');
   await page.click('#fd-items tbody tr:first-child button');
   await page.waitForFunction(() => /one\.docx/.test(document.getElementById('fd-items').textContent));
-  assert.ok(graph.find((g) => g.key === 'GET /v1.0/me/drive/items/f1/children'));
+  assert.equal(graph.filter((g) => g.key === 'GET /v1.0/me/drive/items/f1/children').length, 2, 'the @odata.nextLink page was not asked for');
+  assert.match(await page.textContent('#fd-items'), /two\.docx/, 'the second page is not listed');
   assert.match(await page.textContent('.folders__crumbs'), /My files\/Papers/);
   await page.check('#fd-items input[data-id="b1"]');
   await page.click('.folders__crumbs button');
@@ -252,6 +255,7 @@ await check('C: the drive is drawn from Graph with $select and $top, a folder op
   // untick from the list
   await page.click('#fd-picked li:nth-child(2) button');
   assert.deepEqual(await page.$$eval('#fd-picked li code', (l) => l.map((c) => c.textContent)), ['notes.docx', 'Papers']);
+  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), [], 'something was written before Track');
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -314,6 +318,66 @@ for (const [name, opts] of [['E', { noSecrets: true }], ['E2', { noSecretsRead: 
     await context.close();
   });
 }
+
+await check('D2: two presses of Track in a row make one secret, one file and one run', async () => {
+  const routes = repoRoutes({});
+  routes['GET /repos/acme/demo/actions/secrets/public-key'] = async () => { await new Promise((r) => setTimeout(r, 300)); return { key_id: 'k1', key: PUBLIC_KEY }; };
+  const { context, page, calls, errors } = await open({ routes });
+  await connect(page);
+  await page.waitForSelector('#fd-items tbody tr');
+  await page.check('#fd-items input[data-id="a1"]');
+  calls.length = 0;
+  await page.$eval('#fd-track', (b) => { b.click(); b.click(); });
+  await page.waitForFunction(() => /acme\/demo tracks 1 item of OneDrive/.test(document.getElementById('msg').textContent));
+  const writes = calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key);
+  assert.deepEqual(writes, ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('E3: a 403 on the first run still leaves the secret and the file written, says the sign-in has no Actions right, gives the Run workflow link, and the hostile name reaches the file as given', async () => {
+  const { context, page, calls, errors } = await open({ noActions: true });
+  await connect(page);
+  await page.waitForSelector('#fd-items tbody tr');
+  await page.check('#fd-items input[data-id="h1"]');
+  calls.length = 0;
+  await page.click('#fd-track');
+  await page.waitForFunction(() => /could not be started from here \(403/.test(document.getElementById('msg').textContent));
+  const text = await msg(page);
+  assert.match(text, /acme\/demo tracks 1 item of OneDrive in papers\//);
+  assert.match(text, /Open https:\/\/github.com\/acme\/demo\/actions\/workflows\/drive-sync.yml and press "Run workflow"/);
+  assert.match(text, /tokens are dropped from this page/);
+  const writes = calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key);
+  assert.deepEqual(writes, ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
+  const file = JSON.parse(Buffer.from(calls.find((c) => c.key === 'PUT /repos/acme/demo/contents/.github/symphony/drive.json').body.content, 'base64').toString('utf8'));
+  assert.deepEqual(file.items, [{ id: 'h1', name: HOSTILE, drive: 'drive1' }], 'the name goes to the file as the drive gave it; the run cleans it');
+  assert.equal(await storageHolds(page, REFRESH), false);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('E4: a folder that is not one plain name is refused in words before anything is written', async () => {
+  const { context, page, calls, errors } = await open({});
+  await connect(page);
+  await page.waitForSelector('#fd-items tbody tr');
+  await page.check('#fd-items input[data-id="a1"]');
+  calls.length = 0;
+  // the page trims the box first, so a blank at either end is no refusal; a dot at the end is
+  for (const bad of ['', 'a/b', '..', 'papers.', '.papers', 'pa pers.', 'x'.repeat(81), 'a\\b', 'pa:pers']) {
+    await page.$eval('#fd-folder', (box, v) => { box.value = v; }, bad);
+    await page.$eval('#msg', (m) => { m.textContent = ''; });
+    await page.click('#fd-track');
+    await page.waitForFunction(() => /The folder is one name of up to 80 letters/.test(document.getElementById('msg').textContent));
+    assert.equal(calls.filter((c) => !c.key.startsWith('GET ')).length, 0, 'a write for the folder ' + JSON.stringify(bad));
+    assert.equal(calls.length, 0, 'a read for the folder ' + JSON.stringify(bad));
+  }
+  await page.$eval('#fd-folder', (box) => { box.value = 'my papers 2026'; });
+  await page.click('#fd-track');
+  await page.waitForFunction(() => /acme\/demo tracks 1 item of OneDrive in my papers 2026\//.test(document.getElementById('msg').textContent));
+  assert.equal(JSON.parse(Buffer.from(calls.find((c) => c.key === 'PUT /repos/acme/demo/contents/.github/symphony/drive.json').body.content, 'base64').toString('utf8')).folder, 'my papers 2026');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
 
 await check('F: a repository that tracks a drive shows what, the connect-again day 90 days on, the secret, and Sync now starts the run', async () => {
   const { context, page, calls, errors } = await open({ tracked: true, secret: true });
