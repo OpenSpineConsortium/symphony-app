@@ -28,6 +28,19 @@ ghu_TEST or github_pat_X.
   answer, the issue read again before each question and replaced when closed, one press at a time,
   a sign-in changed under the page, a watch read on after a sign-in, and Stop watching; its cadence
   constants are shortened in the served script, and a check may serve its own.
+- `e2e2/graph.test.mjs`: 14 checks of the panel's Dependencies section (site branch
+  claude/graph-section, 2026-10-18): the chart text the page hands the drawing, byte for byte the
+  two blocks symphony-protocol's board writes for its fixture board-epics.json (board-epics-STATE.md
+  at fea34c6, copied into the check), the reads made and never made (one sub_issues read per open
+  epic or goal with sub-issues, one blocked_by read per sub-issue of an epic whose summary counts a
+  blocker, none for a goal's children or an epic whose summary says none, nothing written), the
+  vendored Mermaid loaded from the served site only when there is a chart and drawing both charts
+  with their nodes and classes, a node pressed and Centre its row centring the task's row, the
+  tables alone when the drawing script cannot load, a hostile title inert, a 403, a 429 and the
+  cap each said in words with nothing half drawn (the cap lowered in the served script), nothing
+  drawn without an epic, Refresh redrawing the new count, a goal listed with the epics, a
+  repository switched mid-draw, and the tables' words. A check that wants the drawing recorded
+  instead of made serves a stand-in for the library on its route.
 - `e2e2/mutants/`: 79 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it.
   `e2e2/run-mutants.sh` runs them. Every one was caught against master 009109c.
