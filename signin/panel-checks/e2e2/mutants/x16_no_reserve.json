@@ -1,0 +1,1 @@
+[["    if (rateLatest !== null && rateLatest < GRAPH_RESERVE) return Promise.reject(new Error('GitHub says this token has ' + rateLatest", "    if (false) return Promise.reject(new Error('GitHub says this token has ' + rateLatest"]]

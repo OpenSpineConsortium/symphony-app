@@ -1,0 +1,1 @@
+[["    add(t, el('span', 'ex__title', n.title));", "    var ti = el('span', 'ex__title'); ti.innerHTML = n.title; add(t, ti);"]]

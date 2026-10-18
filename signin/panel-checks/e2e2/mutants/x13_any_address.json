@@ -1,0 +1,1 @@
+[["  function exHttps(url) { return typeof url === 'string' && /^https:\\/\\//.test(url) ? url : ''; }", "  function exHttps(url) { return typeof url === 'string' ? url : ''; }"]]

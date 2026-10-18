@@ -1,0 +1,1 @@
+[["'/actions/runs?branch=' + encodeURIComponent(branch) + '&per_page=20'", "'/actions/runs?branch=' + branch + '&per_page=20'"]]
