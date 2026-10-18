@@ -54,6 +54,10 @@ ghu_TEST or github_pat_X.
   `e2e2/run-mutants.sh` runs them. The 79 of the sign-in (`m*`) were caught against master
   009109c; the 28 of the Dependencies section (`g*`) against site branch claude/graph-section on
   2026-10-18.
+- `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
+  2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
+  and every page action, visibility read and locator action on a selector first opens the tab that
+  holds it, as a person presses its rail button.
 - `e2e2/shots.mjs`: the screenshots of the gate, before and after the two constants are set.
 - `review-signin/` and `review2/` to `review5/`: the five adversarial reviews of the sign-in, each
   with its report (`report.txt`) and its own reproductions. The reports name the session's

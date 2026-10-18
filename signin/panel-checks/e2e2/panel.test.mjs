@@ -1,5 +1,6 @@
 // End-to-end test of the control panel and the cost page against a mocked GitHub API.
 import { chromium } from 'playwright';
+import { consoleTabs } from './console-tabs.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
@@ -74,6 +75,7 @@ const rawRoutes = {
 };
 
 const browser = await chromium.launch();
+await consoleTabs(browser);
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
 await context.route('**/assets/js/symphony-panel.js*', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: UNCONFIGURED }));
 await context.route('https://api.github.com/**', async (route) => {
