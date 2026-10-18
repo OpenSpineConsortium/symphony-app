@@ -17,6 +17,7 @@
     "actions": "write",
     "administration": "write",
     "secrets": "write",
+    "actions_variables": "write",
     "metadata": "read",
     "organization_secrets": "write",
     "organization_actions_variables": "write"
