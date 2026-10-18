@@ -13,7 +13,12 @@
     "issues": "write",
     "pull_requests": "write",
     "checks": "write",
-    "metadata": "read"
+    "workflows": "write",
+    "actions": "write",
+    "administration": "write",
+    "metadata": "read",
+    "organization_secrets": "write",
+    "organization_actions_variables": "write"
   },
   "default_events": [
     "issues",

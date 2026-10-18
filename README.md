@@ -64,7 +64,7 @@ installations may use the App.
 | app/envfile.py | The env file register.py writes and the server reads |
 | app/vendor/ | protocol_check.py and claims.py from symphony-protocol, with its `__init__.py` and vendoring.py, and VENDORED, the record they are held to (vendor/README.md) |
 | manifest.json | The App's manifest: name, permissions, events |
-| manifest-setup.json | The setup App's manifest: Administration and Metadata, public, no webhook (The Setup App for the front door) |
+| manifest-setup.json | The setup App's manifest: Administration and Metadata, the organization's Administration, public, no webhook (The Setup App for the front door) |
 | scripts/register.py | Registers the App, or with `--setup` the setup App, for an organization by GitHub's manifest flow |
 | scripts/collect.py | Collects the field metrics projects share, daily from .github/workflows/collect.yml (Field metrics) |
 | scripts/check.sh | The checks; CI's job `check` runs it |
@@ -96,8 +96,11 @@ By hand, at `https://github.com/organizations/<org>/settings/apps/new`:
   https://github.com/OpenSpineConsortium/symphony-template.
 - Webhook: untick Active (stage 2 turns it on).
 - Repository permissions: Contents read and write, Issues read and write,
-  Pull requests read and write, Checks read and write; Metadata read-only
-  comes with them.
+  Pull requests read and write, Checks read and write, Workflows read and
+  write, Actions read and write, Administration read and write; Metadata
+  read-only comes with them.
+- Organization permissions: Secrets read and write, Variables read and
+  write, for the control panel's Tokens page.
 - Events: Issues, Issue comment, Pull request, Push, Check suite. GitHub
   delivers them only once the webhook is active; if the form hides them
   while it is off, tick them in stage 2.
@@ -170,8 +173,9 @@ commit starts the first Checks and Board runs, and the setup issue it opens
 starts the Board, instead of both waiting for the six-hourly fallback or a
 person. board.yml keeps GITHUB_TOKEN for its push to the branch `board`: that
 push starting no workflow is what keeps the Board from starting itself
-again. The App has no `workflows` permission, so, like GITHUB_TOKEN, its
-token cannot change a file under .github/workflows/.
+again. The App holds the `workflows` permission, since an adoption's pull
+request brings files under .github/workflows/, so its token, unlike
+GITHUB_TOKEN, can change a file there.
 
 ## The Setup App for the front door
 
@@ -183,9 +187,16 @@ adopts the template into a repository in one run of its workflow
 the template's scripts/setup-repo.sh applies by hand: the default
 branch's ruleset, delete-branch-on-merge, auto-merge, and secret scanning
 with push protection. Those take the Administration permission, which
-the main App, installed for good on every repository it serves, must
-never hold. So the setup App holds Administration (write) and Metadata
-(read) and nothing else, no webhook and no events, and an adopter
+the main App, installed for good on every repository it serves, uses for
+one thing only since 2026-10-18: the control panel's Share tab invites a
+person as a collaborator, as the person signed in (the owner's choice;
+the Apps' privacy statement, version 17). No adoption run uses it there,
+so the setup App holds Administration (write) and Metadata
+(read) and, on an organization, the organization's Administration
+(write), for the one box "Allow GitHub Actions to create and approve
+pull requests" that a new organization holds off for its repositories
+(the owner's choice of 2026-10-18; the Apps' privacy statement, version
+14), and nothing else, no webhook and no events, and an adopter
 installs it on the one repository for that one run and uninstalls it
 afterwards; the run mints its token for that repository alone, and the
 repository's settings need no step by hand.
