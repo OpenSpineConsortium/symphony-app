@@ -126,6 +126,16 @@ async function gateFacts(page) {
   });
 }
 
+// A wait on #msg in a tab that is loading a new document starts once that document has loaded, as
+// the other checks' waits do after page.goto: until the parser reaches #msg, in the console's
+// status line at the foot of the body, there is no element to read, and a wait whose test throws
+// ends at once. The panel's script runs after it, at the end of the body, so by the load the
+// console is set up as well.
+const ORIGIN = new URL(BASE).origin;
+// Sign in with GitHub leaves for GitHub's authorize page, which sends the tab back with the state
+const pressSigninAndReturn = (page) => Promise.all([page.waitForURL((u) => u.origin === ORIGIN && u.searchParams.has('state')), page.click('#cp-signin')]);
+const onControlPage = (u) => u.origin === ORIGIN && u.pathname === '/symphony/control/';
+
 await check('A1: unconfigured, the control page shows Sign in with GitHub first, unpressable, says why, token box open', async () => {
   const { context, page, service, errors } = await open({});
   const f = await gateFacts(page);
@@ -259,7 +269,7 @@ await check('B6: the cost page signs in and comes back to itself', async () => {
 
 await check('C1: GitHub refusing (access denied) says so, opens the token box and cleans the address', async () => {
   const { context, page, service } = await open({ script: configured, denied: true, path: '/symphony/control/?repo=acme/demo' });
-  await page.click('#cp-signin');
+  await pressSigninAndReturn(page);
   await page.waitForFunction(() => /did not sign you in/.test(document.getElementById('msg').textContent));
   const msg = await page.textContent('#msg');
   const f = await gateFacts(page);
@@ -287,7 +297,7 @@ await check('C2: a return whose state differs exchanges nothing', async () => {
 
 await check('C3: the service refusing the code says so and offers the token', async () => {
   const { context, page } = await open({ script: configured, service: { '/exchange': { status: 502, body: { error: 'bad_verification_code', error_description: 'The code passed is incorrect or expired.' } } }, path: '/symphony/control/' });
-  await page.click('#cp-signin');
+  await pressSigninAndReturn(page);
   await page.waitForFunction(() => /bad_verification_code/.test(document.getElementById('msg').textContent));
   const msg = await page.textContent('#msg');
   console.log('      message:', msg);
@@ -702,6 +712,7 @@ await check('F6: a copy of a signed-in tab (window.open, Duplicate) never spends
   await page.evaluate(() => { const o = JSON.parse(sessionStorage.getItem('symphony_panel_oauth')); o.expires_at = Date.now() - 1000; sessionStorage.setItem('symphony_panel_oauth', JSON.stringify(o)); });
   const [copy] = await Promise.all([context.waitForEvent('page'), page.evaluate(() => { window.open(location.href); })]);
   copy.on('pageerror', (e) => errors.push(String(e)));
+  await copy.waitForURL(onControlPage);
   await copy.waitForFunction(() => /ran out after its eight hours/.test(document.getElementById('msg').textContent), null, { timeout: 10000 });
   assert.equal(service.filter((x) => x.path === '/refresh').length, 0, 'the copy spent the refresh token');
   const n = calls.length;

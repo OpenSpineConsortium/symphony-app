@@ -10,7 +10,8 @@
   "public": true,
   "default_permissions": {
     "administration": "write",
-    "metadata": "read"
+    "metadata": "read",
+    "organization_administration": "write"
   },
   "default_events": []
 }
