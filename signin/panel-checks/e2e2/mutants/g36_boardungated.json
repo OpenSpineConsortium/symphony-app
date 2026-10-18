@@ -1,0 +1,1 @@
+[["      if (boardChartLines(host.getAttribute('data-chart'))) return true;\n", "      return true;\n"]]

@@ -1,0 +1,1 @@
+[["    $('cp-graph-said').textContent = assistantFocus(n);", "    window.open('https://github.com/acme/demo/issues/' + n, '_blank'); $('cp-graph-said').textContent = assistantFocus(n);"]]

@@ -1,0 +1,1 @@
+[["    say($('cp-graph-said').textContent);\n", "    if ($('cp-graph-said').closest('[data-tab-panel]').hidden) say($('cp-graph-said').textContent);\n"]]

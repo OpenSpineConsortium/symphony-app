@@ -1,0 +1,1 @@
+[["      revealTab(heading);\n      scrollInDeck(heading, { block: 'start' });\n", "      heading.scrollIntoView({ block: 'start' });\n"]]

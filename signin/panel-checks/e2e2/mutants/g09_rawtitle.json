@@ -1,0 +1,1 @@
+[["    var label = '#' + issue.number + (title ? ' ' + title : '');", "    title = issue.title; var label = '#' + issue.number + (title ? ' ' + title : '');"]]

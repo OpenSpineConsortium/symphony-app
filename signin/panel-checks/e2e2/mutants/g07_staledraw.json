@@ -1,0 +1,1 @@
+[["function graphLive(draw) { return !stale(draw.s) && draw.s.graphDraw === draw.n; }", "function graphLive(draw) { return true; }"]]

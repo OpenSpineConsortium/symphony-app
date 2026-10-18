@@ -1,0 +1,1 @@
+[["      graphReset('Nothing to draw yet: no open issue labelled epic or goal has sub-issues. ' + GRAPH_START + graphCut(draw));", "      loadMermaid(); graphReset('Nothing to draw yet: no open issue labelled epic or goal has sub-issues. ' + GRAPH_START + graphCut(draw));"]]

@@ -1,0 +1,1 @@
+[["return graphDraw(m, chart).catch(function (e) { undrawn.push(chart.heading + ': ' + e.message); });", "return graphDraw(m, chart);"]]
