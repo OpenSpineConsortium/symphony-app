@@ -1,0 +1,1 @@
+[["window.open(OWN_CLAUDE + encodeURIComponent(whole), '_blank', 'noopener,noreferrer');", "window.open(OWN_CLAUDE + encodeURIComponent(whole), '_self', 'noopener,noreferrer');"]]

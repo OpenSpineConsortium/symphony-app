@@ -1015,6 +1015,71 @@ await check('N4: the symphony block is hidden from the answer and nothing else i
   await context.close();
 });
 
+await check('O: Ask in claude.ai opens the question and the page\'s state in a new tab\'s address, writes nothing, and needs no write access', async () => {
+  // the opened tab is recorded in place of opened, since claude.ai is off the mocked network
+  const stub = (page) => page.evaluate(() => { window.__opened = []; window.open = function (u, t, f) { window.__opened.push([u, t, f]); return null; }; });
+  const opened = (page) => page.evaluate(() => window.__opened);
+  // without write access the box is hidden and the button still works, carrying the state alone
+  const routes = baseRoutes();
+  routes['GET /repos/acme/demo/collaborators/tester/permission'] = { permission: 'read', role_name: 'read', user: { login: 'tester' } };
+  const first = await open(routes);
+  await signIn(first.page);
+  await waitState(first.page, /write access/);
+  await stub(first.page);
+  assert.equal(await first.page.isVisible('#cp-as-box'), false, 'the question box is offered');
+  assert.ok(await first.page.isVisible('#cp-as-own'), 'the button is not offered without write access');
+  await first.page.click('#cp-as-own');
+  let got = await opened(first.page);
+  assert.equal(got.length, 1, 'one tab opens, not ' + got.length);
+  let u = new URL(got[0][0]);
+  assert.equal(u.origin + u.pathname, 'https://claude.ai/new');
+  assert.match(u.searchParams.get('q'), /^I am looking at the Symphony control panel for acme\/demo \(https:\/\/github\.com\/acme\/demo\), on its [A-Za-z ]+ tab\.$/);
+  assert.deepEqual([got[0][1], got[0][2]], ['_blank', 'noopener,noreferrer'], 'the tab is not a new one with no opener and no referrer');
+  assert.equal(posts(first.calls).length, 0, 'something was written: ' + posts(first.calls).map((c) => c.key));
+  assert.deepEqual(first.errors, []);
+  await first.context.close();
+  // with write access the typed question comes first, then the state, which names the tab shown
+  const { context, page, calls, errors } = await open(baseRoutes());
+  await signIn(page);
+  await page.waitForSelector('#cp-as-box:not(.hidden)', { timeout: 8000 });
+  await stub(page);
+  await page.evaluate(() => document.querySelector('.console__rail [data-tab="tasks"]').click());
+  const tasksName = await page.$eval('.console__rail [data-tab="tasks"] .rail__name', (n) => n.textContent.trim());
+  await page.fill('#cp-as-q', 'What is blocked?');
+  await page.click('#cp-as-own');
+  got = await opened(page);
+  assert.equal(got.length, 1, 'one tab opens, not ' + got.length);
+  const q = new URL(got[0][0]).searchParams.get('q');
+  assert.ok(q.startsWith('What is blocked?\n\nI am looking at the Symphony control panel for acme/demo'), 'the question does not lead: ' + q.slice(0, 90));
+  assert.ok(q.endsWith(', on its ' + tasksName + ' tab.'), 'the tab shown is not named: ' + q.slice(-60));
+  assert.equal(await page.inputValue('#cp-as-q'), 'What is blocked?', 'the question was cleared from the box');
+  // a question longer than an address carries is cut, the page's lines left out, and the message line says so
+  await page.fill('#cp-as-q', 'x'.repeat(2500));
+  await page.click('#cp-as-own');
+  got = await opened(page);
+  assert.equal(got.length, 2, 'the long question opened ' + (got.length - 1) + ' tabs');
+  assert.equal(new URL(got[1][0]).searchParams.get('q'), 'x'.repeat(2000), 'the question was not cut to its first 2000 alone');
+  assert.match(await page.textContent('#msg'), /cut to its first 2000, and what the page shows is left out/);
+  // a question of 1500 characters outside ASCII fits the bound but not the address, since each encodes to nine: the encoded form is held to 6000
+  await page.fill('#cp-as-q', '\u3042'.repeat(1500));
+  await page.click('#cp-as-own');
+  got = await opened(page);
+  assert.equal(got.length, 3, 'the non-ASCII question opened ' + (got.length - 2) + ' tabs');
+  const enc = new URL(got[2][0]).search.slice(3);
+  assert.ok(enc.length <= 6000 && enc.length > 5900, 'the encoded question is ' + enc.length + ' characters, not held to 6000');
+  assert.ok(/^(%E3%81%82)+$/.test(enc), 'the cut split a character: ' + enc.slice(-20));
+  assert.match(await page.textContent('#msg'), /cut to fit/);
+  // the cut falls by code points: a question whose 2000th character is an emoji keeps it whole (a split pair would make the address malformed and open nothing)
+  await page.fill('#cp-as-q', 'x'.repeat(1999) + '\uD83D\uDE00'.repeat(2));
+  await page.click('#cp-as-own');
+  got = await opened(page);
+  assert.equal(got.length, 4, 'the question ending in emoji opened ' + (got.length - 3) + ' tabs');
+  assert.equal(new URL(got[3][0]).searchParams.get('q'), 'x'.repeat(1999) + '\uD83D\uDE00', 'the cut did not keep the 2000th character whole');
+  assert.equal(posts(calls).length, 0, 'something was written: ' + posts(calls).map((c) => c.key));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 await browser.close();
 console.log('\n' + results.join('\n'));
 if (results.some((r) => r.startsWith('FAIL'))) process.exit(1);

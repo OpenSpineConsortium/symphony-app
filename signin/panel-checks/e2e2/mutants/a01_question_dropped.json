@@ -1,0 +1,1 @@
+[["whole = text + (text && room > 0 ? '\\n\\n' : '') + (room > 0 ? ownCut(context, room) : '');", "whole = (room > 0 ? ownCut(context, room) : '');"]]
