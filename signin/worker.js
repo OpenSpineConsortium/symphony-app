@@ -13,16 +13,38 @@
 // token GitHub gave beside it, and /revoke kills the token at GitHub when the person presses
 // "Forget the token".
 //
+// The drive routes serve the panel's Folders tab (/symphony/control/#folders), which makes
+// a repository track files and folders of a person's OneDrive (symphony-template's
+// docs/research/drive-sync.md). The same shape as the GitHub sign-in, with Microsoft's token
+// endpoint in GitHub's place: GET /drive/config says which provider is set up, by its public
+// client id; POST /drive/connect exchanges the consent code the page brought back, with the
+// client secret, for the drive's tokens, which the page seals into the repository's secret;
+// POST /drive/token trades the refresh token for an access token, which the repository's own
+// run calls on every sync, and the page calls when its access token runs out during a sitting.
+// The provider table holds Microsoft alone: the owner declined the browser key Google's Picker
+// takes (2026-10-18), so Google Drive waits for a way that needs none, and a request naming any
+// other provider is answered 400 unknown_provider.
+//
 // What it never does: it never sees a Claude token, never reads a repository, never calls anything
-// but GitHub's token endpoint and its token-revocation endpoint, and answers only the page's
-// origin (ALLOWED_ORIGIN). The Origin header is the browser's word, which a script elsewhere
-// cannot forge but a program can; what binds a code to the page that asked for it is PKCE: the
-// page sends GitHub a hash of a secret it made, and only the holder of that secret can exchange
-// the code, through this service or anywhere.
+// but GitHub's token endpoint and its token-revocation endpoint and Microsoft's token endpoint, and
+// answers only the page's origin (ALLOWED_ORIGIN), except that /drive/token takes a call with no
+// Origin at all, the repository's run, which is no browser. The Origin header is the browser's
+// word, which a script elsewhere cannot forge but a program can; what binds a code to the page
+// that asked for it is PKCE: the page sends the provider a hash of a secret it made, and only the
+// holder of that secret can exchange the code, through this service or anywhere. /drive/token
+// redeems whatever refresh token it is sent, for any caller, so the repository's secret that a run
+// sends is a bearer credential: whoever can run a workflow on the repository can read it and,
+// through this route, reach the whole drive until it lapses or the person withdraws Symphony's
+// access at Microsoft (README.md, the drive routes). Binding it to the one repository, by a token
+// wrapped here and a GitHub Actions OIDC check on this route, is a change of its own.
 //
 // Settings (Cloudflare, Workers & Pages, the Worker, Settings, Variables and Secrets):
 //   GITHUB_CLIENT_ID      the App's client id (a text variable; it is public anyway)
 //   GITHUB_CLIENT_SECRET  a client secret generated on the App's settings page (a secret)
+//   MICROSOFT_CLIENT_ID   the Entra app registration's Application (client) ID (a text
+//                         variable); with it and its secret unset, /drive/config lists no
+//                         provider and the Folders tab says the owner has not set it up
+//   MICROSOFT_CLIENT_SECRET  a client secret of that registration (a secret)
 //   ALLOWED_ORIGIN        the page's origin, https://openspineconsortium.com (a text variable;
 //                         that is the default when unset; a value that is not a bare origin
 //                         makes every answer 503, so a mistake shows instead of refusing everyone)
@@ -34,7 +56,28 @@ const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const GITHUB_API = 'https://api.github.com';
 const DEFAULT_ORIGIN = 'https://openspineconsortium.com';
 const MAX_BODY = 4096;
-const ROUTES = ['/exchange', '/refresh', '/revoke'];
+// a drive's consent code and refresh token run to a few thousand characters, so the drive routes
+// read twice as much
+const MAX_DRIVE_BODY = 8192;
+const ROUTES = ['/exchange', '/refresh', '/revoke', '/drive/config', '/drive/connect', '/drive/token'];
+// the one address a drive's consent may come back to: the control panel's own page, the same one
+// GitHub's sign-in returns to, which tells the two returns apart by the state each left with and
+// then opens its Folders tab; the trailing slash is part of it, since Microsoft matches the
+// registered redirect URI exactly and so does this service
+const CONSOLE_PATH = '/symphony/control/';
+// Each drive provider: its token endpoint, the Worker settings that hold its client id and
+// secret, and the scope its tokens are for. Microsoft's v2.0 endpoint for "common" takes any
+// Microsoft account, personal or a tenant's; a Web platform registration must send its client
+// secret on every token request, and Microsoft refuses the secret from a request that carries an
+// Origin header, which a fetch from a Worker does not.
+const PROVIDERS = {
+  microsoft: {
+    tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+    id: 'MICROSOFT_CLIENT_ID',
+    secret: 'MICROSOFT_CLIENT_SECRET',
+    scope: 'Files.ReadWrite offline_access'
+  }
+};
 
 /** the one origin answered, as a bare origin; null when the setting is not one */
 function originOf(env) {
@@ -48,7 +91,7 @@ function originOf(env) {
 function corsHeaders(env) {
   return {
     'Access-Control-Allow-Origin': originOf(env) || DEFAULT_ORIGIN,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age': '600',
     'Vary': 'Origin',
@@ -96,10 +139,11 @@ async function withinLimit(request, env) {
   return !!(result && result.success);
 }
 
-/** the JSON object of the body, read at most MAX_BODY bytes; anything else throws */
-async function readBody(request) {
+/** the JSON object of the body, read at most `max` bytes (MAX_BODY unless said); anything else throws */
+async function readBody(request, max) {
+  const limit = max || MAX_BODY;
   const declared = request.headers.get('Content-Length');
-  if (declared !== null && (!/^[0-9]{1,7}$/.test(declared) || Number(declared) > MAX_BODY)) throw new Error('body too long');
+  if (declared !== null && (!/^[0-9]{1,7}$/.test(declared) || Number(declared) > limit)) throw new Error('body too long');
   const chunks = [];
   let size = 0;
   if (request.body) {
@@ -108,7 +152,7 @@ async function readBody(request) {
       const next = await reader.read();
       if (next.done) break;
       size += next.value.byteLength;
-      if (size > MAX_BODY) {
+      if (size > limit) {
         await reader.cancel();
         throw new Error('body too long');
       }
@@ -183,14 +227,77 @@ async function revokeAtGitHub(env, token, fetchImpl) {
   return { status: 502, body: { error: 'github_refused', error_description: 'GitHub answered ' + r.status } };
 }
 
+/** a drive provider the service is set up for, by the name a request gives; null for any other */
+function providerOf(name, env) {
+  if (typeof name !== 'string' || !Object.prototype.hasOwnProperty.call(PROVIDERS, name)) return null;
+  const p = PROVIDERS[name];
+  if (!env || !env[p.id] || !env[p.secret]) return null;
+  return Object.assign({ name, clientId: env[p.id], clientSecret: env[p.secret] }, p);
+}
+
+/** the providers set up, with what the page needs to start a consent: the public client id */
+function driveConfig(env) {
+  const out = {};
+  for (const name of Object.keys(PROVIDERS)) {
+    const p = providerOf(name, env);
+    out[name] = p ? { client_id: p.clientId } : null;
+  }
+  return out;
+}
+
+/** a consent code or a refresh token as a provider shapes it: printable ASCII, bounded, or null */
+function credential(value, max) {
+  if (typeof value !== 'string' || !value || value.length > max) return null;
+  return /^[\x21-\x7e]+$/.test(value) ? value : null;
+}
+
+/** the page a drive's consent may come back to: the control panel on the allowed origin, exactly,
+ * with no other path, no query and no fragment */
+function consolePage(value, env) {
+  const origin = originOf(env);
+  return typeof value === 'string' && origin && value === origin + CONSOLE_PATH ? value : null;
+}
+
+/** A provider's token endpoint, asked with the client secret; back come only the fields the page or
+ * the run needs. The provider's own error words pass through with its status where that is a
+ * refusal of the request (a 4xx), so the page can say why; anything else is 502 with those words. */
+async function askProvider(provider, form, fields, fetchImpl) {
+  const body = new URLSearchParams(form);
+  body.set('client_id', provider.clientId);
+  body.set('client_secret', provider.clientSecret);
+  let r;
+  try {
+    r = await (fetchImpl || fetch)(provider.tokenUrl, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'symphony-signin' },
+      body: body.toString()
+    });
+  } catch (e) {
+    return { status: 502, body: { error: 'provider_unreachable', error_description: provider.name + ' could not be reached; try again' } };
+  }
+  let data;
+  try { data = await r.json(); } catch (e) { data = {}; }
+  if (!r.ok || !data || !data.access_token) {
+    const status = r.status >= 400 && r.status < 500 ? r.status : 502;
+    return { status, body: { error: (data && data.error) || 'provider_refused', error_description: (data && data.error_description) || (provider.name + ' answered ' + r.status) } };
+  }
+  const out = {};
+  for (const field of fields) out[field] = data[field] === undefined ? null : data[field];
+  return { status: 200, body: out };
+}
+
 export async function handle(request, env, fetchImpl) {
   const url = new URL(request.url);
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders(env) });
   if (request.method === 'GET' && url.pathname === '/') {
     return answer(env, 200, { service: 'symphony-signin', routes: ROUTES, keeps: 'nothing' });
   }
+  if (!originOf(env)) return answer(env, 503, { error: 'not_configured' });
+  // the drive routes: a public reading of what is set up, and the two exchanges
+  if (request.method === 'GET' && url.pathname === '/drive/config') return answer(env, 200, driveConfig(env));
   if (request.method !== 'POST') return answer(env, 405, { error: 'method_not_allowed' });
-  if (!env || !env.GITHUB_CLIENT_ID || !env.GITHUB_CLIENT_SECRET || !originOf(env)) return answer(env, 503, { error: 'not_configured' });
+  if (url.pathname.indexOf('/drive/') === 0) return handleDrive(request, env, url.pathname, fetchImpl);
+  if (!env || !env.GITHUB_CLIENT_ID || !env.GITHUB_CLIENT_SECRET) return answer(env, 503, { error: 'not_configured' });
   if (!sameOrigin(request, env)) return answer(env, 403, { error: 'origin_refused' });
   if (ROUTES.indexOf(url.pathname) < 0) return answer(env, 404, { error: 'no_such_route' });
   if (!(await withinLimit(request, env))) return answer(env, 429, { error: 'too_many_requests' });
@@ -215,6 +322,40 @@ export async function handle(request, env, fetchImpl) {
   const token = tokenish(body.access_token, 256);
   if (!token) return answer(env, 400, { error: 'bad_request', error_description: 'access_token is needed' });
   const out = await revokeAtGitHub(env, token, fetchImpl);
+  return answer(env, out.status, out.body);
+}
+
+/** The two drive exchanges. /drive/connect is the page's alone, so it must come from the site's
+ * origin; /drive/token is also the repository's run's, which sends no Origin, so a call with none
+ * is taken and one from another origin is refused. Neither needs the GitHub settings. */
+async function handleDrive(request, env, path, fetchImpl) {
+  if (path === '/drive/config') return answer(env, 405, { error: 'method_not_allowed' });
+  if (path !== '/drive/connect' && path !== '/drive/token') return answer(env, 404, { error: 'no_such_route' });
+  const origin = request.headers.get('Origin');
+  if (!(origin === originOf(env) || (path === '/drive/token' && origin === null))) return answer(env, 403, { error: 'origin_refused' });
+  if (!(await withinLimit(request, env))) return answer(env, 429, { error: 'too_many_requests' });
+  let body;
+  try { body = await readBody(request, MAX_DRIVE_BODY); } catch (e) { return answer(env, 400, { error: 'bad_body' }); }
+  if (typeof body.provider !== 'string' || !Object.prototype.hasOwnProperty.call(PROVIDERS, body.provider)) {
+    return answer(env, 400, { error: 'unknown_provider', error_description: 'provider is one of: ' + Object.keys(PROVIDERS).join(', ') });
+  }
+  const provider = providerOf(body.provider, env);
+  if (!provider) return answer(env, 503, { error: 'not_configured', error_description: body.provider + ' is not set up on this service yet' });
+  if (path === '/drive/connect') {
+    const code = credential(body.code, 4096);
+    const verifier = verifierOf(body.code_verifier);
+    const redirect = consolePage(body.redirect_uri, env);
+    if (!code || !verifier || !redirect) {
+      return answer(env, 400, { error: 'bad_request', error_description: 'code, code_verifier and redirect_uri are needed; redirect_uri is the control panel\'s address' });
+    }
+    const out = await askProvider(provider, { grant_type: 'authorization_code', code, code_verifier: verifier, redirect_uri: redirect, scope: provider.scope },
+      ['access_token', 'refresh_token', 'expires_in', 'scope'], fetchImpl);
+    return answer(env, out.status, out.body);
+  }
+  const refresh = credential(body.refresh_token, 4096);
+  if (!refresh) return answer(env, 400, { error: 'bad_request', error_description: 'refresh_token is needed' });
+  const out = await askProvider(provider, { grant_type: 'refresh_token', refresh_token: refresh, scope: provider.scope },
+    ['access_token', 'expires_in'], fetchImpl);
   return answer(env, out.status, out.body);
 }
 

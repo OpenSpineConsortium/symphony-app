@@ -1,0 +1,1 @@
+[["function driveAddress() { return location.origin + DRIVE_RETURN; }", "function driveAddress() { return location.origin + location.pathname; }"]]

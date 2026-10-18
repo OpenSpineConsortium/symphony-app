@@ -1,0 +1,1 @@
+[["if (!kept) { stripDriveParams(['session_state', 'admin_consent']); return Promise.resolve(false); }", "if (!kept) { stripDriveParams(); say('This page was opened with a code and a state it never issued, so nothing was exchanged.', true); return Promise.resolve(false); }"]]

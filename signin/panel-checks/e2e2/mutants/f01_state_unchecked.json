@@ -1,0 +1,1 @@
+[["var ours = !!(kept && state && kept.state === state && kept.verifier);", "var ours = !!(kept && state && kept.verifier);"]]

@@ -1,0 +1,1 @@
+[["return isPlain(c) && !('pull_request' in c) && inRepository(c, draw.repo); });", "return isPlain(c) && inRepository(c, draw.repo); });"]]

@@ -1,0 +1,1 @@
+[["    forgetDriveState();\n    stripDriveParams();\n    restoreQuery(kept.back);", "    forgetDriveState();\n    restoreQuery(kept.back);"]]

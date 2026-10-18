@@ -1,0 +1,1 @@
+[["    stripDriveParams();\n    restoreQuery(kept.back);\n    if (!ours) {", "    stripDriveParams();\n    if (!ours) {"]]

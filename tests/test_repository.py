@@ -40,12 +40,15 @@ class ManifestTest(unittest.TestCase):
         self.assertFalse(manifest["public"])
         self.assertEqual(manifest["hook_attributes"], {"url": "https://example.invalid/webhook", "active": False})
         self.assertEqual(manifest["redirect_url"], "http://localhost:3010/registered")
-        # what the Apps' privacy statement, version 17, says SymphonyBoard uses; Codespaces and
-        # Codespaces user secrets, which it says the App no longer uses, are not asked for again
+        # what the Apps' privacy statement, version 19, says SymphonyBoard uses: repository Secrets
+        # for the control panel's Folders tab, which saves a drive's refresh token as the
+        # repository's secret, and for the Tokens tab on a personal account's repository; Codespaces
+        # and Codespaces user secrets, which it says the App no longer uses, are not asked for again
         self.assertEqual(manifest["default_permissions"], {"contents": "write", "issues": "write",
                                                            "pull_requests": "write", "checks": "write",
                                                            "workflows": "write", "actions": "write",
-                                                           "administration": "write", "metadata": "read",
+                                                           "administration": "write", "secrets": "write",
+                                                           "metadata": "read",
                                                            "organization_secrets": "write",
                                                            "organization_actions_variables": "write"})
         self.assertEqual(manifest["default_events"], ["issues", "issue_comment", "pull_request", "push",
