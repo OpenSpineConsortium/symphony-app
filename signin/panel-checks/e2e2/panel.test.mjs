@@ -122,10 +122,12 @@ assert.match(await page.textContent('#cp-board-when'), /Written just now/);
 assert.match(await page.textContent('#cp-workers tbody'), /nightly/);
 assert.match(await page.textContent('#cp-other'), /1 other open issue/);
 await page.waitForFunction(() => /1 of 1 passed/.test(document.querySelector('#cp-pulls tbody').textContent));
-assert.equal(await page.isDisabled('#cp-pulls tbody button'), false, 'merge enabled on a green ready PR');
+assert.equal(await page.isDisabled('#cp-pulls tbody .admin__act button'), false, 'merge enabled on a green ready PR');
 assert.equal(await page.evaluate(() => localStorage.getItem('symphony_panel_token')), 'github_pat_TEST');
 
-// queue a task
+// queue a task: + Add task opens the dialog the fields are in
+await page.click('#cp-task-new');
+assert.ok(await page.evaluate(() => document.getElementById('dlg-task').open), 'the task dialog opens');
 await page.fill('#cp-task-title', 'Write the README');
 await page.fill('#cp-task-goal', 'A README exists');
 await page.fill('#cp-task-acceptance', 'check passes');
@@ -137,16 +139,19 @@ assert.equal(task.body.title, 'Task: Write the README');
 assert.equal(task.body.body, '### Goal\n\nA README exists\n\n### Acceptance\n\ncheck passes\n\n### Files likely touched\n\nREADME.md\n');
 assert.deepEqual(task.body.labels, ['todo']);
 assert.equal(task.auth, 'Bearer github_pat_TEST');
+assert.ok(!(await page.evaluate(() => document.getElementById('dlg-task').open)), 'the task dialog closes once queued');
 
-// give an issue to a worker
-await page.selectOption('#cp-queue tbody select', 'nightly');
+// give an issue to a worker: its gear opens its settings
+await page.click('#cp-queue tbody tr:not(.card--add) .card__gear');
+await page.selectOption('#dlg-give', 'nightly');
+await page.click('#dlg-give-go');
 await page.waitForFunction(() => /#9 is given to nightly/.test(document.getElementById('msg').textContent));
 assert.ok(posts.find((p) => p.key === 'POST /repos/acme/demo/issues/9/labels' && p.body.labels[0] === 'worker:nightly'));
 
 // add a worker
 posts.length = 0;
 await page.fill('#cp-w-name', 'docs-fixer');
-await page.selectOption('#cp-w-runs', { index: 1 });
+await page.click('#dlg-worker [data-for="cp-w-runs"] .wtile[data-index="1"]');
 await page.fill('#cp-w-about', 'Docs');
 await page.click('#cp-w-add');
 await page.waitForFunction(() => /Issue #42 is open/.test(document.getElementById('msg').textContent));
@@ -154,18 +159,19 @@ const worker = posts.find((p) => p.key === 'POST /repos/acme/demo/issues');
 assert.equal(worker.body.title, 'Add a worker: docs-fixer');
 assert.ok(worker.body.body.startsWith('### Name\n\ndocs-fixer\n\n### Where it runs\n\nroutine: a routine on someone\'s Claude account\n\n### What it is for\n\nDocs\n\n### Area\n\n_No response_\n\n### How its pull requests land\n\nowner: the owner merges each pull request\n\n### Model\n\n_No response_'), worker.body.body);
 
-// ask Claude: a new issue, then a comment
+// ask Claude: the task dialog's Ask @claude now opens an issue, an issue's gear comments on it
 posts.length = 0;
-await page.fill('#cp-prompt', 'Explain the board');
-await page.click('#cp-prompt-ask');
+await page.fill('#cp-task-goal', 'Explain the board');
+await page.click('#cp-task-ask');
 await page.waitForFunction(() => /Opened #42/.test(document.getElementById('msg').textContent));
 let ask = posts.find((p) => p.key === 'POST /repos/acme/demo/issues');
 assert.equal(ask.body.title, 'Explain the board');
 assert.equal(ask.body.body, '@claude Explain the board');
 posts.length = 0;
-await page.fill('#cp-prompt', '@claude review this');
-await page.fill('#cp-prompt-target', '5');
-await page.click('#cp-prompt-ask');
+await page.click('.console__rail [data-tab="tasks"]');
+await page.click('xpath=//tr[contains(., "#5")]//button[contains(@class, "card__gear")]');
+await page.fill('#dlg-ask', '@claude review this');
+await page.click('#dlg-ask-go');
 await page.waitForFunction(() => /Commented on #5/.test(document.getElementById('msg').textContent));
 ask = posts.find((p) => p.key === 'POST /repos/acme/demo/issues/5/comments');
 assert.equal(ask.body.body, '@claude review this');
@@ -183,14 +189,14 @@ await page.waitForFunction(() => /the workers is queued on main/.test(document.g
 assert.ok(posts.find((p) => p.key === 'POST /repos/acme/demo/actions/workflows/workers.yml/dispatches' && p.body.ref === 'main'));
 
 // merge: two presses, the first arms the button and offers Cancel
-await page.click('#cp-pulls tbody button');
-assert.equal(await page.textContent('#cp-pulls tbody button'), 'Confirm: merge #7 into main');
-assert.equal((await page.$$('#cp-pulls tbody button')).length, 2, 'a Cancel button appears');
-await page.click('#cp-pulls tbody button:nth-child(2)');
-assert.equal(await page.textContent('#cp-pulls tbody button'), 'Merge', 'Cancel disarms');
+await page.click('#cp-pulls tbody .admin__act button');
+assert.equal(await page.textContent('#cp-pulls tbody .admin__act button'), 'Confirm: merge #7 into main');
+assert.equal((await page.$$('#cp-pulls tbody .admin__act button')).length, 2, 'a Cancel button appears');
+await page.click('#cp-pulls tbody .admin__act button:nth-child(2)');
+assert.equal(await page.textContent('#cp-pulls tbody .admin__act button'), 'Merge', 'Cancel disarms');
 assert.ok(!posts.find((p) => p.key === 'PUT /repos/acme/demo/pulls/7/merge'), 'nothing merged yet');
-await page.click('#cp-pulls tbody button');
-await page.click('#cp-pulls tbody button');
+await page.click('#cp-pulls tbody .admin__act button');
+await page.click('#cp-pulls tbody .admin__act button');
 await page.waitForFunction(() => /#7 is merged/.test(document.getElementById('msg').textContent));
 assert.ok(posts.find((p) => p.key === 'PUT /repos/acme/demo/pulls/7/merge' && p.body.merge_method === 'merge' && p.body.sha === 'abc123'));
 

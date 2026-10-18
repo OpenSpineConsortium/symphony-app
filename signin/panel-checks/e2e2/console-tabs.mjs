@@ -9,10 +9,33 @@ const METHODS = ['click', 'dblclick', 'fill', 'type', 'press', 'check', 'uncheck
 function reveal(selector) {
   let node = null;
   try { node = document.querySelector(selector); } catch (e) { return; }
-  const panel = node && node.closest ? node.closest('[data-tab-panel]') : null;
-  if (!panel || !panel.hidden) return;
-  const tab = document.querySelector('.console__rail [data-tab="' + panel.getAttribute('data-tab-panel') + '"]');
-  if (tab) tab.click();
+  if (!node || !node.closest) return;
+  // since the + style (site #61) a task, a worker and an agent are made in a dialog that opens from
+  // a "+" button, so a selector in a closed dialog presses the button that opens it, and one
+  // outside every dialog closes any left open, since a modal dialog makes the rest of the page inert
+  const dialog = node.closest('dialog');
+  for (const open of document.querySelectorAll('dialog[open]')) {
+    if (open !== dialog) open.close();
+  }
+  const openTab = (el) => {
+    const panel = el.closest('[data-tab-panel]');
+    if (!panel || !panel.hidden) return;
+    const tab = document.querySelector('.console__rail [data-tab="' + panel.getAttribute('data-tab-panel') + '"]');
+    if (tab) tab.click();
+  };
+  if (dialog) {
+    if (!dialog.open) {
+      const opener = document.querySelector('.console__add[data-open="' + dialog.id + '"]') || document.querySelector('[data-open="' + dialog.id + '"]');
+      if (!opener) return;
+      openTab(opener);
+      opener.click();
+    }
+    // the rarer settings sit in a folded details, which a person unfolds
+    const fold = node.closest('details');
+    if (fold && !fold.open) fold.open = true;
+    return;
+  }
+  openTab(node);
 }
 
 let patched = false;

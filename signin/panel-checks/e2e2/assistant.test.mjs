@@ -854,7 +854,7 @@ await check('M: the bar sits outside every tab, frozen on each, and the answer o
   }));
   assert.deepEqual(placed, { inTab: false, inBar: true, drawerInStage: true, drawerInBar: false });
   // on every tab the box is on screen, inside the window, and the page does not scroll
-  for (const tab of ['command', 'board', 'tasks', 'pulls', 'runs', 'workers', 'ask', 'tokens', 'share', 'repos', 'about']) {
+  for (const tab of ['command', 'board', 'tasks', 'pulls', 'runs', 'workers', 'agents', 'tokens', 'share', 'repos', 'about']) {
     await page.evaluate((t) => document.querySelector('.console__rail [data-tab="' + t + '"]').click(), tab);
     const r = await page.evaluate(() => { const b = document.getElementById('cp-as-q').getBoundingClientRect(); return { top: b.top, bottom: b.bottom, h: window.innerHeight, y: window.pageYOffset }; });
     assert.ok(r.top > 0 && r.bottom <= r.h, 'the box is off screen on ' + tab + ': ' + JSON.stringify(r));
@@ -937,12 +937,13 @@ await check('N: the lines that would change something are buttons that write not
   await page.click('#cp-as-toggle');
   await press(page, /^Draft the task$/);
   assert.equal(await page.inputValue('#cp-task-title'), 'Write the README');
+  assert.ok(await page.evaluate(() => document.getElementById('dlg-task').open), 'the task draft opened no dialog');
   assert.equal(await page.getAttribute('[data-tab="tasks"]', 'aria-selected'), 'true');
   await page.click('#cp-as-toggle');
   await press(page, /^Draft @claude on #9$/);
-  assert.equal(await page.inputValue('#cp-prompt'), 'Please add tests');
-  assert.equal(await page.inputValue('#cp-prompt-target'), '9');
-  assert.equal(await page.getAttribute('[data-tab="ask"]', 'aria-selected'), 'true');
+  assert.ok(await page.evaluate(() => document.getElementById('dlg-item').open), 'the issue draft opened no dialog');
+  assert.match(await page.textContent('#dlg-item'), /Settings of #9/);
+  assert.equal(await page.inputValue('#dlg-ask'), 'Please add tests');
   assert.equal(written().length, n, 'a draft wrote something');
   assert.deepEqual(errors, []);
   await context.close();
