@@ -31,7 +31,7 @@ const granted = { access_token: 'ghu_token', token_type: 'bearer', expires_in: 2
 test('the service describes itself and keeps nothing', async () => {
   const r = await handle(new Request(SERVICE + '/'), env);
   assert.equal(r.status, 200);
-  assert.deepEqual(await r.json(), { service: 'symphony-signin', routes: ['/exchange', '/refresh', '/revoke'], keeps: 'nothing' });
+  assert.deepEqual(await r.json(), { service: 'symphony-signin', routes: ['/exchange', '/refresh', '/revoke', '/drive/config', '/drive/connect', '/drive/token'], keeps: 'nothing' });
   assert.equal(r.headers.get('Cache-Control'), 'no-store');
 });
 
@@ -39,7 +39,7 @@ test('preflight answers the site origin only, with the header a JSON post needs'
   const r = await handle(new Request(SERVICE + '/exchange', { method: 'OPTIONS' }), env);
   assert.equal(r.status, 204);
   assert.equal(r.headers.get('Access-Control-Allow-Origin'), ORIGIN);
-  assert.equal(r.headers.get('Access-Control-Allow-Methods'), 'POST, OPTIONS');
+  assert.equal(r.headers.get('Access-Control-Allow-Methods'), 'GET, POST, OPTIONS');
   assert.equal(r.headers.get('Access-Control-Allow-Headers'), 'Content-Type');
 });
 
@@ -213,4 +213,182 @@ test('the default origin is the site when none is set', async () => {
   const r = await handle(post('/refresh', { refresh_token: 'ghr' }), { GITHUB_CLIENT_ID: 'id', GITHUB_CLIENT_SECRET: 's' }, gh.fetchImpl);
   assert.equal(r.status, 200);
   assert.equal(r.headers.get('Access-Control-Allow-Origin'), ORIGIN);
+});
+
+/* ---------- the drive routes: OneDrive for the Folders page and the repository's sync ---------- */
+const FOLDERS = ORIGIN + '/symphony/control/folders.html';
+const MS_TOKEN_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/token';
+const driveEnv = Object.assign({}, env, { MICROSOFT_CLIENT_ID: 'ms-client-id', MICROSOFT_CLIENT_SECRET: 'ms-secret-value' });
+// what Microsoft's token endpoint answers a Web platform app; id_token and ext_expires_in must not reach the page
+const msGranted = { token_type: 'Bearer', scope: 'Files.ReadWrite', expires_in: 3599, ext_expires_in: 3599, access_token: 'EwB-access', refresh_token: 'M.C5-refresh!*$', id_token: 'eyJ-id' };
+
+test('/drive/config lists the provider that is set up, with its public client id, and null for one that is not', async () => {
+  const r = await handle(new Request(SERVICE + '/drive/config'), driveEnv);
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), { microsoft: { client_id: 'ms-client-id' } });
+  assert.equal(r.headers.get('Access-Control-Allow-Origin'), ORIGIN);
+  assert.equal(r.headers.get('Cache-Control'), 'no-store');
+  // no secret, no id, or the GitHub settings missing: the reading still answers, and says the provider is not set up
+  for (const partial of [env, Object.assign({}, env, { MICROSOFT_CLIENT_ID: 'ms-client-id' }), { ALLOWED_ORIGIN: ORIGIN, MICROSOFT_CLIENT_SECRET: 's' }, { MICROSOFT_CLIENT_ID: 'id', MICROSOFT_CLIENT_SECRET: 's' }]) {
+    const c = await handle(new Request(SERVICE + '/drive/config'), partial);
+    assert.equal(c.status, 200);
+    const got = await c.json();
+    assert.deepEqual(Object.keys(got), ['microsoft']);
+    assert.equal(got.microsoft === null || (got.microsoft.client_id === 'id' && !('client_secret' in got.microsoft)), true, JSON.stringify(got));
+  }
+  // nothing Google: the owner declined the Picker's key, so the table holds Microsoft alone
+  const withGoogle = await handle(new Request(SERVICE + '/drive/config'), Object.assign({}, driveEnv, { GOOGLE_CLIENT_ID: 'g', GOOGLE_CLIENT_SECRET: 'gs', GOOGLE_PICKER_KEY: 'k' }));
+  assert.deepEqual(await withGoogle.json(), { microsoft: { client_id: 'ms-client-id' } });
+});
+
+test('/drive/connect sends Microsoft the code, the verifier, the secret, the scope and the Folders page, and returns four fields', async () => {
+  const ms = github(msGranted);
+  const r = await handle(post('/drive/connect', { provider: 'microsoft', code: 'M.C507_BAY.2.U.code-part', code_verifier: VERIFIER, redirect_uri: FOLDERS }), driveEnv, ms.fetchImpl);
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), { access_token: 'EwB-access', refresh_token: 'M.C5-refresh!*$', expires_in: 3599, scope: 'Files.ReadWrite' });
+  assert.equal(ms.calls.length, 1);
+  assert.equal(ms.calls[0].url, MS_TOKEN_URL);
+  const form = ms.calls[0].form;
+  assert.equal(form.get('grant_type'), 'authorization_code');
+  assert.equal(form.get('client_id'), 'ms-client-id');
+  assert.equal(form.get('client_secret'), 'ms-secret-value');
+  assert.equal(form.get('code'), 'M.C507_BAY.2.U.code-part');
+  assert.equal(form.get('code_verifier'), VERIFIER);
+  assert.equal(form.get('redirect_uri'), FOLDERS);
+  assert.equal(form.get('scope'), 'Files.ReadWrite offline_access');
+  assert.equal(form.has('refresh_token'), false);
+  // the GitHub settings play no part: the GitHub secret never reaches Microsoft
+  assert.equal(form.has('secret-value'), false);
+  assert.equal(ms.calls[0].init.headers.Origin, undefined, 'no Origin header reaches Microsoft, which refuses a secret beside one');
+});
+
+test('/drive/token trades the refresh token for an access token with the scope, and returns two fields', async () => {
+  const ms = github(msGranted);
+  const r = await handle(post('/drive/token', { provider: 'microsoft', refresh_token: 'M.C5-old!*$' }), driveEnv, ms.fetchImpl);
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), { access_token: 'EwB-access', expires_in: 3599 });
+  const form = ms.calls[0].form;
+  assert.equal(form.get('grant_type'), 'refresh_token');
+  assert.equal(form.get('refresh_token'), 'M.C5-old!*$');
+  assert.equal(form.get('scope'), 'Files.ReadWrite offline_access');
+  assert.equal(form.get('client_secret'), 'ms-secret-value');
+  assert.equal(form.has('code'), false);
+});
+
+test('/drive/token takes the repository\'s run, which sends no Origin, and refuses another origin; /drive/connect takes the site alone', async () => {
+  const ms = github(msGranted);
+  const run = await handle(post('/drive/token', { provider: 'microsoft', refresh_token: 'M.C5-old' }, null), driveEnv, ms.fetchImpl);
+  assert.equal(run.status, 200);
+  for (const origin of ['https://evil.example', '', 'http://openspineconsortium.com', 'https://openspineconsortium.com.evil.example']) {
+    const r = await handle(post('/drive/token', { provider: 'microsoft', refresh_token: 'M.C5-old' }, origin), driveEnv, ms.fetchImpl);
+    assert.equal(r.status, 403, String(origin));
+  }
+  for (const origin of ['https://evil.example', null, '']) {
+    const r = await handle(post('/drive/connect', { provider: 'microsoft', code: 'abc', code_verifier: VERIFIER, redirect_uri: FOLDERS }, origin), driveEnv, ms.fetchImpl);
+    assert.equal(r.status, 403, String(origin));
+    assert.deepEqual(await r.json(), { error: 'origin_refused' });
+  }
+  assert.equal(ms.calls.length, 1);
+});
+
+test('a provider the table lacks, a missing provider and a provider not set up are refused before Microsoft is asked', async () => {
+  const ms = github(msGranted);
+  for (const provider of ['google', 'dropbox', '', 42, undefined, '__proto__', 'constructor']) {
+    const r = await handle(post('/drive/connect', { provider, code: 'abc', code_verifier: VERIFIER, redirect_uri: FOLDERS }), driveEnv, ms.fetchImpl);
+    assert.equal(r.status, 400, String(provider));
+    assert.equal((await r.json()).error, 'unknown_provider');
+    const t = await handle(post('/drive/token', { provider, refresh_token: 'r' }), driveEnv, ms.fetchImpl);
+    assert.equal(t.status, 400, String(provider));
+  }
+  const unset = await handle(post('/drive/token', { provider: 'microsoft', refresh_token: 'r' }), env, ms.fetchImpl);
+  assert.equal(unset.status, 503);
+  assert.equal((await unset.json()).error, 'not_configured');
+  assert.equal(ms.calls.length, 0);
+});
+
+test('/drive/connect exchanges a code only for the Folders page on the allowed origin, with a verifier', async () => {
+  const ms = github(msGranted);
+  for (const redirect of [ORIGIN + '/symphony/control/', ORIGIN + '/', 'https://evil.example/symphony/control/folders.html', FOLDERS + '?x=1', FOLDERS + '#top', 'https://OpenSpineConsortium.com/symphony/control/folders.html', FOLDERS.replace('https', 'http'), undefined, 42]) {
+    const r = await handle(post('/drive/connect', { provider: 'microsoft', code: 'abc', code_verifier: VERIFIER, redirect_uri: redirect }), driveEnv, ms.fetchImpl);
+    assert.equal(r.status, 400, String(redirect));
+  }
+  for (const verifier of [undefined, 'short', 'has space'.padEnd(43, 'x')]) {
+    const r = await handle(post('/drive/connect', { provider: 'microsoft', code: 'abc', code_verifier: verifier, redirect_uri: FOLDERS }), driveEnv, ms.fetchImpl);
+    assert.equal(r.status, 400, String(verifier));
+  }
+  for (const code of [undefined, '', 'has space', 'x'.repeat(5000), 'tab\there']) {
+    const r = await handle(post('/drive/connect', { provider: 'microsoft', code, code_verifier: VERIFIER, redirect_uri: FOLDERS }), driveEnv, ms.fetchImpl);
+    assert.equal(r.status, 400, String(code).slice(0, 20));
+  }
+  for (const refresh of [undefined, '', 'has space', 'x'.repeat(5000)]) {
+    const r = await handle(post('/drive/token', { provider: 'microsoft', refresh_token: refresh }), driveEnv, ms.fetchImpl);
+    assert.equal(r.status, 400, String(refresh).slice(0, 20));
+  }
+  // an unknown drive route, the GET of a POST route and the POST of the GET one
+  assert.equal((await handle(post('/drive/other', { provider: 'microsoft' }), driveEnv, ms.fetchImpl)).status, 404);
+  assert.equal((await handle(new Request(SERVICE + '/drive/connect'), driveEnv, ms.fetchImpl)).status, 405);
+  assert.equal((await handle(post('/drive/config', { provider: 'microsoft' }), driveEnv, ms.fetchImpl)).status, 405);
+  assert.equal(ms.calls.length, 0);
+});
+
+test('a drive body may run to twice the GitHub routes\' bytes, and no further', async () => {
+  const ms = github(msGranted);
+  const long = 'c'.repeat(3000);
+  const r = await handle(post('/drive/connect', { provider: 'microsoft', code: long, code_verifier: VERIFIER, redirect_uri: FOLDERS }), driveEnv, ms.fetchImpl);
+  assert.equal(r.status, 200);
+  assert.equal(ms.calls[0].form.get('code'), long);
+  const over = await handle(post('/drive/token', { provider: 'microsoft', refresh_token: 'r', padding: 'p'.repeat(9000) }), driveEnv, ms.fetchImpl);
+  assert.equal(over.status, 400);
+  assert.deepEqual(await over.json(), { error: 'bad_body' });
+  assert.equal(ms.calls.length, 1);
+  // a declared length between the two bounds is read on a drive route and refused on a GitHub one
+  const declared = { 'Content-Length': '6000' };
+  assert.equal((await handle(post('/drive/token', { provider: 'microsoft', refresh_token: 'r' }, undefined, declared), driveEnv, ms.fetchImpl)).status, 200);
+  assert.equal((await handle(post('/refresh', { refresh_token: 'ghr' }, undefined, declared), driveEnv, ms.fetchImpl)).status, 400);
+  assert.equal(ms.calls.length, 2);
+});
+
+test('Microsoft refusing a code or a refresh token passes its words and its status through, with no token', async () => {
+  const refused = github({ error: 'invalid_grant', error_description: 'AADSTS70000: The code has expired.', error_codes: [70000], trace_id: 't', correlation_id: 'c' }, 400);
+  const r = await handle(post('/drive/connect', { provider: 'microsoft', code: 'abc', code_verifier: VERIFIER, redirect_uri: FOLDERS }), driveEnv, refused.fetchImpl);
+  assert.equal(r.status, 400);
+  assert.deepEqual(await r.json(), { error: 'invalid_grant', error_description: 'AADSTS70000: The code has expired.' });
+  const unauthorized = github({ error: 'invalid_client', error_description: 'AADSTS7000215: Invalid client secret provided.' }, 401);
+  const u = await handle(post('/drive/token', { provider: 'microsoft', refresh_token: 'r' }), driveEnv, unauthorized.fetchImpl);
+  assert.equal(u.status, 401);
+  assert.equal((await u.json()).error, 'invalid_client');
+  // a server error, no JSON, or no answer at all is 502 in words
+  const html = github(null, 503, '<html>down</html>');
+  const h = await handle(post('/drive/token', { provider: 'microsoft', refresh_token: 'r' }), driveEnv, html.fetchImpl);
+  assert.equal(h.status, 502);
+  assert.deepEqual(await h.json(), { error: 'provider_refused', error_description: 'microsoft answered 503' });
+  const down = async () => { throw new TypeError('fetch failed'); };
+  const d = await handle(post('/drive/connect', { provider: 'microsoft', code: 'abc', code_verifier: VERIFIER, redirect_uri: FOLDERS }), driveEnv, down);
+  assert.equal(d.status, 502);
+  assert.equal((await d.json()).error, 'provider_unreachable');
+  // an answer with no access token, whatever its status, is a refusal
+  const empty = github({ token_type: 'Bearer' }, 200);
+  assert.equal((await handle(post('/drive/token', { provider: 'microsoft', refresh_token: 'r' }), driveEnv, empty.fetchImpl)).status, 502);
+});
+
+test('the rate limit covers the drive routes too, and a refused origin or an unknown route spends none of it', async () => {
+  const ms = github(msGranted);
+  const keys = [];
+  const limiter = { limit: async ({ key }) => { keys.push(key); return { success: keys.length < 2 }; } };
+  const limited = Object.assign({}, driveEnv, { RATE_LIMITER: limiter });
+  const headers = { 'CF-Connecting-IP': '203.0.113.9' };
+  assert.equal((await handle(post('/drive/token', { provider: 'microsoft', refresh_token: 'r' }, null, headers), limited, ms.fetchImpl)).status, 200);
+  const second = await handle(post('/drive/token', { provider: 'microsoft', refresh_token: 'r' }, null, headers), limited, ms.fetchImpl);
+  assert.equal(second.status, 429);
+  await handle(post('/drive/connect', { provider: 'microsoft', code: 'abc', code_verifier: VERIFIER, redirect_uri: FOLDERS }, 'https://evil.example', headers), limited, ms.fetchImpl);
+  await handle(post('/drive/other', { provider: 'microsoft' }, null, headers), limited, ms.fetchImpl);
+  assert.equal(keys.length, 2);
+  assert.equal(ms.calls.length, 1);
+});
+
+test('the GitHub routes are as they were beside the drive ones: a GitHub exchange still needs its own settings', async () => {
+  const gh = github(granted);
+  const r = await handle(post('/exchange', { code: 'abc', code_verifier: VERIFIER, redirect_uri: PAGE }), { ALLOWED_ORIGIN: ORIGIN, MICROSOFT_CLIENT_ID: 'id', MICROSOFT_CLIENT_SECRET: 's' }, gh.fetchImpl);
+  assert.equal(r.status, 503);
+  assert.equal(gh.calls.length, 0);
 });
