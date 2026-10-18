@@ -128,7 +128,21 @@ ghu_TEST or github_pat_X.
   editing in Word at its d.docs.live.net address on a personal drive and at the address OneDrive
   gives on a work drive, never an address that is not https, other files on OneDrive's page, and
   the right-click menu; Large icons, sorting with folders first, and the search box.
-- `e2e2/mutants/`: 183 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/explore.test.mjs`: 10 checks of the console's Explore tab, /symphony/control/#explore
+  (site branch claude/explore-tab, 2026-10-18), against a mocked GitHub: a goal over an epic over
+  three tasks, a draft pull request on one task's claim branch, one run with one job of four steps,
+  a skipped one among them, and a log whose lines test the edges of each step by time. XP1 to XP7:
+  the tab after Dependencies and nothing below a task read until one goes in; the levels down to
+  a task and their states; a pull request, its runs, a job and its steps each read once, and Read
+  again; a step's own lines, the Claude step marked, the colour codes out and every line as text;
+  the wheel, including one long glide moving one level, Enter, Backspace and a claim branch with
+  no pull request; a log the browser cannot read and an address that is not https; a hostile title
+  and the reserve. XP8 serves the log as GitHub does, a redirect to its storage on another origin
+  (a local server of the check's own, so Chromium's checks on private addresses are off for this
+  suite alone), and holds that the storage is asked one plain read with no token and no header of
+  GitHub's. XP9 switches the repository while the tab is open, and XP10 holds that an epic whose
+  sub-issues could not be read says so.
+- `e2e2/mutants/`: 207 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The 79 of the sign-in (`m*`) were caught against master
@@ -149,7 +163,8 @@ ghu_TEST or github_pat_X.
   again. The 55 of the Folders tab (`f*`, each with a `.json.suite` naming
   folders.test.mjs) were caught against site branch claude/folders-explorer on 2026-10-18, the
   first 48 also against the site's script at commit 044b8b3, f06 rewritten for the explorer's
-  name cell.
+  name cell. The 24 of the Explore tab (`x*`, each naming explore.test.mjs) were caught
+  against site branch claude/explore-tab on 2026-10-18, after its adversarial review.
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
   and every page action, visibility read and locator action on a selector first opens the tab that
