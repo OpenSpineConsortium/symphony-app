@@ -1,0 +1,7 @@
+FAIL O: Ask in claude.ai opens the question and the page's state in a new tab's address, writes nothing, and needs no write access 
+     Expected values to be strictly deep-equal:
+     + actual - expected
+     
+       [
+
+FAIL O: Ask in claude.ai opens the question and the page's state in a new tab's address, writes nothing, and needs no write access :: Expected values to be strictly deep-equal:

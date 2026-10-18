@@ -1,0 +1,1 @@
+[["var whole = (text ? text + '\\n\\n' : '') + askInClaudeContext();", "var whole = askInClaudeContext();"]]
