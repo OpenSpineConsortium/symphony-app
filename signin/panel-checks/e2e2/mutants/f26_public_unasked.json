@@ -1,0 +1,1 @@
+[["if (isPublic(r.data) && !$('fd-public').checked) {", "if (false) {"]]

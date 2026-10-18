@@ -1,0 +1,1 @@
+[["    if (c && getComputedStyle(c).overflow === 'hidden') window.scrollTo(x, y);\n", ""]]

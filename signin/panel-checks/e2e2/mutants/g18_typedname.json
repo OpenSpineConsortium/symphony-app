@@ -1,0 +1,1 @@
+[["var repo = s.meta && typeof s.meta.full_name === 'string' && s.meta.full_name ? s.meta.full_name : s.repo;", "var repo = s.repo;"]]

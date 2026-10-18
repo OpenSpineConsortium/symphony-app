@@ -1,0 +1,1 @@
+[["    Array.prototype.forEach.call(document.querySelectorAll('#fd-items input[data-id]'), function (box) { box.checked = !!picked[box.getAttribute('data-id')]; });\n", ""]]

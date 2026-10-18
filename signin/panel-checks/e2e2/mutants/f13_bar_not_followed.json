@@ -1,0 +1,1 @@
+[["    foldersFor = null;\n    if (consoleTab === 'folders' && consoleOnOpen.folders) consoleOnOpen.folders();\n", "    foldersFor = null;\n"]]

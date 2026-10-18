@@ -1,0 +1,1 @@
+[["say('OneDrive is connected for this page. Tick what to track in the list.');", "say('OneDrive is connected for this page (' + answer.refresh_token + '). Tick what to track in the list.');"]]

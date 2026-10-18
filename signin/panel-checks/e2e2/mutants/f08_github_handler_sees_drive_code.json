@@ -1,0 +1,1 @@
+[["($('fd-connect') ? driveReturn() : Promise.resolve(false)).then(function (back) { fromDrive = back; return finishOauth(); }).then(function () {", "finishOauth().then(function () { return $('fd-connect') ? driveReturn() : false; }).then(function (back) { fromDrive = back; }).then(function () {"]]

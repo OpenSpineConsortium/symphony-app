@@ -1,0 +1,1 @@
+[["    if (ours && github) { try { sessionStorage.removeItem(KEY_STATE); } catch (e) { /* nothing kept */ } }\n", ""]]

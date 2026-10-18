@@ -1,0 +1,1 @@
+[["items.forEach(function (i, n) { add(p, n ? ', ' : '', el('code', '', String(i.name || i.id))); });", "items.forEach(function (i, n) { var c = el('code'); c.innerHTML = String(i.name || i.id); add(p, n ? ', ' : '', c); });"]]
