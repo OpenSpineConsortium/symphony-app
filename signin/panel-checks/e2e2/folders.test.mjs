@@ -1645,6 +1645,218 @@ await check('N7: Folders is a tab of the console, at /symphony/control/#folders:
   await context.close();
 });
 
+// The saved-catalog route: with no drive connected, a private repository that has a catalog.json on
+// its drive-catalog branch (the drive organizer writes it) is browsed read-only in the same
+// explorer. The catalog is a flat list of folders and files whose paths start with "OneDrive/"; some
+// files carry no web address or modified date (unknown, not an error), and mime is empty, so the
+// kind comes from the name. One file name is hostile, to show it stays text.
+const catalogData = {
+  provider: 'microsoft',
+  made: today + 'T09:00:00Z',
+  complete: true,
+  problems: [],
+  totals: { folders: 2, files: 4 },
+  folders: [
+    { path: 'OneDrive/Papers', id: 'cf1', drive: 'drive1', web: 'https://onedrive.live.com/?id=cf1', files: 2, bytes: 6000, latest: now },
+    { path: 'OneDrive/Papers/Drafts', id: 'cf2', drive: 'drive1', web: 'https://onedrive.live.com/?id=cf2', files: 1, bytes: 500, latest: now },
+  ],
+  files: [
+    { path: 'OneDrive/notes.docx', id: 'c-a1', drive: 'drive1', name: 'notes.docx', mime: '', size: 1234, modified: now, web: 'https://onedrive.live.com/?id=c-a1', kind: 'doc', native: true },
+    { path: 'OneDrive/Papers/one.docx', id: 'c-b1', drive: 'drive1', name: 'one.docx', mime: '', size: 2048, modified: now, web: 'https://onedrive.live.com/?id=c-b1', kind: 'doc', native: true },
+    { path: 'OneDrive/Papers/Drafts/draft.docx', id: 'c-d1', drive: 'drive1', name: 'draft.docx', mime: '', size: 500, modified: '', web: '', kind: 'doc', native: true },
+    { path: 'OneDrive/' + HOSTILE, id: 'c-h1', drive: 'drive1', name: HOSTILE, mime: '', size: 10, modified: now, web: 'https://onedrive.live.com/?id=c-h1', kind: 'text', native: false },
+  ],
+};
+// a repository's routes with catalog.json served on its drive-catalog branch, read as raw text
+function catalogRoutes(o) {
+  const routes = repoRoutes(o || {});
+  routes['GET /repos/acme/demo/contents/catalog.json'] = { raw: JSON.stringify(catalogData) };
+  return routes;
+}
+await check('CAT1: with no drive connected a private repository\'s saved catalog is drawn in the same explorer, read from the drive-catalog branch with the person\'s token, and nothing is asked of Microsoft', async () => {
+  const env = await open({ routes: catalogRoutes() });
+  const { context, page, calls, graph, service, errors } = env;
+  await ready(page);
+  await page.click('#rail-folders');
+  await listed(page);
+  // the catalog's root: the folder first, then the files by name, drawn read-only
+  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent)), ['Papers', HOSTILE, 'notes.docx']);
+  assert.match(await page.textContent('#fd-browser'), /saved OneDrive catalog/);
+  assert.match(await page.textContent('#fd-status'), /From the saved catalog/);
+  // read with the person's GitHub token, from the drive-catalog branch, with no call to Microsoft
+  const read = calls.find((c) => c.key === 'GET /repos/acme/demo/contents/catalog.json');
+  assert.ok(read && /[?&]ref=drive-catalog/.test(read.url), 'the catalog was not read from the drive-catalog branch');
+  assert.ok(/github_pat/.test(read.auth), 'the catalog was read without the person\'s GitHub token');
+  assert.deepEqual(graph, [], 'Microsoft Graph was called for a saved catalog');
+  assert.deepEqual(service.filter((s) => s.path === '/drive/connect' || s.path === '/drive/token').map((s) => s.path), [], 'the drive sign-in ran for a saved catalog');
+  // the tree lists the catalog's folders, and opening one shows its children
+  await page.click('#fd-tree .fx__nodename:has-text("Papers")');
+  await page.waitForFunction(() => /one\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
+  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent)), ['Drafts', 'one.docx']);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('CAT2: the saved catalog is read-only: every tick is disabled, and the right-click menu offers no tracking and no Office app, only opening', async () => {
+  const env = await open({ routes: catalogRoutes() });
+  const { context, page, errors } = env;
+  await ready(page);
+  await page.click('#rail-folders');
+  await listed(page);
+  assert.equal(await page.$$eval('#fd-items input[data-id]', (l) => l.every((b) => b.disabled)), true, 'a catalog tick could be ticked');
+  assert.equal(await page.$$eval('#fd-items input[data-id]', (l) => l.length), 3);
+  // a file: only "Open in the browser", never Word and never Tick
+  await page.click('#fd-items tr[data-item="c-a1"] .fx__name', { button: 'right' });
+  assert.deepEqual(await page.$$eval('#fd-menu button', (l) => l.map((b) => b.textContent)), ['Open in the browser']);
+  // a folder: Open and Open in OneDrive, still no Tick (the new menu replaces the old)
+  await page.click('#fd-items tr[data-item="cf1"] .fx__name', { button: 'right' });
+  assert.deepEqual(await page.$$eval('#fd-menu button', (l) => l.map((b) => b.textContent)), ['Open', 'Open in OneDrive']);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('CAT3: in the saved catalog a double-click opens a file at its web address in the browser, a file the catalog gave no address is not opened but said so, and nothing is written to GitHub', async () => {
+  const env = await open({ routes: catalogRoutes() });
+  const { context, page, calls, errors } = env;
+  await ready(page);
+  await page.click('#rail-folders');
+  await listed(page);
+  await recordOpens(page);
+  // a .docx in the catalog opens in the browser (never Word), at the web address the catalog holds
+  await page.dblclick('#fd-items tr[data-item="c-a1"] .fx__name');
+  assert.deepEqual(await page.evaluate(() => window.__opened), ['window:https://onedrive.live.com/?id=c-a1']);
+  // down into Papers, then Drafts, to the file with no address: it is not opened, and said so
+  await page.dblclick('#fd-items tr[data-item="cf1"] .fx__name');
+  await page.waitForFunction(() => /Drafts/.test((document.getElementById('fd-items') || {}).textContent || ''));
+  await page.dblclick('#fd-items tr[data-item="cf2"] .fx__name');
+  await page.waitForFunction(() => /draft\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
+  await page.dblclick('#fd-items tr[data-item="c-d1"] .fx__name');
+  assert.match(await page.textContent('#msg'), /gave no address for draft\.docx/);
+  assert.deepEqual(await page.evaluate(() => window.__opened), ['window:https://onedrive.live.com/?id=c-a1'], 'the addressless file was opened anyway');
+  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), [], 'the saved catalog wrote to GitHub');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('CAT4: a public repository never reads a saved catalog: the explorer shows the connect prompt and catalog.json is never fetched', async () => {
+  const env = await open({ routes: catalogRoutes({ public: true }) });
+  const { context, page, calls, errors } = env;
+  await ready(page);
+  await page.click('#rail-folders');
+  await page.waitForFunction(() => /Connect OneDrive first/.test(document.getElementById('fd-browser').textContent), null, { timeout: 15000 });
+  assert.equal(calls.some((c) => c.key === 'GET /repos/acme/demo/contents/catalog.json'), false, 'a public repository\'s catalog.json was read');
+  assert.equal(await page.$('#fd-items input[data-id]'), null, 'a public repository drew a catalog list');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('CAT5: connecting a drive replaces the saved catalog with the live drive, and tracking is possible again', async () => {
+  const env = await open({ routes: catalogRoutes() });
+  const { context, page, errors } = env;
+  await ready(page);
+  await page.click('#rail-folders');
+  await listed(page);
+  assert.match(await page.textContent('#fd-browser'), /saved OneDrive catalog/, 'the catalog was not shown first');
+  assert.equal(await page.$$eval('#fd-items input[data-id]', (l) => l.every((b) => b.disabled)), true);
+  // connect a drive: the live drive takes the explorer, its ticks work, the catalog banner is gone
+  await connect(env);
+  await page.waitForFunction(() => { const b = document.querySelector('#fd-items input[data-id]'); return !!b && !b.disabled; }, null, { timeout: 15000 });
+  assert.doesNotMatch(await page.textContent('#fd-browser'), /saved OneDrive catalog/, 'the catalog banner stayed after connecting');
+  await page.check('#fd-items input[data-id="a1"]');
+  assert.equal(await page.isChecked('#fd-items input[data-id="a1"]'), true);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('CAT6: a hostile file name in the catalog is drawn as text, never as markup, and runs nothing', async () => {
+  const env = await open({ routes: catalogRoutes() });
+  const { context, page, errors } = env;
+  await ready(page);
+  await page.click('#rail-folders');
+  await listed(page);
+  const names = await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent));
+  assert.ok(names.includes(HOSTILE), 'the hostile name was changed or dropped');
+  assert.equal(await page.$$eval('#fd-items img', (l) => l.length), 0, 'the catalog injected an image');
+  assert.equal(await page.evaluate(() => !!window.__hostile), false, 'the catalog ran a script from a name');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('CAT7: in the saved catalog the keyboard Space never ticks, since the whole catalog is read-only', async () => {
+  const env = await open({ routes: catalogRoutes() });
+  const { context, page, calls, errors } = env;
+  await ready(page);
+  await page.click('#rail-folders');
+  await listed(page);
+  // select a file row by clicking its name, then focus the list and press Space, the keyboard's tick
+  await page.click('#fd-items tr[data-item="c-a1"] .fx__name');
+  await page.focus('#fd-main');
+  await page.keyboard.press('Space');
+  // nothing is ticked: the keyboard path respects the read-only catalog as the disabled boxes do
+  assert.equal(await page.$$eval('#fd-picked li', (l) => l.length), 0, 'the keyboard Space ticked a catalog item');
+  assert.match(await page.textContent('#fd-picked-head'), /Nothing ticked yet/);
+  assert.match(await page.textContent('#fd-status'), /From the saved catalog/);
+  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), [], 'the saved catalog wrote to GitHub');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('CAT8: choosing another private repository reads and draws that repository\'s own saved catalog, and a late answer about the last one is dropped', async () => {
+  const catalogOther = {
+    provider: 'microsoft', made: today + 'T09:00:00Z', complete: true, problems: [], totals: { folders: 1, files: 1 },
+    folders: [{ path: 'OneDrive/Grants', id: 'og1', drive: 'drive1', web: 'https://onedrive.live.com/?id=og1', files: 1, bytes: 10, latest: now }],
+    files: [{ path: 'OneDrive/budget.xlsx', id: 'o-a1', drive: 'drive1', name: 'budget.xlsx', mime: '', size: 99, modified: now, web: 'https://onedrive.live.com/?id=o-a1', kind: 'sheet', native: true }],
+  };
+  const routes = repoRoutes({}, ['acme/demo', 'acme/other']);
+  let slow = false;
+  // acme/demo's catalog can be made slow, to answer after the chosen repository has changed
+  routes['GET /repos/acme/demo/contents/catalog.json'] = async () => { if (slow) await sleep(1500); return { raw: JSON.stringify(catalogData) }; };
+  routes['GET /repos/acme/other/contents/catalog.json'] = { raw: JSON.stringify(catalogOther) };
+  const env = await open({ routes, repos: ['acme/demo', 'acme/other'] });
+  const { context, page, calls, errors } = env;
+  await ready(page);
+  await page.click('#rail-folders');
+  await listed(page);
+  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent)), ['Papers', HOSTILE, 'notes.docx']);
+  // choose acme/other: its own catalog is read from its drive-catalog branch, with the token, and drawn
+  await page.selectOption('#cp-repo', 'acme/other');
+  await page.waitForFunction(() => /budget\.xlsx/.test((document.getElementById('fd-items') || {}).textContent || ''), null, { timeout: 15000 });
+  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent)), ['Grants', 'budget.xlsx']);
+  assert.doesNotMatch(await page.textContent('#fd-items'), /notes\.docx|Papers/, 'the last repository\'s catalog is still shown');
+  const read = calls.find((c) => c.key === 'GET /repos/acme/other/contents/catalog.json');
+  assert.ok(read && /[?&]ref=drive-catalog/.test(read.url) && /github_pat/.test(read.auth), 'acme/other\'s catalog was not read from its drive-catalog branch with the person\'s token');
+  // back to acme/demo, whose catalog is slow, and on to acme/other before it comes: the late answer is dropped
+  slow = true;
+  await page.selectOption('#cp-repo', 'acme/demo');
+  await page.selectOption('#cp-repo', 'acme/other');
+  await page.waitForFunction(() => /budget\.xlsx/.test((document.getElementById('fd-items') || {}).textContent || ''), null, { timeout: 15000 });
+  await sleep(2200);
+  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent)), ['Grants', 'budget.xlsx'], 'acme/demo\'s late catalog overwrote acme/other\'s');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('CAT9: two catalog folders that share an id keep their own children and never merge or loop', async () => {
+  const dupData = {
+    provider: 'microsoft', made: today + 'T09:00:00Z', complete: true, problems: [], totals: { folders: 2, files: 2 },
+    folders: [
+      { path: 'OneDrive/Alpha', id: 'dup', drive: 'drive1', web: '', files: 1, bytes: 1, latest: now },
+      { path: 'OneDrive/Beta', id: 'dup', drive: 'drive1', web: '', files: 1, bytes: 1, latest: now },
+    ],
+    files: [
+      { path: 'OneDrive/Alpha/a.docx', id: 'd-a', drive: 'drive1', name: 'a.docx', mime: '', size: 1, modified: now, web: '', kind: 'doc', native: true },
+      { path: 'OneDrive/Beta/b.docx', id: 'd-b', drive: 'drive1', name: 'b.docx', mime: '', size: 1, modified: now, web: '', kind: 'doc', native: true },
+    ],
+  };
+  const routes = repoRoutes({}, ['acme/demo']);
+  routes['GET /repos/acme/demo/contents/catalog.json'] = { raw: JSON.stringify(dupData) };
+  const env = await open({ routes });
+  const { context, page, errors } = env;
+  await ready(page);
+  await page.click('#rail-folders');
+  await listed(page);
+  // the root lists both folders despite the shared id
+  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent).sort()), ['Alpha', 'Beta']);
+  // opening Alpha shows only its own child, never Beta's: the shared id did not merge the two
+  await page.dblclick('#fd-items .fx__name:has-text("Alpha")');
+  await page.waitForFunction(() => /a\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''), null, { timeout: 15000 });
+  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent)), ['a.docx'], 'Alpha showed another folder\'s children');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 await browser.close();
 console.log('\n' + results.join('\n'));
 if (results.some((r) => r.startsWith('FAIL'))) process.exit(1);

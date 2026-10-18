@@ -74,7 +74,7 @@ ghu_TEST or github_pat_X.
   it reads or presses inside it, and a press that crosses tabs is read at once with page.evaluate,
   which opens nothing, so the page and not console-tabs.mjs is seen opening the tab. A check that
   wants the drawing recorded instead of made serves a stand-in for the library on its route.
-- `e2e2/folders.test.mjs`: 52 checks of the console's Folders tab, /symphony/control/#folders
+- `e2e2/folders.test.mjs`: 58 checks of the console's Folders tab, /symphony/control/#folders
   (site branch claude/folders-page, 2026-10-18; the tab took the place of the page folders.html
   before that page shipped), against a mocked Microsoft consent page, a mocked Microsoft Graph,
   the mocked service's three `/drive` routes and a mocked GitHub that keeps what Track writes as
@@ -122,12 +122,22 @@ ghu_TEST or github_pat_X.
   the tab. B, C, D, E3, I and L scan every request, the console, #msg, the markup, the fields, the
   address and the storage for the drive's tokens, which go only to Graph's Authorization header,
   to /drive/token and, sealed, into the secret. Its mutants
-  are `e2e2/mutants/f*.json`, 55, run as the section below says. X1 to X4 hold the list drawn
+  are `e2e2/mutants/f*.json`, 63, run as the section below says. X1 to X4 hold the list drawn
   as a file explorer (site branch claude/folders-explorer, 2026-10-18): the folder tree, Back,
   Forward, Up and the keyboard, Details' four columns and the status bar; a Word file opened for
   editing in Word at its d.docs.live.net address on a personal drive and at the address OneDrive
   gives on a work drive, never an address that is not https, other files on OneDrive's page, and
-  the right-click menu; Large icons, sorting with folders first, and the search box.
+  the right-click menu; Large icons, sorting with folders first, and the search box. CAT1 to
+  CAT9 hold the saved catalog drawn in the same explorer when no drive is connected (site branch
+  claude/folders-catalog, 2026-10-18): a private repository's catalog.json on its drive-catalog
+  branch, read with the person's GitHub token and nothing asked of Microsoft, drawn read-only
+  with every tick disabled and neither Track nor an Office app in the menu; a file opened at its
+  web address in the browser and one the catalog gave no address said so, with nothing written to
+  GitHub; a public repository never read, its catalog.json left alone; a connected drive taking
+  the saved catalog's place so tracking works again; a hostile name kept as text; the keyboard's
+  Space never ticking in the read-only catalog; choosing another private repository drawing that
+  repository's own catalog, with a late answer about the last one dropped; and two folders that
+  share an id keeping their own children, never merging or looping.
 - `e2e2/explore.test.mjs`: 10 checks of the console's Explore tab, /symphony/control/#explore
   (site branch claude/explore-tab, 2026-10-18), against a mocked GitHub: a goal over an epic over
   three tasks, a draft pull request on one task's claim branch, one run with one job of four steps,
@@ -162,10 +172,13 @@ ghu_TEST or github_pat_X.
   and a Board chart that could not be drawn losing its text (R4); g41, the draw not seeded from the
   open issues' count, was retired, since every read now updates the count it starts from) against
   site branch claude/graph-section on 2026-10-18 after that review's fold, where the 79 were caught
-  again. The 55 of the Folders tab (`f*`, each with a `.json.suite` naming
+  again. The 63 of the Folders tab (`f*`, each with a `.json.suite` naming
   folders.test.mjs) were caught against site branch claude/folders-explorer on 2026-10-18, the
   first 48 also against the site's script at commit 044b8b3, f06 rewritten for the explorer's
-  name cell. The 24 of the Explore tab (`x*`, each naming explore.test.mjs) were caught
+  name cell; f56 to f63, the saved catalog's, against site branch claude/folders-catalog the
+  same day, f60 to f63 for CAT7 to CAT9 (CAT5 and CAT6 are held by the checks alone, since a
+  connect reloads the page and a name is kept as text by the shared drawing, so no single line of
+  the catalog carries them). The 24 of the Explore tab (`x*`, each naming explore.test.mjs) were caught
   against site branch claude/explore-tab on 2026-10-18, after its adversarial review.
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
