@@ -2351,7 +2351,7 @@ await check('P6: on a phone every tab fits the window, the saved text size and i
   await sleep(300);
   const status = await page.evaluate(() => { const st = document.querySelector('.console__status'); const r = st.getBoundingClientRect(); return { pos: getComputedStyle(st).position, top: Math.round(r.top), bottom: Math.round(r.bottom), ih: window.innerHeight, scrollY: Math.round(window.scrollY) }; });
   // the phone's own rules win over the desktop's: a run's card puts its name and its time on the
-  // first line and the rest under them, the tiles stand two to a row, and the foot's buttons spread
+  // first line and the rest under them, the tiles stand three to a row, and the foot's buttons spread
   await page.click('.console__rail [data-tab="runs"]');
   await sleep(300);
   const card = await page.evaluate(() => {
@@ -2568,6 +2568,10 @@ await check('P12: on a phone, Refresh on the Dependencies tab keeps the chart\'s
   const before = await restingY(page);
   // the sub-issues take a while, so the box stands empty long enough to be seen held or not
   phase.subDelay = 700;
+  // the box's own height, to the fraction of a pixel: a hold rounded to a whole one moves the page
+  // under it by a pixel where the rounding goes up, and by less than the window shows where it goes
+  // down, so the hold itself is compared with it
+  const exact = await page.evaluate(() => getComputedStyle(document.getElementById('cp-graph')).height);
   await page.evaluate(() => {
     const box = document.getElementById('cp-graph');
     window.__seen = [];
@@ -2580,10 +2584,13 @@ await check('P12: on a phone, Refresh on the Dependencies tab keeps the chart\'s
   const seen = await page.evaluate(() => { clearInterval(window.__watch); return window.__seen; });
   const unheld = seen.filter((s) => s.kids === 0 && !s.min);
   const moved = seen.filter((s) => s.y !== before);
-  console.log('      before', before, '| samples', seen.length, '| empty and unheld:', JSON.stringify(unheld.slice(0, 3)), '| moved:', JSON.stringify(moved.slice(0, 3)));
+  const heldAt = [...new Set(seen.filter((s) => s.kids === 0 && s.min).map((s) => s.min))];
+  console.log('      before', before, '| the box', exact, 'held at', JSON.stringify(heldAt), '| samples', seen.length, '| empty and unheld:', JSON.stringify(unheld.slice(0, 3)), '| moved:', JSON.stringify(moved.slice(0, 3)));
   assert.ok(before > 300, 'the page did not scroll into the tab');
   assert.ok(seen.some((s) => s.kids === 0), 'the box was never emptied, so nothing was measured');
   assert.deepEqual(unheld, [], 'the empty box lost its hold before the chart was drawn');
+  assert.ok(parseFloat(exact) % 1 !== 0, 'the box\'s height is a whole pixel, so a hold rounded to one says nothing');
+  assert.deepEqual(heldAt, [exact], 'the empty box was not held at its own height to the fraction of a pixel');
   assert.deepEqual(moved, [], 'the page moved through Refresh');
   // the sub-issues cannot be read: the box stands empty under one line, at no height of its own
   phase.subDelay = 0;

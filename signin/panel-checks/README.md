@@ -29,9 +29,9 @@ ghu_TEST or github_pat_X.
   leaving the tiles their room on a narrow one, a phone held sideways and a wide one (P22). P23
   (site branch claude/dependencies-look, 2026-10-19, after the owner's "the buttons for tokens ect,
   should scale to the screen size so multiple fit on the page") holds the Tokens tiles to the
-  window: at 1280, 1920 and 2560 px a full row reaches the box's end, each tile is 104 to 377 px
-  wide and never a tall square, the columns grow with the window, and the nine tiles fill one row at
-  1280 and 1920; P6 holds the Command tab's readouts and buttons three and two to a row on a phone.
+  window: at 1280 and 1920 px the nine tiles fill one row and that row reaches the box's end, and at
+  those widths and at 2560 px, where nine tiles fill less than a row, each tile is 104 to 377 px wide
+  and never a tall square and the columns grow with the window; P6 holds the Command tab's readouts and buttons three and two to a row on a phone.
   P24 (site branch claude/lend-list-hidden, 2026-10-19) holds the organization variable
   SYMPHONY_LEND_TO readable by no repository's workflows: written for selected repositories with
   none selected, and a list an older page left readable by the private repositories, or by all,
@@ -49,7 +49,7 @@ ghu_TEST or github_pat_X.
   answer, the issue read again before each question and replaced when closed, one press at a time,
   a sign-in changed under the page, a watch read on after a sign-in, and Stop watching; its cadence
   constants are shortened in the served script, and a check may serve its own.
-- `e2e2/graph.test.mjs`: 54 checks of the panel's Dependencies tab (site branch
+- `e2e2/graph.test.mjs`: 59 checks of the panel's Dependencies tab (site branch
   claude/graph-section, 2026-10-18; a section of the long page until the console): the chart text
   the page hands the drawing, byte for byte the two blocks symphony-protocol's board writes for its
   fixture board-epics.json (board-epics-STATE.md, copied into the check from symphony-protocol
@@ -100,32 +100,51 @@ ghu_TEST or github_pat_X.
   neo look in the deck's colours, its labels wrapped at 190 px, with its list of settings no
   directive may change pinned (A; the neo look turns arrows at rounded corners whatever curve is
   asked, so none is), each chart a card with its heading, an epic's bar of closed tasks named for
-  its card with its ARIA, a pill per state of the card's own issues (an epic's sub-issues, so the
-  pills add up to the bar) and one for the blockers from outside the epic, its list folded under it
+  its card with its ARIA, a pill per state of the card's own issues (an epic's sub-issues in this
+  repository), one for its sub-issues in another repository, which the bar counts and the chart
+  does not draw (AQ), so the pills add up to the bar, and one for the blockers from outside the epic, its list folded under it
   and named for its card, and the key, a swatch per state drawn with the edge its nodes have and the
   three arrows, in two sets, shown with the charts (AF), the key hidden while there is nothing to
   draw, while a Refresh reads again and after a Refresh that finds nothing (AG), hidden where the
   drawing script cannot load (E) or no chart could be drawn (Q), every node of the six states drawn
   by the real Mermaid keeping none of the board's light colours on its own elements, shaded and
-  edged by its state (blocked thick on a lighter tint, claimed dotted, closed dashed and struck
-  through, so no two differ by hue alone), its box rounded, no label wider or taller than its box
+  edged by its state (blocked thick, claimed dotted, closed dashed and struck through, in review on
+  a lit fill and open with a thin pale edge), no two states told apart by hue alone (each pair
+  differs in its edge's dash, by a pixel of its edge's width, in its words' line, or by 1.4 to 1 in
+  the lightness of its edge or its fill, which R5 holds on the Board tab too), its box rounded, no label wider or taller than its box
   though the site's face, served 160% wide, comes 1.5 s after the drawing script, and the arrows
-  left unfilled (AH), the wait for that face bounded, the charts drawn 2.5 s after the script where
-  the face never comes (AP), the same look on the Board tab's charts, every state (R5), a block
+  left unfilled (AH), the wait for that face bounded at 2.5 s, the charts drawn within 5.5 s of the
+  script where the face never comes (AP), the same look on the Board tab's charts, every state (R5), a block
   shown as text there giving up the chart's class (X), the list folded before it is opened and open
   after, as a person opens it before Centre its row (D), and a chart wider than its box opening at
   its middle on a phone, though it was drawn in a hidden tab, then left where the person scrolls it
   (AI). The tiles and the moves between charts (AJ to AO, after the owner's "make the epics more
   intuitive and navigating that page more fluent" of 2026-10-19): a bar on each tile of its chart's
   own issues by state, All every epic's tasks, the tiles sharing a row on a laptop and on a phone
-  one row that scrolls sideways with the chosen tile brought into view (AJ), Previous and Next on
-  each card stepping to the chart beside it with the keyboard kept on the card shown (AK), the arrow
-  keys, Home and End moving from tile to tile (AL), a chart dragged with the mouse like a map, a
-  drag pressing no node (AM), Fit shown only on a chart wider than its card and drawing it whole
-  (AN), and a chosen chart fading in, none on load and none where less motion is asked (AO).
+  one row that scrolls sideways with the chosen tile brought into view, a kept one too when the tab
+  opens after a draw made on another tab (AJ), Previous and Next on each card stepping to the chart
+  beside it with the keyboard kept on the card shown (AK), the arrow keys moving from tile to tile,
+  Home and End across every tile to the first and the last, and a key at either end, which moves
+  nowhere, changing nothing (AL), a chart dragged with the mouse like a map, the page moving up and
+  down where the page scrolls as a whole, a drag pressing no node (AM), Fit shown only on a chart
+  wider than its card, though drawn in a hidden tab or a hidden card, and drawing it whole (AN),
+  and a chosen chart fading in, none on load and none where less motion is asked (AO). From the
+  look's second review (AQ to AU, 2026-10-19): an epic's sub-issue in another repository in a pill
+  of its own (AQ); on a laptop the tiles one compact row however many epics there are, the charts'
+  box keeping three fifths of the deck or more at 1280 x 800 with a goal and twelve epics, the row
+  turned sideways by the wheel, its ends fading where more tiles lie past them, and the wheel left
+  to the page where the page scrolls as a whole (AR); a card's tools, Fit and Previous and Next, in
+  one place on every card however long its heading and however many its pills, so Next pressed
+  again and again by the mouse steps through every chart, and on a phone Fit and the steps on one
+  row at the top of the card (AS); a press whose release never comes ended by the first move made
+  with no button held, nothing moving with the bare mouse and the next click kept (AT); and the
+  tiles' and the cards' small words at 4.5 to 1 on their ground, at rest and under the pointer
+  (AU).
   `NOCSS=1` serves the stylesheet without its rules for a chart's nodes, the half of the look no
   mutant of the script reaches, and AH and R5 fail then (until the console's look it took the
-  chart's light ground away and C and R failed). Each check opens the Dependencies tab by its rail
+  chart's light ground away and C and R failed). AR's compact row, the phone's half of AS and AU
+  hold the rest of the stylesheet's part, which no mutant reaches either, and were seen to fail
+  with the rules from before the look's second review. Each check opens the Dependencies tab by its rail
   button before it reads or presses inside it, and a press that crosses tabs is read at once with
   page.evaluate,
   which opens nothing, so the page and not console-tabs.mjs is seen opening the tab. A check that
@@ -227,13 +246,13 @@ ghu_TEST or github_pat_X.
   read before the write asks for no write access, and a write that lands after a sign-out and a
   sign-in again frees no lock a later write holds; N19 and N20 grew there too (the lock a write after
   a sign-in again holds, and the x on an internal repository's notebook).
-- `e2e2/mutants/`: 349 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/mutants/`: 361 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
   (`a*`, check O of assistant.test.mjs: the question dropped, the same tab, the state dropped, no
   cut, the encoded form unbounded, the referrer sent, a cut by code unit) were caught against the site branch claude/ask-in-claude. The 79 of the sign-in (`m*`) were caught against master
-  009109c; the 97 of the Dependencies tab (`g*`, five of them for the tab: show dependencies
+  009109c; the 109 of the Dependencies tab (`g*`, five of them for the tab: show dependencies
   opening no tab and leaving the charts' box where it was, the message line unsaid, the focus
   opening no tab, and the window not put back; eleven from the tab's second review: the message
   line said only when the press leaves the tab, a press always opening the Tasks tab, the board's
@@ -253,30 +272,41 @@ ghu_TEST or github_pat_X.
   claude/dependencies-focus on 2026-10-19; thirteen from the console's look (g56 to g68: the nodes
   not restyled, restyled on the node alone and not its parts, not rounded (AH), the classic look
   (A), the list open from the start (AF), not opened for a chart not drawn (Q) or for the drawing
-  script not loaded (E), the key never shown (AF) or kept through a Refresh's read (AG), the bar's
+  script not loaded (E), the key never shown (AF) or kept through a Refresh's read, by the strip's clearing that a Refresh
+  and every draw go through (AG), the bar's
   aria-valuenow given the total (AF), the closed pill dropped (AF), a wide chart not opened at its
   middle, and opened at its middle again after the person scrolled it (AI)); sixteen from the tiles
   and the moves (g69 to g84: the tile bar's segments even (AJ), All counting the goals (AJ), the
   pressed tile left out of view on a phone (AJ), a step that selects nothing or loses the keyboard,
   All's class unset (AK), the arrow keys dead or Home and End stepping one (AL), no drag, a drag
-  that presses a node or one with no threshold (AM), Fit never shown, never fitting or never watched
-  for a resize (AN), no fade or a fade on load (AO)); and thirteen from the look's review (g85 to
-  g98 but g95: the secure list short of themeVariables (A), the key kept after the drawing script
+  that presses a node or one with no threshold (AM), Fit never shown, never fitting or never checked
+  once drawn (AN), no fade or a fade on load (AO)); twelve from the look's review (g85 to g98 but
+  g95, and g97, retired as g64 again: the secure list short of themeVariables (A), the key kept after the drawing script
   failed (E) or with no chart drawn (Q), the pills counting the blockers from outside the epic (AF),
   no pill for them (AF), the bar named for no card (AF) or read as a percentage (AF), the list's
   toggle named for no card (AF), the site's face not waited for (AH), waited for with no bound (AP),
-  the Board tab's charts not restyled (R5), the strip's clearing keeping the key (AG), and the
-  tiles' bars counting the blockers from outside (AJ)) against site branch claude/dependencies-look
-  on 2026-10-19, where every other suite passes too. Four were rewritten for that branch, since
+  the Board tab's charts not restyled (R5), and the tiles' bars counting the blockers from outside
+  (AJ)) against site branch claude/dependencies-look on 2026-10-19, where every other suite passes
+  too; and thirteen from its second review (g100 to g112: no pill for an epic's sub-issues in
+  another repository (AQ), the kept tile not brought into view when the tab opens after the draw
+  (AJ), the strip deaf to the wheel, its ends never marked, or the wheel taken from the page where
+  the page scrolls as a whole (AR), Previous and Next out of the tools' row or Fit back among the
+  pills (AS), End stepping one, or a key at either end still pressing its tile (AL), a drag moving
+  the tab's box where the page scrolls (AM), a press whose release never came still dragging (AT),
+  Fit's box never watched for a resize (AN), and the wait for the site's face made 6 s (AP)) against
+  the same branch the same day. Four were rewritten for that branch, since
   their text had moved: g22 (one chart's failure failing the rest, now that the failure opens the
   chart's list), g27 (the words for no repository listed), g29 (show dependencies scrolling only)
-  and g52 (the strip not hiding the other charts); and g45 (a block shown as text keeping the
+  and g52 (the strip not hiding the other charts), and two more for the second review, g64 (the
+  strip's clearing now drops its faded ends too) and g75 (the strip's keys added through its own
+  name); and g45 (a block shown as text keeping the
   chart's class), which the dark chart ground let survive, is caught again by X, which now asks that
   such a block keep no chart's class. No mutant has graphRestyle reach the arrows: it would take off
   only the fill:none Mermaid also gives them in its own stylesheet, so nothing it changed could be
   seen, and AH's look at the arrows guards the console's stylesheet instead. g99 (a box held through
   Refresh at its height rounded to a whole pixel, so the page under it moves one) names P12 in
-  signin.test.mjs. The 63 of the Folders tab (`f*`, each with a `.json.suite` naming
+  signin.test.mjs, which compares the hold with the box's own height to the fraction of a pixel,
+  since the look's second review left the box a height that rounds down and moves no page. The 63 of the Folders tab (`f*`, each with a `.json.suite` naming
   folders.test.mjs) were caught against site branch claude/folders-explorer on 2026-10-18, the first
   48 also against the site's script at commit 044b8b3, f06 rewritten for the explorer's name cell;
   f56 to f63, the saved catalog's, against site branch claude/folders-catalog the same day, f60 to
@@ -289,7 +319,9 @@ ghu_TEST or github_pat_X.
   f025b08 on 2026-10-19, where every other suite passes too; p34 to p40, for P24 (the list written
   readable by the private repositories, an open list left open, the close rewriting the value, a
   closed list closed again, a list open to all left open, a refused close thrown, and the emptied
-  list kept), against site branch claude/lend-list-hidden on 2026-10-19. The 39 of the Notebooks tab
+  list kept), against site branch claude/lend-list-hidden on 2026-10-19; p17 (the chart's box
+  measured after the earlier hold let it go) was rewritten for the exact height the hold now takes
+  and caught again against site branch claude/dependencies-look the same day. The 39 of the Notebooks tab
   (`n*`, each naming notebooks.test.mjs) were caught against site branch claude/notebooks at 1656fbb
   on 2026-10-19 after its third review, n35 to n39 for its findings, where every other suite passes
   too; N6 to N9 and N18 have no mutant of their own (N9 and N18 hold the stylesheet, which no mutant

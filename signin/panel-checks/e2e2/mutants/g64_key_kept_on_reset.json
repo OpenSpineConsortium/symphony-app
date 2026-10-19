@@ -1,1 +1,1 @@
-[["    if (strip) { clear(strip); strip.hidden = true; }\n    graphKey(false);\n", "    if (strip) { clear(strip); strip.hidden = true; }\n"]]
+[["    if (strip) { clear(strip); strip.hidden = true; strip.removeAttribute('data-more'); }\n    graphKey(false);\n", "    if (strip) { clear(strip); strip.hidden = true; strip.removeAttribute('data-more'); }\n"]]

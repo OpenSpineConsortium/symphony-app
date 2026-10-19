@@ -29,7 +29,8 @@
 // restored on load and on Refresh, no strip for a single chart, and a kept choice that is gone
 // falling back to the first, and (AF to AI) the console's look: each chart a card with its bar and
 // its pills and its list folded, the key, the nodes shaded by their state in place of the board's
-// light colours, and a wide chart opened at its middle. Each check states what the page promises;
+// light colours, and a wide chart opened at its middle, and (AJ to AU) the tiles, the moves between
+// the charts and what the look's second review found. Each check states what the page promises;
 // a FAIL is a defect. Every token is a stand-in.
 //
 // The console shows one tab at a time, so each check opens the Dependencies tab by its rail button
@@ -37,7 +38,8 @@
 // the other suites do. A press that crosses tabs is read right after it with page.evaluate, which
 // opens nothing, so the page and not the helper is what opened the tab. The window is a laptop's,
 // 1366 x 657, where the console fills the window and the site's foot lies below it, so the page
-// could scroll and no press may move it; AI and AJ open a phone's too, 390 x 844.
+// could scroll and no press may move it; AI, AJ and AS open a phone's too, 390 x 844, and AM and AR
+// a window 800 px wide, where the page scrolls as a whole.
 //
 // The mutants that prove the checks bite are e2e2/mutants/g*.json, each with the checks that must
 // catch it (.only) and this file named as its suite (.suite); e2e2/run-mutants.sh runs them.
@@ -163,16 +165,17 @@ function fixtureRoutes(f) {
   for (const n of Object.keys(f.blockedBy)) routes['GET /repos/acme/demo/issues/' + n + '/dependencies/blocked_by'] = f.blockedBy[n];
   return routes;
 }
-// the colours the stylesheet gives each state, as getComputedStyle gives them, and the edge each has
-// besides its hue, so no two of the open states differ by hue alone: blocked thick, claimed dotted,
-// closed dashed
+// the colours the stylesheet gives each state, as getComputedStyle gives them, and the edge each
+// has; no two of the six differ by hue alone (assertNotHueAlone): blocked thick, claimed dotted,
+// closed dashed and struck through, in review on a fill lit well above to do's, and open with a thin
+// pale edge far lighter than to do's green
 const SHADES = {
   todo: { fill: 'rgb(16, 38, 27)', stroke: 'rgb(63, 185, 80)', width: '1.5px', dash: 'none' },
   claimed: { fill: 'rgb(42, 36, 18)', stroke: 'rgb(227, 179, 65)', width: '2.5px', dash: '0.5px, 5px' },
-  review: { fill: 'rgb(17, 35, 56)', stroke: 'rgb(88, 166, 255)', width: '1.5px', dash: 'none' },
+  review: { fill: 'rgb(34, 70, 111)', stroke: 'rgb(88, 166, 255)', width: '1.5px', dash: 'none' },
   blocked: { fill: 'rgb(69, 28, 32)', stroke: 'rgb(248, 81, 73)', width: '3px', dash: 'none' },
   closed: { fill: 'rgb(21, 27, 26)', stroke: 'rgb(111, 125, 120)', width: '1.5px', dash: '4px, 3px' },
-  '': { fill: 'rgb(22, 34, 31)', stroke: 'rgb(138, 158, 151)', width: '1.5px', dash: 'none' },
+  '': { fill: 'rgb(22, 34, 31)', stroke: 'rgb(194, 204, 200)', width: '1px', dash: 'none' },
 };
 // every drawn node under a box, as AH and R5 read them: its number and state, any colour left on its
 // own elements, its shade, edge and corners, its words' colour and line, and whether its words are
@@ -199,6 +202,27 @@ function assertShaded(nodes) {
     assert.equal(x.rx, '10', 'node #' + x.n + '\'s box is not rounded');
     assert.deepEqual([x.color, x.line], x.state === 'closed' ? ['rgb(138, 152, 147)', 'line-through'] : ['rgb(228, 236, 232)', 'none'], 'node #' + x.n + '\'s words');
     assert.equal(x.cut, false, 'node #' + x.n + '\'s words are wider or taller than its box');
+  }
+}
+// WCAG's relative luminance of a colour as getComputedStyle gives it, and the ratio of two such
+const luminance = (c) => c.match(/[0-9.]+/g).slice(0, 3).map(Number).map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }).reduce((sum, x, i) => sum + x * [0.2126, 0.7152, 0.0722][i], 0);
+const lightRatio = (a, b) => { const p = luminance(a) + 0.05, q = luminance(b) + 0.05; return Math.max(p, q) / Math.min(p, q); };
+// no two of the six states, as drawn, differ by hue alone, so a reader who does not tell red from
+// green or blue from green, or a screen of greys, still tells them apart: each pair differs in its
+// edge's dash, in its edge's width by a pixel or more, in its words' line, or by 1.4 to 1 or more in
+// the lightness of its edge or of its fill, a step that shows in greys
+function assertNotHueAlone(nodes) {
+  const byState = {};
+  for (const x of nodes) byState[x.state] = x;
+  const states = Object.keys(byState);
+  assert.equal(states.length, 6, 'not every state is drawn: ' + states.join());
+  for (let i = 0; i < states.length; i++) {
+    for (let j = i + 1; j < states.length; j++) {
+      const a = byState[states[i]], b = byState[states[j]];
+      const apart = a.dash !== b.dash || Math.abs(parseFloat(a.width) - parseFloat(b.width)) >= 1 || a.line !== b.line
+        || lightRatio(a.stroke, b.stroke) >= 1.4 || lightRatio(a.fill, b.fill) >= 1.4;
+      assert.ok(apart, (a.state || 'open') + ' and ' + (b.state || 'open') + ' differ by hue alone: ' + JSON.stringify([a, b]));
+    }
   }
 }
 // The fixture with a node of each of the six states in epic #20's chart: #23 blocked, and #99, the
@@ -1210,7 +1234,7 @@ await check('R4: a board chart the drawing script cannot draw keeps its text und
 });
 // the Board tab draws through the same graphDraw as the Dependencies tab, so its charts take the
 // same look: the gate's block, a node of each of the six states, drawn there by the real Mermaid
-await check('R5: the Board tab\'s charts are drawn in the console\'s look, each of the six states shaded and edged as its own, no node keeping the board\'s light colours, its box rounded', async () => {
+await check('R5: the Board tab\'s charts are drawn in the console\'s look, each of the six states shaded and edged as its own, no two by hue alone, no node keeping the board\'s light colours, its box rounded', async () => {
   const { context, page, errors } = await open(boardOnlyRoutes(boardWith([['Epic #67: Every printable character', GATE_TEXT]])));
   await signIn(page, null);
   await page.waitForFunction(() => document.querySelectorAll('#cp-board .control__chart svg').length === 1, null, { timeout: 15000 });
@@ -1218,6 +1242,7 @@ await check('R5: the Board tab\'s charts are drawn in the console\'s look, each 
   const nodes = await readNodes(page, '#cp-board');
   console.log('     board nodes:', JSON.stringify(nodes.map((x) => [x.n, x.state, x.fill, x.stroke, x.width, x.dash, x.inline.length, x.rx])));
   assertShaded(nodes);
+  assertNotHueAlone(nodes);
   assert.deepEqual(nodes.map((x) => [x.n, x.state]).sort((a, b) => a[0] - b[0]), [[61, 'todo'], [62, 'claimed'], [63, 'review'], [64, 'blocked'], [65, 'closed'], [66, '']]);
   assert.deepEqual(errors, []);
   await context.close();
@@ -1642,7 +1667,7 @@ await check('AF: each chart is a card: its heading, for an epic a bar of its clo
   }));
   const key = await page.evaluate(() => {
     const k = document.getElementById('cp-graph-key');
-    const edge = (c) => { const b = getComputedStyle(k.querySelector('.graph__swatch--' + c), '::before'); return [b.borderTopStyle, b.borderTopWidth, b.borderTopColor]; };
+    const edge = (c) => { const b = getComputedStyle(k.querySelector('.graph__swatch--' + c), '::before'); return [b.borderTopStyle, b.borderTopWidth, b.borderTopColor, b.backgroundColor]; };
     return {
       hidden: k.hidden, inTab: !!k.closest('#tab-dependencies'), label: k.getAttribute('aria-label'),
       sets: Array.from(k.children).map((set) => Array.from(set.children).map((c) => c.textContent.trim())),
@@ -1658,13 +1683,15 @@ await check('AF: each chart is a card: its heading, for an epic a bar of its clo
       pills: [['graph__pill graph__pill--todo', '1 to do'], ['graph__pill graph__pill--claimed', '1 claimed'], ['graph__pill graph__pill--closed', '1 closed'], ['graph__pill graph__pill--outside', '1 from outside the epic']],
       list: [false, 'List of 4 issues', 1, 'List of 4 issues: Epic #20: Draw the board (1/3)'] },
   ]);
-  // each swatch's edge as its nodes are edged (AH): blocked thick, claimed dotted, closed dashed
+  // each swatch's edge and fill as its nodes are edged and filled (AH): blocked thick, claimed
+  // dotted, closed dashed, in review lit and open's edge pale
+  const swatch = (style, width, c) => [style, width, SHADES[c].stroke, SHADES[c].fill];
   assert.deepEqual(key, { hidden: false, inTab: true, label: 'Key to the charts',
     sets: [['To do', 'Claimed', 'In review', 'Blocked', 'Closed', 'Open'], ['blocks', 'blocked, now closed', 'goal to its epic']],
     edges: {
       // a border of 1.5 px is drawn, and given, as 1 px on a screen of one pixel to the px
-      todo: ['solid', '1px', SHADES.todo.stroke], claimed: ['dotted', '2px', SHADES.claimed.stroke], review: ['solid', '1px', SHADES.review.stroke],
-      blocked: ['solid', '3px', SHADES.blocked.stroke], closed: ['dashed', '1px', SHADES.closed.stroke], open: ['solid', '1px', SHADES[''].stroke],
+      todo: swatch('solid', '1px', 'todo'), claimed: swatch('dotted', '2px', 'claimed'), review: swatch('solid', '1px', 'review'),
+      blocked: swatch('solid', '3px', 'blocked'), closed: swatch('dashed', '1px', 'closed'), open: swatch('solid', '1px', ''),
     } });
   assert.deepEqual(errors, []);
   await context.close();
@@ -1704,7 +1731,7 @@ await check('AG: the key is hidden while there is nothing to draw and while a Re
   await context.close();
 });
 
-await check('AH: drawn by the real Mermaid in the console\'s look, no node keeps the board\'s light colours: each of the six states is shaded and edged as its own, its box rounded, a closed one struck through, no label is cut though the site\'s face comes late, and the arrows keep their own look', async () => {
+await check('AH: drawn by the real Mermaid in the console\'s look, no node keeps the board\'s light colours: each of the six states is shaded and edged as its own, no two by hue alone, its box rounded, a closed one struck through, no label is cut though the site\'s face comes late, and the arrows keep their own look', async () => {
   // the face is handed over 1.5 s after the drawing script: Mermaid, waiting for it, measures in it
   const face = lateFace((release) => setTimeout(release, 1500));
   const { context, page, errors } = await open(fixtureRoutes(fixtureStates()), { extraRoutes: face.routes, waitUntil: 'domcontentloaded' });
@@ -1720,6 +1747,7 @@ await check('AH: drawn by the real Mermaid in the console\'s look, no node keeps
   console.log('     nodes:', JSON.stringify(nodes), '| edges\' fill:', JSON.stringify(edges));
   assert.equal(nodes.length, 6);
   assertShaded(nodes);
+  assertNotHueAlone(nodes);
   assert.deepEqual(nodes.map((x) => [x.n, x.state]).sort((a, b) => a[0] - b[0]), [[20, ''], [21, 'closed'], [22, 'claimed'], [23, 'blocked'], [30, 'todo'], [99, 'review']]);
   assert.ok(edges.length >= 3, 'the arrows were not found');
   assert.ok(edges.every((e) => e === 'none'), 'an arrow is drawn filled');
@@ -1730,7 +1758,7 @@ await check('AH: drawn by the real Mermaid in the console\'s look, no node keeps
 
 // The wait for the site's face is bounded: where its file never comes, as on a network that stalls
 // the font host, the charts are drawn in the fallback face a moment later, never held for good.
-await check('AP: a site face that never arrives holds the charts back no longer than the wait the page allows', async () => {
+await check('AP: a site face that never arrives holds the charts back no longer than the page\'s wait of 2.5 s, drawn within 5.5 s of the drawing script', async () => {
   let handed = 0;
   const face = lateFace(() => { handed = Date.now(); });
   const { context, page, errors } = await open(fixtureRoutes(fixture()), { extraRoutes: face.routes, waitUntil: 'domcontentloaded' });
@@ -1741,8 +1769,9 @@ await check('AP: a site face that never arrives holds the charts back no longer 
   console.log('     drawn', took, 'ms after the drawing script was handed over, with the face never served | charts:', svgs);
   assert.equal(svgs, 2);
   assert.ok(handed > 0, 'the drawing script was never asked for');
-  // it waited for the face (2.5 s), and no longer than that and the drawing take
-  assert.ok(took >= 2300 && took < 9000, 'the charts were drawn ' + took + ' ms after the script came');
+  // it waited for the face (2.5 s), and no longer than that and the drawing take, about a second
+  // here: 5.5 s leaves room for a slower machine and fails a wait of 6 s, which drew at 6.9 s
+  assert.ok(took >= 2300 && took < 5500, 'the charts were drawn ' + took + ' ms after the script came');
   assert.deepEqual(errors, []);
   face.release();
   await context.close();
@@ -1780,7 +1809,7 @@ await check('AI: a chart wider than its box opens at its middle on a phone, thou
 // tiles to a row on a laptop and one sideways row on a phone with the chosen one in view, Previous and
 // Next on each card, the arrow keys on the tiles, a chart dragged with the mouse, Fit, and a fade.
 const segs = (page, key) => page.$eval('#cp-graph-focus .graph__chip[data-focus="' + key + '"] .graph__tbar', (bar) => [bar.getAttribute('aria-hidden')].concat(Array.from(bar.children).map((s) => s.className.replace('graph__seg graph__seg--', '') + ' ' + s.style.width)));
-await check('AJ: each tile carries a bar of its chart\'s own issues by state, an epic\'s tasks without its blockers from outside, All every epic\'s tasks; the tiles share a row on a laptop, and on a phone are one row that scrolls sideways, the chosen tile brought into view', async () => {
+await check('AJ: each tile carries a bar of its chart\'s own issues by state, an epic\'s tasks without its blockers from outside, All every epic\'s tasks; the tiles share a row on a laptop, and on a phone are one row that scrolls sideways, the chosen tile brought into view, a kept one too when the tab opens after the draw', async () => {
   // epic #20 with a fourth task, #26 to do, so its tasks are two to do, one claimed and one closed;
   // #99, which blocks #22 from outside the epic, is no task of it and not in its bar
   const f = fixture();
@@ -1803,7 +1832,7 @@ await check('AJ: each tile carries a bar of its chart\'s own issues by state, an
   const phone = await open(fixtureRoutes(fixture()), { extraRoutes: [stubRoute], viewport: { width: 390, height: 844 } });
   await signIn(phone.page);
   await waitGraph(phone.page, /^Drawn from 4 reads/, 15000);
-  const strip = () => phone.page.evaluate(() => {
+  const stripOf = (page) => page.evaluate(() => {
     const s = document.getElementById('cp-graph-focus'), sr = s.getBoundingClientRect();
     const on = s.querySelector('[aria-pressed="true"]').getBoundingClientRect();
     const tops = Array.from(s.querySelectorAll('.graph__chip')).map((b) => Math.round(b.getBoundingClientRect().top));
@@ -1811,7 +1840,7 @@ await check('AJ: each tile carries a bar of its chart\'s own issues by state, an
   });
   await phone.page.$eval('#cp-graph-focus', (s) => { s.scrollLeft = 0; });
   await phone.page.$eval('#cp-graph-focus .graph__chip[data-focus="epic-20"]', (b) => b.click());
-  const pressed = await strip();
+  const pressed = await stripOf(phone.page);
   console.log('     phone strip after a press on the last tile:', JSON.stringify(pressed));
   assert.equal(pressed.scrolls, true, 'the phone\'s tiles do not scroll sideways');
   assert.equal(pressed.oneRow, true, 'the phone\'s tiles are not one row');
@@ -1819,6 +1848,22 @@ await check('AJ: each tile carries a bar of its chart\'s own issues by state, an
   assert.ok(pressed.page <= 390, 'the tiles widen the page past the phone: ' + pressed.page);
   assert.deepEqual(phone.errors, []);
   await phone.context.close();
+  // the last tile kept as the choice and the charts drawn while the console stands on another tab,
+  // where the strip has no width: its tile is brought into view once the tab opens
+  const later = await open(fixtureRoutes(fixture()), { extraRoutes: [stubRoute], viewport: { width: 390, height: 844 }, storage: { symphony_panel_graph_focus: JSON.stringify({ 'acme/demo': 'epic-20' }) } });
+  await signIn(later.page, null);
+  await waitGraph(later.page, /^Drawn from 4 reads/, 15000);
+  const hiddenWhileDrawn = await later.page.evaluate(() => document.getElementById('tab-dependencies').hidden);
+  await toTab(later.page, 'dependencies');
+  await later.page.waitForFunction(() => document.getElementById('cp-graph-focus').clientWidth > 0, null, { timeout: 5000 });
+  await sleep(300);
+  const kept = await stripOf(later.page);
+  console.log('     drawn on another tab:', hiddenWhileDrawn, '| the kept tile once the tab opened:', JSON.stringify(kept));
+  assert.equal(hiddenWhileDrawn, true, 'the charts were not drawn while the tab was hidden');
+  assert.equal(kept.scrolls, true, 'the strip does not scroll sideways, so this says nothing');
+  assert.equal(kept.inView, true, 'the kept tile is not in view once the tab opened after the draw');
+  assert.deepEqual(later.errors, []);
+  await later.context.close();
 });
 
 const stepState = (page) => page.evaluate(() => {
@@ -1855,22 +1900,37 @@ await check('AK: Previous and Next on each card step to the chart beside it, kee
   await context.close();
 });
 
-await check('AL: the arrow keys move from tile to tile and show its chart, Home and End to the first and the last, and Left stops at the first', async () => {
+await check('AL: the arrow keys move from tile to tile and show its chart, Home and End across every tile to the first and the last, and a key at either end, which moves nowhere, changes nothing: no fade again and no choice written', async () => {
   const { context, page, errors } = await open(fixtureRoutes(fixture()), { extraRoutes: [stubRoute] });
   await signIn(page);
   await waitGraph(page, /^Drawn from 4 reads/, 15000);
-  const at = () => page.evaluate(() => [document.activeElement.getAttribute('data-focus'), Array.from(document.querySelectorAll('#cp-graph-focus .graph__chip')).filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.getAttribute('data-focus')).join(), Array.from(document.querySelectorAll('#cp-graph .graph__section')).filter((s) => !s.hidden).map((s) => s.getAttribute('data-focus')).join()]);
+  // the tile with the keyboard, the tile pressed, the charts shown, whether a chart shown faded in
+  // again, and the choice kept, which is set aside before each key so a key that writes it shows
+  const at = () => page.evaluate(() => {
+    const shown = Array.from(document.querySelectorAll('#cp-graph .graph__section')).filter((s) => !s.hidden);
+    return [document.activeElement.getAttribute('data-focus'), Array.from(document.querySelectorAll('#cp-graph-focus .graph__chip')).filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.getAttribute('data-focus')).join(),
+      shown.map((s) => s.getAttribute('data-focus')).join(), shown.some((s) => s.classList.contains('graph__section--enter')), localStorage.getItem('symphony_panel_graph_focus')];
+  });
   await page.focus('#cp-graph-focus button[data-focus="all"]');
   const seen = [];
-  for (const key of ['ArrowRight', 'ArrowRight', 'ArrowLeft', 'End', 'Home', 'ArrowLeft']) { await page.keyboard.press(key); seen.push([key].concat(await at())); }
+  // End is pressed from the first tile and Home from the last, so each crosses two tiles, where a
+  // key that moved one would stop short
+  for (const key of ['ArrowRight', 'ArrowRight', 'ArrowRight', 'ArrowLeft', 'Home', 'End', 'Home', 'ArrowLeft']) {
+    await page.evaluate(() => { document.querySelectorAll('#cp-graph .graph__section').forEach((s) => s.classList.remove('graph__section--enter')); localStorage.setItem('symphony_panel_graph_focus', '{}'); });
+    await page.keyboard.press(key);
+    seen.push([key].concat(await at()));
+  }
   console.log('     keys:', JSON.stringify(seen));
+  const kept = (key) => JSON.stringify({ 'acme/demo': key });
   assert.deepEqual(seen, [
-    ['ArrowRight', 'goals', 'goals', 'goals'],
-    ['ArrowRight', 'epic-20', 'epic-20', 'epic-20'],
-    ['ArrowLeft', 'goals', 'goals', 'goals'],
-    ['End', 'epic-20', 'epic-20', 'epic-20'],
-    ['Home', 'all', 'all', 'goals,epic-20'],
-    ['ArrowLeft', 'all', 'all', 'goals,epic-20'],
+    ['ArrowRight', 'goals', 'goals', 'goals', true, kept('goals')],
+    ['ArrowRight', 'epic-20', 'epic-20', 'epic-20', true, kept('epic-20')],
+    ['ArrowRight', 'epic-20', 'epic-20', 'epic-20', false, '{}'],
+    ['ArrowLeft', 'goals', 'goals', 'goals', true, kept('goals')],
+    ['Home', 'all', 'all', 'goals,epic-20', true, kept('all')],
+    ['End', 'epic-20', 'epic-20', 'epic-20', true, kept('epic-20')],
+    ['Home', 'all', 'all', 'goals,epic-20', true, kept('all')],
+    ['ArrowLeft', 'all', 'all', 'goals,epic-20', false, '{}'],
   ]);
   assert.deepEqual(errors, []);
   await context.close();
@@ -1887,7 +1947,7 @@ const panState = (page) => page.evaluate(() => {
   const h = document.querySelector('#cp-graph .control__chart'), box = h.closest('.console__scroll');
   return { left: h.scrollLeft, top: box.scrollTop, tab: location.hash, said: document.getElementById('cp-graph-said').textContent, cursor: getComputedStyle(h).cursor };
 });
-await check('AM: a chart is dragged with the mouse, sideways in its box and up and down the tab; a drag presses no node, even one that ends where it began, and a press that shakes a little still presses its node', async () => {
+await check('AM: a chart is dragged with the mouse, sideways in its box and up and down the tab, or the page where the page scrolls as a whole; a drag presses no node, even one that ends where it began, and a press that shakes a little still presses its node', async () => {
   const { context, page, errors } = await open(wideRoutes(), { viewport: { width: 1280, height: 700 } });
   await signIn(page);
   await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
@@ -1932,9 +1992,64 @@ await check('AM: a chart is dragged with the mouse, sideways in its box and up a
   assert.equal(shaken.tab, '#tasks', 'a press that shook a little did not press its node');
   assert.deepEqual(errors, []);
   await context.close();
+  // a window 800 px wide, where the page scrolls as a whole and the tab's box does not: the drag's
+  // up and down moves the page
+  const narrow = await open(wideRoutes(), { viewport: { width: 800, height: 700 } });
+  await signIn(narrow.page);
+  await narrow.page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+  await waitGraph(narrow.page, /^Drawn from 1 read/, 15000);
+  await narrow.page.$eval('#cp-graph details.graph__list', (d) => { d.open = true; });
+  // the site's stylesheet scrolls the page smoothly, so the window is put there at once, before it is read
+  await narrow.page.evaluate(() => { const h = document.querySelector('#cp-graph .control__chart'); window.scrollTo({ top: Math.round(h.getBoundingClientRect().top + window.scrollY - 200), behavior: 'instant' }); });
+  await sleep(200);
+  const pageState = () => narrow.page.evaluate(() => ({ left: document.querySelector('#cp-graph .control__chart').scrollLeft, y: Math.round(window.scrollY), scrolls: getComputedStyle(document.getElementById('console')).overflow !== 'hidden' }));
+  const p = await narrow.page.$eval('#cp-graph .control__chart', (h) => { const b = h.getBoundingClientRect(); return { x: b.left + 8, y: b.top + 8 }; });
+  const start = await pageState();
+  await narrow.page.mouse.move(p.x, p.y);
+  await narrow.page.mouse.down();
+  await narrow.page.mouse.move(p.x - 150, p.y - 40, { steps: 6 });
+  await narrow.page.mouse.up();
+  const end = await pageState();
+  console.log('     where the page scrolls: before', JSON.stringify(start), '| after the drag', JSON.stringify(end));
+  assert.equal(start.scrolls, true, 'the page does not scroll as a whole at 800 px, so this says nothing');
+  assert.ok(Math.abs(end.left - start.left - 150) <= 2, 'the chart did not move sideways with the drag: ' + JSON.stringify([start, end]));
+  assert.ok(Math.abs(end.y - start.y - 40) <= 2, 'the page did not move up and down with the drag: ' + JSON.stringify([start, end]));
+  assert.deepEqual(narrow.errors, []);
+  await narrow.context.close();
 });
 
-await check('AN: Fit shows only on a chart wider than its card, draws the whole chart at the card\'s width, and pressed again gives it back its own size at its middle', async () => {
+await check('AT: a press on a chart whose release never comes, as when a menu opened on the press takes it, is no drag: the first move made with no button held ends it, nothing moves with the bare mouse, and the next click is not taken for a drag\'s end', async () => {
+  const { context, page, errors } = await open(wideRoutes(), { viewport: { width: 1280, height: 800 } });
+  await signIn(page);
+  await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+  await waitGraph(page, /^Drawn from 1 read/, 15000);
+  await page.waitForFunction(() => !document.querySelector('#cp-graph .graph__fit').hidden && document.querySelector('#cp-graph .control__chart').scrollLeft > 0, null, { timeout: 8000 });
+  const r = await page.$eval('#cp-graph .control__chart', (h) => { const b = h.getBoundingClientRect(); return { x: b.left + 8, y: b.top + 8 }; });
+  // the mouse's own pointer id, read from a real move, so the press made below is the mouse's
+  await page.evaluate(() => { window.__pid = null; window.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') window.__pid = e.pointerId; }); });
+  await page.mouse.move(r.x, r.y);
+  const pid = await page.evaluate(() => window.__pid);
+  const before = await panState(page);
+  // the press alone, with no release after it, as a Mac's Ctrl+click gives it: the menu it opens
+  // takes the release
+  await page.evaluate(({ x, y, pid }) => {
+    document.querySelector('#cp-graph .control__chart').dispatchEvent(new PointerEvent('pointerdown', { pointerId: pid, pointerType: 'mouse', isPrimary: true, button: 0, buttons: 1, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+  }, { x: r.x, y: r.y, pid });
+  await page.mouse.move(r.x - 150, r.y - 40, { steps: 6 });
+  const moved = await panState(page);
+  const panning = await page.$eval('#cp-graph .control__chart', (h) => h.classList.contains('control__chart--panning'));
+  await page.click('#cp-graph .graph__fit');
+  const fit = await page.$eval('#cp-graph .graph__fit', (b) => b.getAttribute('aria-pressed'));
+  console.log('     mouse pointer:', pid, '| before:', JSON.stringify(before), '| after the bare move:', JSON.stringify(moved), '| panning:', panning, '| Fit after a click:', fit);
+  assert.ok(pid !== null, 'no move of the mouse was seen');
+  assert.deepEqual([moved.left, moved.top], [before.left, before.top], 'the chart moved with the mouse though no button was held');
+  assert.equal(panning, false, 'the chart is still being dragged');
+  assert.equal(fit, 'true', 'the click after the lost release was taken for the end of a drag');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('AN: Fit shows only on a chart wider than its card, though the chart was drawn in a hidden tab or a hidden card, draws the whole chart at the card\'s width, and pressed again gives it back its own size at its middle', async () => {
   const narrow = await open(fixtureRoutes(fixture()), { viewport: { width: 1280, height: 800 } });
   await signIn(narrow.page);
   await narrow.page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
@@ -1943,10 +2058,14 @@ await check('AN: Fit shows only on a chart wider than its card, draws the whole 
   const narrowFit = await narrow.page.$$eval('#cp-graph .graph__section', (secs) => secs.map((s) => [s.getAttribute('data-focus'), s.querySelector('.graph__fit').hidden]));
   assert.deepEqual(narrow.errors, []);
   await narrow.context.close();
+  // the wide chart drawn while the console stands on another tab, where its box has no width yet, so
+  // Fit can show only once the tab opens and the box is laid out with one
   const { context, page, errors } = await open(wideRoutes(), { viewport: { width: 1280, height: 800 } });
-  await signIn(page);
+  await signIn(page, null);
   await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
   await waitGraph(page, /^Drawn from 1 read/, 15000);
+  const hiddenWhileDrawn = await page.evaluate(() => document.getElementById('tab-dependencies').hidden);
+  await toTab(page, 'dependencies');
   await page.waitForFunction(() => !document.querySelector('#cp-graph .graph__fit').hidden, null, { timeout: 5000 }).catch(() => {});
   const fitState = () => page.evaluate(() => {
     const h = document.querySelector('#cp-graph .control__chart'), b = document.querySelector('#cp-graph .graph__fit');
@@ -1957,8 +2076,9 @@ await check('AN: Fit shows only on a chart wider than its card, draws the whole 
   const fitted = await fitState();
   await page.click('#cp-graph .graph__fit');
   const back = await fitState();
-  console.log('     narrow charts\' Fit hidden:', JSON.stringify(narrowFit), '| wide:', JSON.stringify(wide), '| fitted:', JSON.stringify(fitted), '| back:', JSON.stringify(back));
+  console.log('     narrow charts\' Fit hidden:', JSON.stringify(narrowFit), '| drawn in a hidden tab:', hiddenWhileDrawn, '| wide:', JSON.stringify(wide), '| fitted:', JSON.stringify(fitted), '| back:', JSON.stringify(back));
   assert.deepEqual(narrowFit, [['goals', true], ['epic-20', true]], 'Fit shows on a chart that fits its card');
+  assert.equal(hiddenWhileDrawn, true, 'the wide chart was not drawn in a hidden tab');
   assert.deepEqual([wide.hidden, wide.pressed, wide.scrolls], [false, 'false', true]);
   assert.deepEqual([fitted.hidden, fitted.pressed, fitted.scrolls], [false, 'true', false]);
   assert.ok(fitted.svg <= fitted.box, 'the fitted chart is wider than its box: ' + JSON.stringify(fitted));
@@ -1966,6 +2086,22 @@ await check('AN: Fit shows only on a chart wider than its card, draws the whole 
   assert.ok(Math.abs(back.left - back.mid) <= 2, 'the chart did not come back at its middle: ' + JSON.stringify(back));
   assert.deepEqual(errors, []);
   await context.close();
+  // the wide epic under a goal: the Goals chart is shown first, so the epic's card is hidden when it
+  // is drawn, and Fit shows on it once its tile is pressed
+  const routes = wideRoutes([issue(1, 'Ship it', ['goal'], subs(0, 1))]);
+  routes['GET /repos/acme/demo/issues/1/sub_issues'] = [issue(70, 'A wide epic', ['epic'], subs(0, 12))];
+  const card = await open(routes, { viewport: { width: 1280, height: 800 } });
+  await signIn(card.page);
+  await card.page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+  await waitGraph(card.page, /^Drawn from 2 reads/, 15000);
+  const cardHidden = await card.page.$eval('#cp-graph .graph__section[data-focus="epic-70"]', (sec) => sec.hidden);
+  await card.page.click('#cp-graph-focus button[data-focus="epic-70"]');
+  await card.page.waitForFunction(() => !document.querySelector('#cp-graph .graph__section[data-focus="epic-70"] .graph__fit').hidden, null, { timeout: 5000 }).catch(() => {});
+  const cardFit = await card.page.$eval('#cp-graph .graph__section[data-focus="epic-70"] .graph__fit', (b) => b.hidden);
+  console.log('     the wide epic\'s card hidden when drawn:', cardHidden, '| its Fit hidden once its tile is pressed:', cardFit);
+  assert.deepEqual([cardHidden, cardFit], [true, false], 'Fit does not show on a wide chart drawn in a hidden card');
+  assert.deepEqual(card.errors, []);
+  await card.context.close();
 });
 
 await check('AO: the chart a person chooses fades in, the one shown on load does not, and nothing fades where the system asks for less motion', async () => {
@@ -1983,6 +2119,173 @@ await check('AO: the chart a person chooses fades in, the one shown on load does
   assert.deepEqual(onLoad, [['goals', false, 'none']]);
   assert.deepEqual(pressed, [['epic-20', true, 'graph-enter']]);
   assert.deepEqual(still, [['goals', true, 'none']]);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// The look's review (2026-10-19): an epic's sub-issues in another repository, the strip on a laptop
+// with many epics, a card's tools in one place, and the small words' contrast.
+await check('AQ: an epic\'s sub-issue in another repository, which GitHub\'s summary and so the bar count and no chart draws, has a pill of its own, so the pills add up to the bar\'s total', async () => {
+  // epic #20 with a fourth sub-issue, closed and in another repository: GitHub's summary gives 2 of 4
+  const f = fixture();
+  const away = issue(5, 'Settled elsewhere', ['todo'], { state: 'closed', repository_url: OTHER_REPO, html_url: 'https://github.com/other/place/issues/5' });
+  f.open = f.open.map((it) => it.number === 20 ? Object.assign({}, it, subs(2, 4)) : it);
+  f.subIssues[20] = f.subIssues[20].concat([away]);
+  const { context, page, errors } = await open(fixtureRoutes(f), { extraRoutes: [stubRoute] });
+  await signIn(page);
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  const card = await page.$eval('#cp-graph .graph__section[data-focus="epic-20"]', (sec) => ({
+    done: sec.querySelector('.graph__done').textContent,
+    pills: Array.from(sec.querySelectorAll('.graph__pill')).map((p) => [p.className.replace('graph__pill graph__pill--', ''), Number(p.querySelector('b').textContent), p.textContent]),
+    list: sec.querySelector('details.graph__list > summary').textContent,
+  }));
+  console.log('     epic #20\'s card:', JSON.stringify(card));
+  assert.equal(card.done, '2 of 4 closed');
+  assert.deepEqual(card.pills, [['todo', 1, '1 to do'], ['claimed', 1, '1 claimed'], ['closed', 1, '1 closed'], ['elsewhere', 1, '1 in another repository'], ['outside', 1, '1 from outside the epic']]);
+  assert.equal(card.pills.filter((p) => p[0] !== 'outside').reduce((sum, p) => sum + p[1], 0), 4, 'the pills do not add up to the bar\'s total');
+  // the chart draws this repository's issues alone: #21, #22, #23 and the blocker #99
+  assert.equal(card.list, 'List of 4 issues');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// A goal over n epics, numbered 100, 200 and on: the first epic has one task, the second two and so
+// on to five, then again, one in each state where there are enough, so the cards' pills differ; the
+// titles run from a word to two lines of a heading. With wide, the second epic has twelve tasks
+// side by side instead, a chart wider than its card.
+const MANY_TITLES = ['Dependencies look modern', 'Sign in from the phone', 'Make the console scale on every screen from a phone held upright to a twenty-seven inch monitor, with the tiles filling each row and the charts taking the rest of the deck', 'Ship', 'Chain the release pipeline'];
+function manyRoutes(n, wide) {
+  const listed = [issue(1, 'Ship the console to everyone', ['goal'], subs(0, n))];
+  const reads = {}, epics = [];
+  const states = [['todo'], ['claimed'], ['in-review'], ['blocked'], []];
+  for (let e = 0; e < n; e++) {
+    const num = 100 * (e + 1), isWide = wide && e === 1, count = isWide ? 12 : 1 + (e % 5);
+    const kids = Array.from({ length: count }, (_, k) => issue(num + k + 1, 'Task ' + (k + 1) + ' of epic ' + num, isWide ? ['todo'] : states[k % 5]));
+    const epic = issue(num, MANY_TITLES[e % MANY_TITLES.length], ['epic'], subs(0, count));
+    epics.push(epic);
+    listed.push(epic, ...kids);
+    reads['GET /repos/acme/demo/issues/' + num + '/sub_issues'] = kids;
+  }
+  reads['GET /repos/acme/demo/issues/1/sub_issues'] = epics;
+  return Object.assign(baseRoutes('acme/demo', listed), reads);
+}
+
+await check('AR: on a laptop the tiles are one compact row however many epics there are, so the charts keep most of the deck; the row scrolls sideways, by the mouse\'s wheel too, its ends fade where more tiles lie past them, and where the page scrolls as a whole the wheel scrolls the page', async () => {
+  const { context, page, errors } = await open(manyRoutes(12), { extraRoutes: [stubRoute], viewport: { width: 1280, height: 800 } });
+  await signIn(page);
+  await waitGraph(page, /^Drawn from 13 reads/, 15000);
+  const lay = () => page.evaluate(() => {
+    const s = document.getElementById('cp-graph-focus'), panel = document.getElementById('tab-dependencies'), box = panel.querySelector('.console__scroll');
+    const tops = Array.from(s.querySelectorAll('.graph__chip')).map((b) => Math.round(b.getBoundingClientRect().top));
+    return { tiles: tops.length, oneRow: tops.every((t) => t === tops[0]), strip: Math.round(s.getBoundingClientRect().height), panel: Math.round(panel.getBoundingClientRect().height),
+      box: Math.round(box.getBoundingClientRect().height), left: Math.round(s.scrollLeft), more: s.getAttribute('data-more'), boxTop: box.scrollTop, y: window.scrollY };
+  });
+  const first = await lay();
+  const r = await page.$eval('#cp-graph-focus', (s) => { const b = s.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; });
+  await page.mouse.move(r.x, r.y);
+  await page.mouse.wheel(0, 300);
+  await sleep(300);
+  const wheeled = await lay();
+  await page.focus('#cp-graph-focus button[data-focus="all"]');
+  await page.keyboard.press('End');
+  await sleep(300);
+  const last = await lay();
+  console.log('     a goal and twelve epics at 1280 x 800:', JSON.stringify(first), '| after the wheel:', JSON.stringify(wheeled), '| after End:', JSON.stringify(last));
+  assert.deepEqual([first.tiles, first.oneRow], [14, true], 'the tiles are not one row');
+  assert.ok(first.strip <= 100, 'the strip is taller than one compact row: ' + first.strip + ' px');
+  assert.ok(first.box >= 0.6 * first.panel, 'the charts keep less than three fifths of the deck: ' + first.box + ' of ' + first.panel + ' px');
+  assert.equal(first.more, 'right', 'the strip\'s end does not show that more tiles lie past it');
+  assert.ok(wheeled.left >= 250, 'the wheel did not turn the strip sideways: ' + wheeled.left);
+  assert.equal(wheeled.more, 'both');
+  assert.deepEqual([wheeled.boxTop, wheeled.y], [first.boxTop, first.y], 'the wheel over the strip moved the tab or the window');
+  assert.equal(last.more, 'left', 'the strip was not brought to its last tile, or its start does not show that more tiles lie before it');
+  assert.deepEqual(errors, []);
+  await context.close();
+  // 800 px wide, where the page scrolls as a whole: the wheel over the strip scrolls the page
+  const narrow = await open(manyRoutes(12), { extraRoutes: [stubRoute], viewport: { width: 800, height: 700 } });
+  await signIn(narrow.page);
+  await waitGraph(narrow.page, /^Drawn from 13 reads/, 15000);
+  await narrow.page.evaluate(() => { const s = document.getElementById('cp-graph-focus'); window.scrollTo({ top: Math.round(s.getBoundingClientRect().top + window.scrollY - 200), behavior: 'instant' }); });
+  await sleep(200);
+  const spot = () => narrow.page.evaluate(() => ({ left: Math.round(document.getElementById('cp-graph-focus').scrollLeft), y: Math.round(window.scrollY), overflows: document.getElementById('cp-graph-focus').scrollWidth > document.getElementById('cp-graph-focus').clientWidth }));
+  const at = await spot();
+  const q = await narrow.page.$eval('#cp-graph-focus', (s) => { const b = s.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; });
+  await narrow.page.mouse.move(q.x, q.y);
+  await narrow.page.mouse.wheel(0, 300);
+  await sleep(300);
+  const after = await spot();
+  console.log('     where the page scrolls: before the wheel', JSON.stringify(at), '| after', JSON.stringify(after));
+  assert.equal(at.overflows, true, 'the strip does not run past its end at 800 px, so this says nothing');
+  assert.equal(after.left, at.left, 'the wheel turned the strip where the page scrolls as a whole');
+  assert.ok(after.y >= at.y + 100, 'the wheel over the strip did not scroll the page');
+  assert.deepEqual(narrow.errors, []);
+  await narrow.context.close();
+});
+
+await check('AS: a card\'s tools, Fit and Previous and Next, keep one place on every card however long its heading and however many its pills, so Next pressed again and again by the mouse steps through every chart; on a phone they share one row at the top of the card', async () => {
+  const { context, page, errors } = await open(manyRoutes(5, true), { viewport: { width: 1366, height: 768 } });
+  await signIn(page);
+  await waitGraph(page, /^Drawn from 6 reads/, 30000);
+  await sleep(300);
+  const nextAt = () => page.evaluate(() => {
+    const sec = Array.from(document.querySelectorAll('#cp-graph .graph__section')).find((x) => !x.hidden);
+    const b = sec.querySelector('.graph__next').getBoundingClientRect();
+    return { card: sec.getAttribute('data-focus'), x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2), heading: Math.round(sec.querySelector('.graph__head h3').getBoundingClientRect().height),
+      pills: sec.querySelectorAll('.graph__pill').length, fit: !sec.querySelector('.graph__fit').hidden };
+  });
+  const seen = [await nextAt()];
+  // the mouse pressed where Next stood on the first card, again and again, as a person stepping through does
+  for (let i = 0; i < 5; i++) { await page.mouse.click(seen[0].x, seen[0].y); await sleep(300); seen.push(await nextAt()); }
+  console.log('     Next on each card in turn:', JSON.stringify(seen));
+  assert.deepEqual(seen.map((c) => c.card), ['goals', 'epic-100', 'epic-200', 'epic-300', 'epic-400', 'epic-500'], 'Next pressed at one spot did not step through every chart');
+  assert.ok(new Set(seen.map((c) => c.heading)).size > 1 && new Set(seen.map((c) => c.pills)).size > 1 && seen.some((c) => c.fit) && seen.some((c) => !c.fit), 'the cards do not differ in their headings, pills and Fit, so this says nothing');
+  assert.ok(seen.every((c) => Math.abs(c.x - seen[0].x) <= 1 && Math.abs(c.y - seen[0].y) <= 1), 'Next moved from card to card');
+  assert.deepEqual(errors, []);
+  await context.close();
+  const phone = await open(manyRoutes(5, true), { viewport: { width: 390, height: 844 }, storage: { symphony_panel_graph_focus: JSON.stringify({ 'acme/demo': 'epic-200' }) } });
+  await signIn(phone.page);
+  await waitGraph(phone.page, /^Drawn from 6 reads/, 30000);
+  await phone.page.waitForFunction(() => !document.querySelector('#cp-graph .graph__section[data-focus="epic-200"] .graph__fit').hidden, null, { timeout: 5000 }).catch(() => {});
+  const tools = await phone.page.$eval('#cp-graph .graph__section[data-focus="epic-200"]', (sec) => {
+    const r = (sel) => { const b = sec.querySelector(sel).getBoundingClientRect(); return { top: Math.round(b.top), bottom: Math.round(b.bottom), mid: Math.round(b.top + b.height / 2) }; };
+    return { fit: r('.graph__fit'), step: r('.graph__step'), heading: r('.graph__head h3'), fitShown: !sec.querySelector('.graph__fit').hidden };
+  });
+  console.log('     a phone\'s wide card:', JSON.stringify(tools));
+  assert.equal(tools.fitShown, true, 'Fit does not show on the wide chart, so this says nothing');
+  assert.ok(Math.abs(tools.fit.mid - tools.step.mid) <= 2, 'Fit and Previous and Next are not on one row');
+  assert.ok(tools.step.bottom <= tools.heading.top, 'the tools are not at the top of the card, above its heading');
+  assert.deepEqual(phone.errors, []);
+  await phone.context.close();
+});
+
+// the contrast of a node's words on the ground it shows on, each background up the tree laid over
+// the one under it, as a translucent tile's is
+const wordsContrast = (page, selector) => page.$eval(selector, (node) => {
+  const rgba = (c) => { const m = /rgba?\(([^)]+)\)/.exec(c || ''); if (!m) return null; const v = m[1].split(',').map(parseFloat); return v.length < 4 ? v.concat(1) : v; };
+  const over = (top, under) => [0, 1, 2].map((i) => top[i] * top[3] + under[i] * (1 - top[3]));
+  const chain = [];
+  for (let n = node; n; n = n.parentElement) chain.unshift(rgba(getComputedStyle(n).backgroundColor));
+  let ground = [255, 255, 255];
+  for (const c of chain) if (c && c[3] > 0) ground = over(c, ground);
+  const ink = over(rgba(getComputedStyle(node).color), ground);
+  const lum = (c) => c.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const a = lum(ink) + 0.05, b = lum(ground) + 0.05;
+  return Math.round(100 * Math.max(a, b) / Math.min(a, b)) / 100;
+});
+await check('AU: the small words of the tiles and the cards read at 4.5 to 1 on their ground: a tile\'s kind and its count, at rest and under the pointer, and a card\'s place among the charts', async () => {
+  const { context, page, errors } = await open(fixtureRoutes(fixture()), { extraRoutes: [stubRoute] });
+  await signIn(page);
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  const tile = '#cp-graph-focus .graph__chip[data-focus="epic-20"] ';
+  const rest = { kind: await wordsContrast(page, tile + '.graph__tkind'), foot: await wordsContrast(page, tile + '.graph__tfoot') };
+  await page.hover(tile.trim());
+  await sleep(400);
+  const hover = { kind: await wordsContrast(page, tile + '.graph__tkind'), foot: await wordsContrast(page, tile + '.graph__tfoot') };
+  const place = await wordsContrast(page, '#cp-graph .graph__section[data-focus="goals"] .graph__pos');
+  console.log('     at rest:', JSON.stringify(rest), '| under the pointer:', JSON.stringify(hover), '| a card\'s place:', place);
+  for (const [name, ratio] of [['kind at rest', rest.kind], ['count at rest', rest.foot], ['kind under the pointer', hover.kind], ['count under the pointer', hover.foot], ['card\'s place', place]]) {
+    assert.ok(ratio >= 4.5, 'a tile\'s or a card\'s small words read at ' + ratio + ' to 1 (' + name + ')');
+  }
   assert.deepEqual(errors, []);
   await context.close();
 });

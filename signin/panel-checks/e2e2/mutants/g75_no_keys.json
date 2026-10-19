@@ -1,1 +1,1 @@
-[["    $('cp-graph-focus').addEventListener('keydown', graphStripKeys);\n", ""]]
+[["    strip.addEventListener('keydown', graphStripKeys);\n", ""]]
