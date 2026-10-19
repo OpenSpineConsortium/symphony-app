@@ -1,0 +1,1 @@
+[["        if (Math.abs(dx) + Math.abs(dy) < 6) return;\n", ""]]

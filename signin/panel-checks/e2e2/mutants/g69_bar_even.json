@@ -1,0 +1,1 @@
+[["seg.style.width = (100 * n / total) + '%';", "seg.style.width = (100 / 6) + '%';"]]

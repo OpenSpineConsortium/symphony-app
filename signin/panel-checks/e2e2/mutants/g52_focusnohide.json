@@ -1,1 +1,1 @@
-[["sec.hidden = !(key === 'all' || sec.getAttribute('data-focus') === key);","sec.hidden = false;"]]
+[["      sec.hidden = !shown;\n", "      sec.hidden = false;\n"]]

@@ -1,1 +1,1 @@
-[["    var h = box ? box.offsetHeight : 0;\n    var tab = $('tab-dependencies');\n    var th = tab ? tab.offsetHeight : 0;\n    graphHeld();\n", "    graphHeld();\n    var h = box ? box.offsetHeight : 0;\n    var tab = $('tab-dependencies');\n    var th = tab ? tab.offsetHeight : 0;\n"]]
+[["    var h = box ? exactHeight(box) : 0;\n    var tab = $('tab-dependencies');\n    var th = tab ? exactHeight(tab) : 0;\n    graphHeld();\n", "    graphHeld();\n    var h = box ? exactHeight(box) : 0;\n    var tab = $('tab-dependencies');\n    var th = tab ? exactHeight(tab) : 0;\n"]]

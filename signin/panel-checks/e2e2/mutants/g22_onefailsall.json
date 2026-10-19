@@ -1,1 +1,1 @@
-[["return graphDraw(m, chart).catch(function (e) { undrawn.push(chart.heading + ': ' + e.message); });", "return graphDraw(m, chart);"]]
+[["return graphDraw(m, chart).catch(function (e) { graphUndrawn(chart); undrawn.push(chart.heading + ': ' + e.message); });", "return graphDraw(m, chart);"]]
