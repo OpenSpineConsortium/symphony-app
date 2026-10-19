@@ -31,7 +31,7 @@ const granted = { access_token: 'ghu_token', token_type: 'bearer', expires_in: 2
 test('the service describes itself and keeps nothing', async () => {
   const r = await handle(new Request(SERVICE + '/'), env);
   assert.equal(r.status, 200);
-  assert.deepEqual(await r.json(), { service: 'symphony-signin', routes: ['/exchange', '/refresh', '/revoke', '/drive/config', '/drive/connect', '/drive/token'], keeps: 'nothing' });
+  assert.deepEqual(await r.json(), { service: 'symphony-signin', routes: ['/exchange', '/refresh', '/revoke', '/device', '/device/token', '/drive/config', '/drive/connect', '/drive/token'], keeps: 'nothing' });
   assert.equal(r.headers.get('Cache-Control'), 'no-store');
 });
 
@@ -187,6 +187,128 @@ test('GitHub answering no JSON, or not answering, is said in words with no token
     assert.equal(d.status, 502, path);
     assert.equal((await d.json()).error, 'github_unreachable');
   }
+});
+
+const DEVICE = 'd'.repeat(40);
+const issued = { device_code: DEVICE, user_code: 'WDJB-MJHT', verification_uri: 'https://github.com/login/device', expires_in: 899, interval: 5, extra: 'dropped' };
+
+test('/device asks GitHub for a code with the client id and no secret, and returns the five fields', async () => {
+  const gh = github(issued);
+  const r = await handle(post('/device', {}), env, gh.fetchImpl);
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), { device_code: DEVICE, user_code: 'WDJB-MJHT', verification_uri: 'https://github.com/login/device', expires_in: 899, interval: 5 });
+  assert.equal(gh.calls.length, 1);
+  assert.equal(gh.calls[0].url, 'https://github.com/login/device/code');
+  assert.equal(gh.calls[0].form.get('client_id'), 'Iv1.testid');
+  assert.equal(gh.calls[0].form.has('client_secret'), false);
+  assert.equal(gh.calls[0].form.has('scope'), false);
+  assert.equal(r.headers.get('Access-Control-Allow-Origin'), ORIGIN);
+});
+
+test('/device names only GitHub\'s own page for the code, and bounds the times GitHub gives', async () => {
+  const gh = github(Object.assign({}, issued, { verification_uri: 'https://evil.example/login/device', expires_in: 999999, interval: -3 }));
+  const r = await handle(post('/device', {}), env, gh.fetchImpl);
+  const body = await r.json();
+  assert.equal(body.verification_uri, 'https://github.com/login/device');
+  assert.equal(body.expires_in, 900);
+  assert.equal(body.interval, 5);
+});
+
+test('/device passes GitHub\'s refusal, such as the device flow not turned on, as 502 with its words and no code', async () => {
+  for (const [answer, status] of [[{ error: 'device_flow_disabled', error_description: 'Device Flow must be explicitly enabled for this App' }, 400], [{ error: 'device_flow_disabled' }, 200], [Object.assign({}, issued, { user_code: '<b>x</b>' }), 200], [Object.assign({}, issued, { device_code: 'has space' }), 200]]) {
+    const gh = github(answer, status);
+    const r = await handle(post('/device', {}), env, gh.fetchImpl);
+    assert.equal(r.status, 502, JSON.stringify(answer));
+    const body = await r.json();
+    assert.equal(body.device_code, undefined);
+    assert.equal(body.user_code, undefined);
+    if (answer.error) assert.equal(body.error, answer.error);
+  }
+  const down = await handle(post('/device', {}), env, async () => { throw new Error('offline'); });
+  assert.equal(down.status, 502);
+  assert.equal((await down.json()).error, 'github_unreachable');
+});
+
+test('/device/token sends the device code with its grant type and the client id, no secret, and returns the five fields', async () => {
+  const gh = github(granted);
+  const r = await handle(post('/device/token', { device_code: DEVICE }), env, gh.fetchImpl);
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), { access_token: 'ghu_token', token_type: 'bearer', expires_in: 28800, refresh_token: 'ghr_refresh', refresh_token_expires_in: 15811200 });
+  assert.equal(gh.calls[0].url, 'https://github.com/login/oauth/access_token');
+  assert.equal(gh.calls[0].form.get('grant_type'), 'urn:ietf:params:oauth:grant-type:device_code');
+  assert.equal(gh.calls[0].form.get('device_code'), DEVICE);
+  assert.equal(gh.calls[0].form.get('client_id'), 'Iv1.testid');
+  assert.equal(gh.calls[0].form.has('client_secret'), false);
+});
+
+test('/device/token says GitHub\'s word while the person has not typed the code, with a slower interval when GitHub asks for one', async () => {
+  for (const [answer, interval] of [[{ error: 'authorization_pending', error_description: 'The authorization request is still pending.' }, undefined],
+    [{ error: 'slow_down', error_description: 'Too many requests have been made in the same timeframe.', interval: 10 }, 10],
+    [{ error: 'slow_down', interval: 9999 }, 10],
+    [{ error: 'expired_token' }, undefined], [{ error: 'access_denied' }, undefined], [{ error: 'device_flow_disabled' }, undefined]]) {
+    const gh = github(answer, 200);
+    const r = await handle(post('/device/token', { device_code: DEVICE }), env, gh.fetchImpl);
+    assert.equal(r.status, 400, answer.error);
+    const body = await r.json();
+    assert.equal(body.error, answer.error);
+    assert.equal(body.access_token, undefined);
+    assert.equal(body.interval, interval, answer.error);
+  }
+});
+
+test('/device/token: a GitHub that refuses with a status, answers no JSON or does not answer is 502, with no token', async () => {
+  for (const gh of [github({ error: 'incorrect_client_credentials' }, 401), github(undefined, 500, '<html>oops</html>'), github({ error: '<script>' }, 200)]) {
+    const r = await handle(post('/device/token', { device_code: DEVICE }), env, gh.fetchImpl);
+    assert.equal(r.status, 502);
+    assert.equal((await r.json()).access_token, undefined);
+  }
+  const down = await handle(post('/device/token', { device_code: DEVICE }), env, async () => { throw new Error('offline'); });
+  assert.equal(down.status, 502);
+});
+
+test('/device/token: GitHub answering a 5xx or a 429 for the moment is github_unreachable, which the page asks again at the same pace, while a refusal in GitHub\'s words stays one', async () => {
+  for (const [gh, status] of [
+    [github(undefined, 503, '<html>down</html>'), 503], [github(undefined, 502, '<html>bad gateway</html>'), 502],
+    [github(null, 500), 500], [github({ message: 'You have exceeded a secondary rate limit.' }, 429), 429],
+  ]) {
+    const r = await handle(post('/device/token', { device_code: DEVICE }), env, gh.fetchImpl);
+    assert.equal(r.status, 502, String(status));
+    const body = await r.json();
+    assert.equal(body.error, 'github_unreachable', 'GitHub\'s ' + status + ' ended the sign-in as a refusal');
+    assert.equal(body.error_description, 'GitHub answered ' + status + ' for the moment; try again');
+    assert.equal(body.access_token, undefined);
+  }
+  for (const [answer, status, word] of [[{ error: 'incorrect_client_credentials' }, 401, 'incorrect_client_credentials'], [{ error: 'unsupported_grant_type' }, 503, 'unsupported_grant_type'], [{ message: 'Not Found' }, 404, 'github_refused']]) {
+    const r = await handle(post('/device/token', { device_code: DEVICE }), env, github(answer, status).fetchImpl);
+    assert.equal(r.status, 502);
+    assert.equal((await r.json()).error, word, 'a refusal with ' + status + ' was taken for a moment\'s trouble');
+  }
+});
+
+test('/device/token without a device code, or with a malformed one, is refused before GitHub is asked', async () => {
+  const gh = github(granted);
+  for (const device of [undefined, '', 'has space', 'x'.repeat(129), 42, { a: 1 }]) {
+    const r = await handle(post('/device/token', { device_code: device }), env, gh.fetchImpl);
+    assert.equal(r.status, 400, String(device));
+  }
+  assert.equal(gh.calls.length, 0);
+});
+
+test('the device routes answer the site alone, need the service set up, and spend the rate limit', async () => {
+  const gh = github(issued);
+  for (const origin of ['https://evil.example', null]) {
+    for (const path of ['/device', '/device/token']) {
+      const r = await handle(post(path, { device_code: DEVICE }, origin), env, gh.fetchImpl);
+      assert.equal(r.status, 403, path + ' ' + origin);
+    }
+  }
+  const bare = await handle(post('/device', {}), { ALLOWED_ORIGIN: ORIGIN }, gh.fetchImpl);
+  assert.equal(bare.status, 503);
+  assert.equal(gh.calls.length, 0);
+  const limited = Object.assign({}, env, { RATE_LIMITER: { limit: async () => ({ success: false }) } });
+  const r = await handle(post('/device', {}), limited, gh.fetchImpl);
+  assert.equal(r.status, 429);
+  assert.equal(gh.calls.length, 0);
 });
 
 test('a rate-limiting binding, when there is one, refuses the caller past its limit before the body is read', async () => {

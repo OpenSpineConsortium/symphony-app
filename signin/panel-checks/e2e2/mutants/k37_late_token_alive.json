@@ -1,0 +1,1 @@
+[["        if (answer.access_token) exchange('/revoke', { access_token: answer.access_token }).catch(function () { /* it runs out in eight hours */ });\n        return;\n", "        return;\n"]]

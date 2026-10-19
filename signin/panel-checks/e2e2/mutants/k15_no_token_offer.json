@@ -1,0 +1,1 @@
+[["      codeSays(CODE_WORDS[e.code] || (e.message + ' Press the button again, or use a token below.'), true);\n      offerToken();\n", "      codeSays(CODE_WORDS[e.code] || (e.message + ' Press the button again, or use a token below.'), true);\n"]]

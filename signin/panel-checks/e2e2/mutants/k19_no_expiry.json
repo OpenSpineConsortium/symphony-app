@@ -1,0 +1,1 @@
+[["        if (Date.now() >= until) { var out = new Error(CODE_WORDS.expired_token); out.code = 'expired_token'; reject(out); return; }\n", ""]]
