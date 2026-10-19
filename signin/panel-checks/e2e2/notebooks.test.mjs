@@ -8,8 +8,10 @@
 // second found a write lock that a sign-out mid-write held for good, a ruleset's 409 told as a change,
 // and an internal repository taken for a private one; the third, a lock a re-sign-in left free and a
 // write landing after one that freed the lock of a later write). N27 to N32 hold the Make private
-// button the owner chose on 2026-10-19 (site branch claude/make-private). Each check states what the page
-// promises; a FAIL is a defect. Every token here is a stand-in.
+// button the owner chose on 2026-10-19 (site branch claude/make-private), and N33 to N36, from its
+// review, the lock on a side panel drawn again and an answer that lands after a sign-in again, a
+// Refresh or a move to another owner's repository. Each check states what the page promises; a FAIL
+// is a defect. Every token here is a stand-in.
 import { chromium } from 'playwright';
 import { consoleTabs } from './console-tabs.mjs';
 import assert from 'node:assert/strict';
@@ -76,6 +78,20 @@ function driveRoutes(repo, o) {
   const refOf = (req) => new URL(req.url()).searchParams.get('ref') || 'main';
   const onBranch = (req) => refOf(req) === 'drive-catalog';
   const object = (text, sha, big) => ({ type: 'file', sha, size: Buffer.byteLength(text), content: big ? '' : Buffer.from(text).toString('base64').replace(/(.{60})/g, '$1\n'), encoding: big ? 'none' : 'base64' });
+  const owner = repo.split('/')[0];
+  store.visibility = { alpha: o.alphaPublic ? 'public' : o.alphaInternal ? 'internal' : 'private', beta: o.betaPublic ? 'public' : null };
+  const repoNow = (name) => (store.visibility[name] == null ? undefined : Object.assign({ full_name: owner + '/' + name, private: store.visibility[name] === 'private', visibility: store.visibility[name] },
+    name === 'alpha' && o.alphaAdmin !== undefined ? { permissions: { admin: o.alphaAdmin, push: true, pull: true } } : {}));
+  // Make private: the change GitHub makes as the person, answered with the repository as it is now
+  const repoChange = async (name, req) => {
+    const body = JSON.parse(req.postData());
+    store.patches.push(Object.assign({ name }, body));
+    if (o.patchGate) await o.patchGate();
+    if (o.patchAnswer) return o.patchAnswer(body);
+    if (store.visibility[name] == null) return { status: 404, body: { message: 'Not Found' } };
+    store.visibility[name] = body.visibility;
+    return { status: 200, body: repoNow(name) };
+  };
   return {
     store,
     routes: {
@@ -104,16 +120,13 @@ function driveRoutes(repo, o) {
         store.notebooks = null;
         return { status: 200, body: { content: null } };
       },
-      [`GET /repos/${repo.split('/')[0]}/alpha`]: Object.assign({ full_name: repo.split('/')[0] + '/alpha', private: !o.alphaPublic, visibility: o.alphaPublic ? 'public' : o.alphaInternal ? 'internal' : 'private' },
-        o.alphaAdmin === undefined ? {} : { permissions: { admin: o.alphaAdmin, push: true, pull: true } }),
-      // Make private: the change GitHub makes as the person, answered with the repository as it is now
-      [`PATCH /repos/${repo.split('/')[0]}/alpha`]: async (req) => {
-        const body = JSON.parse(req.postData());
-        store.patches.push(body);
-        if (o.patchGate) await o.patchGate();
-        if (o.patchAnswer) return o.patchAnswer(body);
-        return { status: 200, body: { full_name: repo.split('/')[0] + '/alpha', private: body.visibility === 'private', visibility: body.visibility } };
-      },
+      // the notebooks' own repositories, kept as GitHub keeps them: alpha made, public, internal or
+      // private as asked, and beta not made unless asked public; Make private changes one as the
+      // person and GitHub then reads it back as it now is, once the change is answered
+      [`GET /repos/${owner}/alpha`]: () => repoNow('alpha'),
+      [`GET /repos/${owner}/beta`]: () => repoNow('beta'),
+      [`PATCH /repos/${owner}/alpha`]: (req) => repoChange('alpha', req),
+      [`PATCH /repos/${owner}/beta`]: (req) => repoChange('beta', req),
     },
   };
 }
@@ -164,7 +177,13 @@ async function open(opts) {
     new MutationObserver(() => { const m = document.getElementById('msg'); if (m) { const t = m.textContent.trim(); if (t && window.__msgs[window.__msgs.length - 1] !== t) window.__msgs.push(t); } }).observe(document, { subtree: true, childList: true, characterData: true });
   });
   await page.goto(CONSOLE);
-  await page.evaluate((seed) => { localStorage.clear(); for (const k of Object.keys(seed)) localStorage.setItem(k, seed[k]); }, Object.assign({ symphony_panel_token: 'github_pat_TEST', symphony_panel_repos: JSON.stringify(repos), symphony_panel_repo: repos[0] }, o.layout ? { symphony_panel_layout: JSON.stringify(o.layout) } : {}));
+  // signed in with a pasted token, or, with o.byApp, with GitHub through SymphonyBoard, whose sign-in
+  // the page keeps as a record of the App's token that runs out in eight hours, as signin.test.mjs
+  // seeds it; nothing here renews it, so the sign-in service is never asked
+  const signin = o.byApp
+    ? { symphony_panel_oauth: JSON.stringify({ access_token: 'ghu_TEST', refresh_token: 'ghr_TEST', expires_at: Date.now() + 8 * 3600000, refresh_expires_at: Date.now() + 100 * 24 * 3600000 }) }
+    : { symphony_panel_token: 'github_pat_TEST' };
+  await page.evaluate((seed) => { localStorage.clear(); for (const k of Object.keys(seed)) localStorage.setItem(k, seed[k]); }, Object.assign(signin, { symphony_panel_repos: JSON.stringify(repos), symphony_panel_repo: repos[0] }, o.layout ? { symphony_panel_layout: JSON.stringify(o.layout) } : {}));
   await page.goto(CONSOLE + '?repo=' + encodeURIComponent(repos[0]) + (o.hash || '#notebooks'));
   await page.waitForSelector('#cp-app:not(.hidden)');
   return { context, page, calls, errors, stores };
@@ -919,7 +938,8 @@ await check('N27: a public notebook repository is made private only once the per
   o.page.once('dialog', (d) => { asked.push(d.message()); d.dismiss(); });
   await o.page.click('#nb-private');
   await sleep(300);
-  assert.equal(asked[0], 'Make acme/alpha private? Only the people given access to it will see it. GitHub erases its stars and watchers, leaves its forks public and detaches them, and unpublishes its GitHub Pages site on a free plan. The repository\'s files and history stay as they are.');
+  // what GitHub's own question says, and what GitHub's plans give a public repository alone
+  assert.equal(asked[0], 'Make acme/alpha private? Only the people given access to it will see it. GitHub erases its stars and watchers, leaves its forks public and detaches them, and unpublishes its GitHub Pages site on a free plan, where its rulesets and branch protection also stop being enforced. Its code scanning stops unless its owner has GitHub Code Security, and its secret scanning and push protection unless its owner has GitHub Secret Protection. The repository\'s files and history themselves stay as they are.');
   assert.equal(o.stores['acme/demo'].patches.length, 0, 'nothing is changed when the person says no');
   o.page.once('dialog', (d) => d.accept());
   await o.page.click('#nb-private');
@@ -944,21 +964,24 @@ await check('N28: an internal repository\'s confirmation says what making it pri
   o.page.once('dialog', (d) => { asked.push(d.message()); d.dismiss(); });
   await o.page.click('#nb-private');
   await sleep(300);
-  assert.equal(asked[0], 'Make acme/alpha private? Only the people given access to it will see it. GitHub erases its stars and watchers and its forks become private, those of people without access removed. The repository\'s files and history stay as they are.');
+  assert.equal(asked[0], 'Make acme/alpha private? Only the people given access to it will see it. GitHub erases its stars and watchers and its forks become private, those of people without access removed. The repository\'s files and history themselves stay as they are.');
   assert.equal(o.stores['acme/demo'].patches.length, 0);
   await o.context.close();
 });
 
-await check('N29: a person GitHub says does not administer the repository is told so, with no button that could only be refused', async () => {
+await check('N29: a person GitHub says does not administer the repository is told so, with no button that could only be refused and no pointer to one', async () => {
   const o = await open({ alphaPublic: true, alphaAdmin: false });
   await openAlphaSide(o);
   const st = await sideState(o.page);
   assert.equal(st.button, null);
+  // neither the button nor the settings page, which GitHub shows only to an administrator
+  assert.deepEqual(st.states, ['The repository is public, and a notebook names a person\'s files, so it should be private.']);
+  assert.equal(await o.page.evaluate(() => document.querySelectorAll('#nb-side .tok__state a').length), 0, 'no link to settings it cannot open');
   assert.ok(st.facts.includes('Only an administrator of acme/alpha may change its visibility, and GitHub says you are not one: ask one to make it private.'), JSON.stringify(st.facts));
   await o.context.close();
 });
 
-await check('N30: a refusal is said in GitHub\'s words with what the change needs, the repository stays public, and the button can be pressed again; a rate limit is not taken for missing access', async () => {
+await check('N30: a refusal is said in GitHub\'s words with what the change needs, the repository stays public, and the button can be pressed again; a rate limit is not taken for missing access, and a 403 or a 404 is, in the words of the way the person signed in', async () => {
   let o = await open({ alphaPublic: true, patchAnswer: () => ({ status: 422, body: { message: 'Visibility can only be changed by organization owners' } }) });
   await openAlphaSide(o);
   o.page.once('dialog', (d) => d.accept());
@@ -976,6 +999,27 @@ await check('N30: a refusal is said in GitHub\'s words with what the change need
   await o.page.waitForFunction(() => /did not make/.test(document.getElementById('msg').textContent), null, { timeout: 8000 });
   assert.equal(await footText(o.page), 'GitHub did not make acme/alpha private: GitHub\'s rate limit for this token is reached (403). Wait a minute, then press Refresh.');
   await o.context.close();
+  // GitHub's other refusals of the change: a 403 for a token or an installation without
+  // Administration, and a 404 where the sign-in may not see the repository as an administrator
+  const refused = async (opts, answer) => {
+    const r = await open(Object.assign({ alphaPublic: true, patchAnswer: () => answer }, opts));
+    await openAlphaSide(r);
+    r.page.once('dialog', (d) => d.accept());
+    await r.page.click('#nb-private');
+    await r.page.waitForFunction(() => /did not make/.test(document.getElementById('msg').textContent), null, { timeout: 8000 });
+    const words = await footText(r.page);
+    assert.match(await r.page.evaluate(() => document.getElementById('msg').className), /admin__warn/);
+    assert.deepEqual((await sideState(r.page)).button, { text: 'Make private', disabled: false });
+    const auth = r.calls.filter((c) => c.key === 'PATCH /repos/acme/alpha').map((c) => c.auth);
+    await r.context.close();
+    return { words, auth };
+  };
+  const integration = { status: 403, body: { message: 'Resource not accessible by integration' } };
+  const byToken = ' Only an administrator of acme/alpha may change its visibility, with Administration: read and write on the token, and an organization may keep the change to its owners.';
+  assert.deepEqual(await refused({}, integration), { auth: ['Bearer github_pat_TEST'], words: 'GitHub did not make acme/alpha private: The token may not do this (403: Resource not accessible by integration). A fine-grained token needs the permission the sign-in box names for it.' + byToken });
+  assert.deepEqual(await refused({}, { status: 404, body: { message: 'Not Found' } }), { auth: ['Bearer github_pat_TEST'], words: 'GitHub did not make acme/alpha private: GitHub has nothing at /repos/acme/alpha (404): the repository, the branch or the file is not there, or the token does not reach it.' + byToken });
+  // signed in with GitHub, the access is SymphonyBoard's, which the token's words would misname
+  assert.deepEqual(await refused({ byApp: true }, integration), { auth: ['Bearer ghu_TEST'], words: 'GitHub did not make acme/alpha private: The sign-in may not do this (403: Resource not accessible by integration): it acts within SymphonyBoard\'s permissions and your own access, on the repositories the App is installed on. Only an administrator of acme/alpha may change its visibility, with SymphonyBoard installed on it and its Administration permission accepted, and an organization may keep the change to its owners.' });
 });
 
 await check('N31: while GitHub is asked the button waits and says so, and a sign-out on the way leaves no lock for the next sign-in', async () => {
@@ -1006,6 +1050,141 @@ await check('N32: GitHub\'s answer, not the press, says what the repository is n
   assert.equal(await footText(o.page), 'GitHub answered, but acme/alpha is still public.');
   assert.match(await o.page.evaluate(() => document.getElementById('msg').className), /admin__warn/);
   assert.equal((await tileText(o.page))[0].state, 'Repository is public');
+  await o.context.close();
+});
+
+// the side panel closed and opened again by its card, which draws its button afresh from the lock
+async function reopenSide(o, slug) {
+  await o.page.click('#nb-tile-' + slug);
+  await o.page.waitForSelector('#nb-side[hidden]', { state: 'attached' });
+  await o.page.click('#nb-tile-' + slug);
+  await o.page.waitForSelector('#nb-side:not([hidden])');
+}
+// a press of the button as the page has it, where Playwright's click would wait for it to be enabled:
+// a disabled button takes no click, so nothing is asked and nothing sent
+async function pressAsIs(o) {
+  const asked = [];
+  const ask = (d) => { asked.push(d.message()); d.accept(); };
+  o.page.on('dialog', ask);
+  await o.page.evaluate(() => document.getElementById('nb-private').click());
+  await sleep(400);
+  o.page.off('dialog', ask);
+  return asked;
+}
+
+await check('N33: while a change is on its way, a side panel drawn again shows the button waiting and a press of it sends nothing, before a sign-out and after a sign-in again alike', async () => {
+  const gates = [];
+  const o = await open({ alphaPublic: true, alphaAdmin: true, patchGate: () => new Promise((r) => gates.push(r)) });
+  const store = o.stores['acme/demo'];
+  await openAlphaSide(o);
+  o.page.once('dialog', (d) => d.accept());
+  await o.page.click('#nb-private');
+  await until(() => gates.length === 1);
+  await reopenSide(o, 'alpha');
+  assert.deepEqual((await sideState(o.page)).button, { text: 'Making it private...', disabled: true }, 'drawn afresh from the lock');
+  assert.deepEqual(await pressAsIs(o), [], 'nothing is asked');
+  assert.equal(store.patches.length, 1, 'one change at a time');
+  // a sign-in again starts the count of sign-ins over, and the lock a change after it takes is held
+  // by that sign-in, not by the first
+  await o.page.click('#cp-signout');
+  await signInAgain(o.page);
+  await openAlphaSide(o);
+  assert.deepEqual((await sideState(o.page)).button, { text: 'Make private', disabled: false });
+  o.page.once('dialog', (d) => d.accept());
+  await o.page.click('#nb-private');
+  await until(() => gates.length === 2);
+  await reopenSide(o, 'alpha');
+  assert.deepEqual((await sideState(o.page)).button, { text: 'Making it private...', disabled: true }, 'the change after a sign-in again holds the lock too');
+  assert.deepEqual(await pressAsIs(o), []);
+  assert.equal(store.patches.length, 2);
+  gates.forEach((g) => g());
+  await o.context.close();
+});
+
+await check('N34: a change answered after a sign-out and a sign-in again frees no lock a later change holds', async () => {
+  const gates = [];
+  const o = await open({ alphaPublic: true, betaPublic: true, patchGate: () => new Promise((r) => gates.push(r)) });
+  await openAlphaSide(o);
+  o.page.once('dialog', (d) => d.accept());
+  await o.page.click('#nb-private');
+  await until(() => gates.length === 1);
+  await o.page.click('#cp-signout');
+  await signInAgain(o.page);
+  await untilTiles(o.page, 2, 10000);
+  await untilMade(o.page);
+  await o.page.click('#nb-tile-beta');
+  await o.page.waitForSelector('#nb-side:not([hidden])');
+  o.page.once('dialog', (d) => d.accept());
+  await o.page.click('#nb-private');
+  await until(() => gates.length === 2);
+  // the first change lands now; the tab, which a sign-in again moved on, reads the repositories again
+  gates[0]();
+  await o.page.waitForFunction(() => /^acme\/alpha is private now/.test(document.getElementById('msg').textContent.trim()), null, { timeout: 8000 });
+  await o.page.waitForSelector('#nb-side[hidden]', { state: 'attached', timeout: 8000 });
+  await untilTiles(o.page, 2);
+  await untilMade(o.page);
+  assert.deepEqual((await tileText(o.page)).map((t) => t.state), ['Repository made', 'Repository is public']);
+  await o.page.click('#nb-tile-beta');
+  await o.page.waitForSelector('#nb-side:not([hidden])');
+  assert.deepEqual((await sideState(o.page)).button, { text: 'Making it private...', disabled: true }, 'the later change still holds the lock');
+  gates[1]();
+  await o.page.waitForFunction(() => /^acme\/beta is private now/.test(document.getElementById('msg').textContent.trim()), null, { timeout: 8000 });
+  await o.context.close();
+});
+
+await check('N35: a Refresh while the change is on its way reads the repository again once GitHub answers, so the card says it is private and no button is left waiting', async () => {
+  const gates = [];
+  const o = await open({ alphaPublic: true, alphaAdmin: true, patchGate: () => new Promise((r) => gates.push(r)) });
+  const reads = () => o.calls.filter((c) => c.key === 'GET /repos/acme/alpha').length;
+  await openAlphaSide(o);
+  o.page.once('dialog', (d) => d.accept());
+  await o.page.click('#nb-private');
+  await until(() => gates.length === 1);
+  await o.page.click('#cp-refresh');
+  // the Refresh reads the repository while GitHub has not yet answered the change: still public
+  await until(() => reads() === 2);
+  await untilTiles(o.page, 2);
+  await untilMade(o.page);
+  assert.equal((await tileText(o.page))[0].state, 'Repository is public');
+  await o.page.click('#nb-tile-alpha');
+  await o.page.waitForSelector('#nb-side:not([hidden])');
+  assert.deepEqual((await sideState(o.page)).button, { text: 'Making it private...', disabled: true }, 'a Refresh is no sign-out: the change still holds the lock');
+  gates[0]();
+  await o.page.waitForFunction(() => /^acme\/alpha is private now/.test(document.getElementById('msg').textContent.trim()), null, { timeout: 8000 });
+  await o.page.waitForFunction(() => { const s = document.querySelector('#nb-tile-alpha .tok__state'); return s && s.textContent === 'Repository made'; }, null, { timeout: 8000 });
+  assert.equal(reads(), 3, 'read once more, after the answer');
+  await o.page.click('#nb-tile-alpha');
+  await o.page.waitForSelector('#nb-side:not([hidden])');
+  const st = await sideState(o.page);
+  assert.equal(st.button, null, 'no button on a private repository');
+  assert.deepEqual(st.states, ['The repository is made.']);
+  assert.equal(o.stores['acme/demo'].patches.length, 1);
+  assert.deepEqual(o.errors, []);
+  await o.context.close();
+});
+
+await check('N36: a change answered once the page shows another owner\'s repository marks nothing there, and the freed lock is drawn', async () => {
+  const gates = [];
+  const o = await open({ repos: ['acme/demo', 'zeta/demo'], per: { 'acme/demo': { alphaPublic: true, patchGate: () => new Promise((r) => gates.push(r)) }, 'zeta/demo': { alphaPublic: true } } });
+  await openAlphaSide(o);
+  o.page.once('dialog', (d) => d.accept());
+  await o.page.click('#nb-private');
+  await until(() => gates.length === 1);
+  await o.page.selectOption('#cp-repo', 'zeta/demo');
+  await o.page.waitForFunction(() => Array.from(document.querySelectorAll('#nb-tiles .tok__open:not(.tok--add)')).length === 2 && !!document.querySelector('#nb-tile-alpha .tok__state'), null, { timeout: 8000 });
+  await o.page.click('#nb-tile-alpha');
+  await o.page.waitForSelector('#nb-side:not([hidden])');
+  assert.equal(await o.page.evaluate(() => document.querySelector('#nb-side .tok__owner').textContent), 'zeta/alpha');
+  assert.deepEqual((await sideState(o.page)).button, { text: 'Make private', disabled: true }, 'one change at a time, whichever repository');
+  gates[0]();
+  await o.page.waitForFunction(() => /^acme\/alpha is private now/.test(document.getElementById('msg').textContent.trim()), null, { timeout: 8000 });
+  await sleep(500);
+  // read as the page stands, with no click that would draw it again
+  const st = await sideState(o.page);
+  assert.equal((await tileText(o.page))[0].state, 'Repository is public', 'zeta/alpha is as its own read says');
+  assert.equal(st.states[0], 'The repository is public, and a notebook names a person\'s files: make it private here, or on GitHub under its settings (General, Danger Zone, Change visibility).');
+  assert.deepEqual(st.button, { text: 'Make private', disabled: false }, 'the freed lock is drawn');
+  assert.deepEqual([o.stores['acme/demo'].visibility.alpha, o.stores['zeta/demo'].visibility.alpha], ['private', 'public']);
   await o.context.close();
 });
 

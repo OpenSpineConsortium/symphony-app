@@ -173,7 +173,7 @@ ghu_TEST or github_pat_X.
   suite alone), and holds that the storage is asked one plain read with no token and no header of
   GitHub's. XP9 switches the repository while the tab is open, and XP10 holds that an epic whose
   sub-issues could not be read says so.
-- `e2e2/notebooks.test.mjs`: 32 checks of the console's Notebooks tab, /symphony/control/#notebooks
+- `e2e2/notebooks.test.mjs`: 36 checks of the console's Notebooks tab, /symphony/control/#notebooks
   (site pull request #82, 2026-10-19), against a mocked GitHub that keeps notebooks.json and
   catalog.json on the branch drive-catalog as GitHub does: read as objects with their sha, a file
   over 1 MB by its blob, written over only with the sha it has (422 without one, 409 with another).
@@ -198,8 +198,18 @@ ghu_TEST or github_pat_X.
   becomes of its forks; a person GitHub says does not administer the repository gets no button; a
   refusal is said in GitHub's words with the access it needs, and a rate limit is not taken for
   missing access; the button waits while GitHub is asked, and a sign-out on the way leaves no lock;
-  GitHub's answer, not the press, says what the repository is now.
-- `e2e2/mutants/`: 315 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+  GitHub's answer, not the press, says what the repository is now. N33 to N36, from its review: a
+  side panel drawn again while the change is on its way shows the button waiting and a press of it
+  sends nothing, before a sign-out and after a sign-in again; a change answered after a sign-out and
+  a sign-in again frees no lock a later change holds; a Refresh while the change is on its way reads
+  the repository again once GitHub answers, so the card says it is private; and a change answered
+  once the page shows another owner's repository marks nothing there and draws the freed lock. N27,
+  N29 and N30 grew there too (the confirmation says what a public repository loses on GitHub's
+  plans; a person who does not administer the repository is pointed at no button and no settings
+  page; a 403 and a 404 get the access words, in SymphonyBoard's words when signed in with GitHub),
+  and the mocked GitHub keeps each notebook repository's visibility, so a change it answers is read
+  back as it now is.
+- `e2e2/mutants/`: 326 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
@@ -244,6 +254,15 @@ ghu_TEST or github_pat_X.
   recorded, the lock kept after the answer or past a sign-out, the button for a person who does not
   administer, the access words for a rate limit, the answer ignored, and an internal repository told
   as a public one) were caught against site branch claude/make-private at 7d3255f on 2026-10-19.
+  The eleven from its review (n49 to n59: the lock tied to no sign-in, a button drawn again live and
+  its press let through, the waiting unsaid, a late answer freeing a later change's lock, a
+  Refresh's repository not read again, an answer recorded under another owner, the freed lock not
+  drawn, the access words for a 422 alone, a SymphonyBoard sign-in told of a token, a person who
+  does not administer told to press here, and what a public repository loses on a free plan
+  unsaid) were caught against site branch claude/make-private at 2901ee5 on 2026-10-19, where n11,
+  which Make private's nb.admin had left stale, was brought up to nbForget as it stands and caught
+  again (N12), and n31, whose text Make private's own refusal had come to match first, was aimed at
+  the write's refusal again and caught again (N21); all 59 of the Notebooks tab are caught there.
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
   and every page action, visibility read and locator action on a selector first opens the tab that
