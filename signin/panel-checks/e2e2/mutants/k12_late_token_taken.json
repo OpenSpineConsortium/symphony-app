@@ -1,1 +1,1 @@
-[["      if (!answer || turn !== codeTurn) return;\n", "      if (!answer) return;\n"]]
+[["      if (turn !== codeTurn) {\n        if (answer.access_token) exchange('/revoke'", "      if (false) {\n        if (answer.access_token) exchange('/revoke'"]]

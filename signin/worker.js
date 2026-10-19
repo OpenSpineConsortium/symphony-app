@@ -185,6 +185,11 @@ function unreachable() {
   return { status: 502, body: { error: 'github_unreachable', error_description: 'GitHub could not be reached; try again' } };
 }
 
+/** GitHub reached but answering a 5xx or a 429 for the moment: the same word, with GitHub's status */
+function busy(status) {
+  return { status: 502, body: { error: 'github_unreachable', error_description: 'GitHub answered ' + status + ' for the moment; try again' } };
+}
+
 /** one form POSTed to one of GitHub's login endpoints, with the App's client id and, where asked,
  * its secret; back comes GitHub's status and JSON, or null where GitHub could not be reached */
 async function postToGitHub(env, url, form, withSecret, fetchImpl) {
@@ -267,6 +272,10 @@ async function askDeviceToken(env, device, fetchImpl) {
     if (data.interval !== undefined) out.interval = seconds(data.interval, 10, 120);
     return { status: 400, body: out };
   }
+  // GitHub's own trouble of the moment, a 5xx or a 429 with no OAuth word of its own, is no refusal:
+  // the person may be typing the code right now, so it goes back as a moment GitHub cannot be
+  // reached, which the page asks again at the same pace until the code runs out
+  if ((r.status >= 500 || r.status === 429) && !data.error) return busy(r.status);
   return { status: 502, body: { error: data.error || 'github_refused', error_description: data.error_description || ('GitHub answered ' + r.status) } };
 }
 

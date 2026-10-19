@@ -266,6 +266,25 @@ test('/device/token: a GitHub that refuses with a status, answers no JSON or doe
   assert.equal(down.status, 502);
 });
 
+test('/device/token: GitHub answering a 5xx or a 429 for the moment is github_unreachable, which the page asks again at the same pace, while a refusal in GitHub\'s words stays one', async () => {
+  for (const [gh, status] of [
+    [github(undefined, 503, '<html>down</html>'), 503], [github(undefined, 502, '<html>bad gateway</html>'), 502],
+    [github(null, 500), 500], [github({ message: 'You have exceeded a secondary rate limit.' }, 429), 429],
+  ]) {
+    const r = await handle(post('/device/token', { device_code: DEVICE }), env, gh.fetchImpl);
+    assert.equal(r.status, 502, String(status));
+    const body = await r.json();
+    assert.equal(body.error, 'github_unreachable', 'GitHub\'s ' + status + ' ended the sign-in as a refusal');
+    assert.equal(body.error_description, 'GitHub answered ' + status + ' for the moment; try again');
+    assert.equal(body.access_token, undefined);
+  }
+  for (const [answer, status, word] of [[{ error: 'incorrect_client_credentials' }, 401, 'incorrect_client_credentials'], [{ error: 'unsupported_grant_type' }, 503, 'unsupported_grant_type'], [{ message: 'Not Found' }, 404, 'github_refused']]) {
+    const r = await handle(post('/device/token', { device_code: DEVICE }), env, github(answer, status).fetchImpl);
+    assert.equal(r.status, 502);
+    assert.equal((await r.json()).error, word, 'a refusal with ' + status + ' was taken for a moment\'s trouble');
+  }
+});
+
 test('/device/token without a device code, or with a malformed one, is refused before GitHub is asked', async () => {
   const gh = github(granted);
   for (const device of [undefined, '', 'has space', 'x'.repeat(129), 42, { a: 1 }]) {

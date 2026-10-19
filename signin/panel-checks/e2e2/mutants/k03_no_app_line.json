@@ -1,1 +1,1 @@
-[["    if (app) row.parentNode.insertBefore(el('p', 'admin__lead control__codelead'", "    if (false) row.parentNode.insertBefore(el('p', 'admin__lead control__codelead'"]]
+[["    if (app && how && how.getAttribute('data-in-app')) how.textContent = how.getAttribute('data-in-app');\n", ""]]
