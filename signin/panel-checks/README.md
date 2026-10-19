@@ -246,7 +246,50 @@ ghu_TEST or github_pat_X.
   read before the write asks for no write access, and a write that lands after a sign-out and a
   sign-in again frees no lock a later write holds; N19 and N20 grew there too (the lock a write after
   a sign-in again holds, and the x on an internal repository's notebook).
-- `e2e2/mutants/`: 361 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/app.test.mjs`: 8 checks of the control panel as a Home Screen app (site branch claude/home-
+  screen-app, 2026-10-19, after the owner's "Build way 1", the first of the three ways in symphony-
+  template's docs/research/native-ios-app.md), against the page as the site serves it, signed out,
+  with every request off the site's origin refused, so it needs no mocked GitHub; the panel's script
+  is served from `SITE`, with a mutant's pairs where `MUTANT` names one. H1: the page names a
+  manifest that Chromium reads with no error and finds installable, its start, scope and id the
+  panel's own address, standalone, its icons PNGs of the sizes they say, one for any use and one
+  maskable, the largest 512 px. H2: iOS's 180 px touch icon, the head lines that open the page as an
+  app named Symphony under iOS's light status bar, and a viewport that covers the screen. H3: where a
+  screen has no safe areas, a computer's 1280 and 1000 px wide or a phone's, the deck, the status
+  line, the header with its own padding, and the section strip, the breadcrumb and the footer with
+  theirs are where they were. H4 to H7, with safe areas played through Chromium's
+  Emulation.setSafeAreaInsetsOverride, and H8 hold what the adversarial review of the branch found
+  that day: held upright, the status line's words and buttons stand clear of the home bar, by its
+  own padding (H4); held sideways at 844 x 390, the header's bar and the deck's dark ground run to
+  the screen's edges while the brand, the menu button and the opened drawer's links, the deck's
+  content, the section strip, the Ask Claude drawer with its Close and its words, the breadcrumb and
+  the footer keep inside the notch on either side, and the visible status line's words and buttons
+  stand clear of the home bar (H5); a large phone held sideways, 932 x 430 with 59 px insets and
+  956 x 440 with 62 px, wider than 900 px but too narrow inside its insets for the header's one row,
+  keeps the header's drawer, with the brand, the menu button, the drawer's links, the strip, the
+  breadcrumb and the footer inside the insets and the page no wider than the screen, while a short
+  window on a computer, 1280 x 500 with a pointer that hovers, keeps the row (H6); a tablet held
+  sideways, 1180 x 820 with a 20 px home bar, keeps the deck's desktop layout, whose own foot pads
+  the home bar, so the status line's words stand clear of it (H7); and the Full screen button is
+  hidden where the browser has neither requestFullscreen nor webkitRequestFullscreen, as on an
+  iPhone, which has no F11 either, and shown on a computer and on a phone that has both, or WebKit's
+  older call alone, as Safari before 16.4 has (H8). The manifest, the head and the stylesheet are
+  the build's and no mutant of the panel's script reaches them, so each of their lines the checks
+  hold was taken out of a served copy by hand on 2026-10-19 and seen to fail its check: display, the maskable icon
+  and the scope (H1), the status bar's style, the covering viewport and the touch icon's size (H2),
+  the manifest's link (H1); the header's own padding at each width and the strip's, the
+  breadcrumb's and the footer's at a phone's (H3); the status line's inset, taken out (H4 and H5)
+  or kept to a narrow window (H5); the header's padding by the insets (H5 and H6), its drawer's at
+  900 px and below (H5), the drawer of a large phone held sideways, its menu button, and the
+  hovering pointer that keeps a computer's row (H6); the strip's, the breadcrumb's and the footer's
+  padding by the insets, each alone (H5 and H6); the Ask Claude drawer's (H5); the deck's left side
+  (H5); the deck's foot kept to the phone layout (H7); and the rule that hides the Full screen
+  button once the script marks it hidden (H8). Two changes no check sees: a fallback given to env(), which Chromium and Safari never
+  use since both define every inset, and the deck's foot padded by the home bar in the phone layout
+  too, which only widens the dark band under the status line, since H4 holds the status line's
+  place alone. Run it with `SITE=<the site's checkout> BASE=<the site's address> node
+  app.test.mjs`.
+- `e2e2/mutants/`: 363 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
@@ -326,6 +369,12 @@ ghu_TEST or github_pat_X.
   on 2026-10-19 after its third review, n35 to n39 for its findings, where every other suite passes
   too; N6 to N9 and N18 have no mutant of their own (N9 and N18 hold the stylesheet, which no mutant
   of the script reaches).
+  The two of the Home Screen app (`h*`, each naming app.test.mjs, for H8: the button offered where
+  the browser has no full screen call, and only the standard call looked for, which would hide it
+  from Safari before 16.4) were caught against site branch claude/home-screen-app at 79d4b83 on
+  2026-10-19, after its adversarial review, where app.test.mjs, signin.test.mjs, panel.test.mjs and
+  hostile.test.mjs pass whole; H1 to H7 hold the build's head and the stylesheet, which no mutant of
+  the script reaches.
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
   and every page action, visibility read and locator action on a selector first opens the tab that
@@ -354,7 +403,7 @@ ghu_TEST or github_pat_X.
      names, and reports each mutant as KILLED, SURVIVED, STALE or ERROR; name mutants to run only
      those, by their paths from e2e2/ (`bash run-mutants.sh mutants/g*.json` there runs the
      Dependencies tab's, `mutants/f*.json` the Folders tab's, `mutants/n*.json` the Notebooks
-     tab's).
+     tab's, `mutants/h*.json` the Home Screen app's, with `SITE` set as for the checks).
 
 The site sets the two constants to the live service and SymphonyBoard's Client ID (site pull
 request #24). The checks set them for themselves, whatever the shipped script holds: the
