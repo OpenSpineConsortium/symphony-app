@@ -39,7 +39,7 @@ ghu_TEST or github_pat_X.
   a word, and the last repository taken off deleting the list.
 - `e2e2/panel.test.mjs`: the panel's walkthrough on both pages.
 - `e2e2/hostile.test.mjs`: 13 hostile-input checks.
-- `e2e2/assistant.test.mjs`: 21 checks of the panel's assistant (site branch claude/assistant-panel,
+- `e2e2/assistant.test.mjs`: 26 checks of the panel's assistant (site branch claude/assistant-panel,
   2026-10-18): who may ask (write access, and the repository's workflow carrying
   .github/symphony/assistant.md), the label and the issue made once and only on a press, the
   question's state block and its size, the conditional polling (If-None-Match and a 304) and where
@@ -149,7 +149,7 @@ ghu_TEST or github_pat_X.
   page.evaluate,
   which opens nothing, so the page and not console-tabs.mjs is seen opening the tab. A check that
   wants the drawing recorded instead of made serves a stand-in for the library on its route.
-- `e2e2/folders.test.mjs`: 58 checks of the console's Folders tab, /symphony/control/#folders
+- `e2e2/folders.test.mjs`: 63 checks of the console's Folders tab, /symphony/control/#folders
   (site branch claude/folders-page, 2026-10-18; the tab took the place of the page folders.html
   before that page shipped), against a mocked Microsoft consent page, a mocked Microsoft Graph,
   the mocked service's three `/drive` routes and a mocked GitHub that keeps what Track writes as
@@ -227,7 +227,7 @@ ghu_TEST or github_pat_X.
   suite alone), and holds that the storage is asked one plain read with no token and no header of
   GitHub's. XP9 switches the repository while the tab is open, and XP10 holds that an epic whose
   sub-issues could not be read says so.
-- `e2e2/notebooks.test.mjs`: 26 checks of the console's Notebooks tab, /symphony/control/#notebooks
+- `e2e2/notebooks.test.mjs`: 36 checks of the console's Notebooks tab, /symphony/control/#notebooks
   (site pull request #82, 2026-10-19), against a mocked GitHub that keeps notebooks.json and
   catalog.json on the branch drive-catalog as GitHub does: read as objects with their sha, a file
   over 1 MB by its blob, written over only with the sha it has (422 without one, 409 with another).
@@ -245,7 +245,24 @@ ghu_TEST or github_pat_X.
   is. N24 to N26, from the third: a refusal whose sha cannot be read again frees the lock, a refused
   read before the write asks for no write access, and a write that lands after a sign-out and a
   sign-in again frees no lock a later write holds; N19 and N20 grew there too (the lock a write after
-  a sign-in again holds, and the x on an internal repository's notebook).
+  a sign-in again holds, and the x on an internal repository's notebook). N27 to N32 (site branch
+  claude/make-private, 2026-10-19, after the owner's "Add the button"): Make private on a public
+  notebook repository asks once, saying what GitHub erases, then changes the repository as the
+  person and says it is private by GitHub's answer; an internal repository's confirmation says what
+  becomes of its forks; a person GitHub says does not administer the repository gets no button; a
+  refusal is said in GitHub's words with the access it needs, and a rate limit is not taken for
+  missing access; the button waits while GitHub is asked, and a sign-out on the way leaves no lock;
+  GitHub's answer, not the press, says what the repository is now. N33 to N36, from its review: a
+  side panel drawn again while the change is on its way shows the button waiting and a press of it
+  sends nothing, before a sign-out and after a sign-in again; a change answered after a sign-out and
+  a sign-in again frees no lock a later change holds; a Refresh while the change is on its way reads
+  the repository again once GitHub answers, so the card says it is private; and a change answered
+  once the page shows another owner's repository marks nothing there and draws the freed lock. N27,
+  N29 and N30 grew there too (the confirmation says what a public repository loses on GitHub's
+  plans; a person who does not administer the repository is pointed at no button and no settings
+  page; a 403 and a 404 get the access words, in SymphonyBoard's words when signed in with GitHub),
+  and the mocked GitHub keeps each notebook repository's visibility, so a change it answers is read
+  back as it now is.
 - `e2e2/app.test.mjs`: 8 checks of the control panel as a Home Screen app (site branch claude/home-
   screen-app, 2026-10-19, after the owner's "Build way 1", the first of the three ways in symphony-
   template's docs/research/native-ios-app.md), against the page as the site serves it, signed out,
@@ -289,7 +306,7 @@ ghu_TEST or github_pat_X.
   too, which only widens the dark band under the status line, since H4 holds the status line's
   place alone. Run it with `SITE=<the site's checkout> BASE=<the site's address> node
   app.test.mjs`.
-- `e2e2/mutants/`: 363 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/mutants/`: 383 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
@@ -368,7 +385,22 @@ ghu_TEST or github_pat_X.
   (`n*`, each naming notebooks.test.mjs) were caught against site branch claude/notebooks at 1656fbb
   on 2026-10-19 after its third review, n35 to n39 for its findings, where every other suite passes
   too; N6 to N9 and N18 have no mutant of their own (N9 and N18 hold the stylesheet, which no mutant
-  of the script reaches).
+  of the script reaches). The nine of Make private (n40 to n48: no confirmation, the catalog's
+  repository changed in place of the notebook's, the change not recorded, the lock kept after the answer or past a sign-out, the button for a person who does not
+  administer, the access words for a rate limit, the answer ignored, and an internal repository told
+  as a public one) were caught against site branch claude/make-private at 7d3255f on 2026-10-19.
+  The eleven from its review (n49 to n59: the lock tied to no sign-in, a button drawn again live and
+  its press let through, the waiting unsaid, a late answer freeing a later change's lock, a
+  Refresh's repository not read again, an answer recorded under another owner, the freed lock not
+  drawn, the access words for a 422 alone, a SymphonyBoard sign-in told of a token, a person who
+  does not administer told to press here, and what a public repository loses on a free plan
+  unsaid) were caught against site branch claude/make-private at 2901ee5 on 2026-10-19, where n11,
+  which Make private's nb.admin had left stale, was brought up to nbForget as it stands and caught
+  again (N12), and n31, whose text Make private's own refusal had come to match first, was aimed at
+  the write's refusal again and caught again (N21); all 59 of the Notebooks tab are caught there.
+  With site pull requests #90 and #91 merged into that branch at b9c9674 the same day, m51 and m63
+  (H10, I10) were aimed at the https:// address the classic tokens' page is now written with, and
+  p11 (P4) at the note now drawn with its addresses as links, and all three were caught again.
   The two of the Home Screen app (`h*`, each naming app.test.mjs, for H8: the button offered where
   the browser has no full screen call, and only the standard call looked for, which would hide it
   from Safari before 16.4) were caught against site branch claude/home-screen-app at 79d4b83 on

@@ -737,7 +737,7 @@ await check('F7: Forget the token with a pasted token says GitHub keeps it valid
   await new Promise((r) => setTimeout(r, 300));
   const msg = await page.textContent('#msg');
   console.log('      message:', msg);
-  assert.equal(msg, 'The token is forgotten in this tab and on this browser. Another tab signed in for that tab alone keeps its sign-in until you forget it there or close it. The personal access token itself stays valid at GitHub until it runs out or you delete it at github.com/settings/personal-access-tokens. The repositories you listed stay.');
+  assert.equal(msg, 'The token is forgotten in this tab and on this browser. Another tab signed in for that tab alone keeps its sign-in until you forget it there or close it. The personal access token itself stays valid at GitHub until it runs out or you delete it at https://github.com/settings/personal-access-tokens. The repositories you listed stay.');
   assert.equal(service.filter((x) => x.path === '/revoke').length, 0);
   await context.close();
 });
@@ -1024,7 +1024,7 @@ await check('G6: Forget the token, with this tab\'s own sign-in in front of a to
   assert.equal(f.pasted, null);
   assert.equal(f.session, null);
   assert.deepEqual(revoked(service), ['ghu_TAB']);
-  assert.match(f.msg, /^The token is forgotten in this tab and on this browser, and the sign-in's token is revoked at GitHub\. Another tab signed in for that tab alone keeps its sign-in until you forget it there or close it\. The personal access token itself stays valid at GitHub until it runs out or you delete it at github\.com\/settings\/personal-access-tokens\./);
+  assert.match(f.msg, /^The token is forgotten in this tab and on this browser, and the sign-in's token is revoked at GitHub\. Another tab signed in for that tab alone keeps its sign-in until you forget it there or close it\. The personal access token itself stays valid at GitHub until it runs out or you delete it at https:\/\/github\.com\/settings\/personal-access-tokens\./);
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -1403,7 +1403,7 @@ await check('H10: Forget the token says a tab signed in for itself keeps its sig
   await page2.click('#cp-refresh');
   await loaded(page2);
   console.log('      tab 1 says:', msg);
-  assert.equal(msg, 'The token is forgotten in this tab and on this browser. Another tab signed in for that tab alone keeps its sign-in until you forget it there or close it. The personal access token itself stays valid at GitHub until it runs out or you delete it at github.com/settings/tokens. The repositories you listed stay.');
+  assert.equal(msg, 'The token is forgotten in this tab and on this browser. Another tab signed in for that tab alone keeps its sign-in until you forget it there or close it. The personal access token itself stays valid at GitHub until it runs out or you delete it at https://github.com/settings/tokens. The repositories you listed stay.');
   assert.ok(tabCalls(calls, page2, n).every((c) => c.auth === 'Bearer github_pat_TAB2'), 'the other tab lost its own token');
   assert.deepEqual(errors, []);
   await context.close();
@@ -1863,7 +1863,7 @@ for (const [way, pasted] of ways) {
     const writes = calls.filter((c) => c.key.startsWith('POST ')).map((c) => c.key + ' ' + c.auth);
     console.log('      the page says:', msg, '| writes:', JSON.stringify(writes));
     assert.deepEqual(writes, []);
-    assert.equal(msg, pasted ? 'The token is forgotten in this tab and on this browser. Another tab signed in for that tab alone keeps its sign-in until you forget it there or close it. The personal access token itself stays valid at GitHub until it runs out or you delete it at github.com/settings/personal-access-tokens. The repositories you listed stay.' : FORGET_SIGNIN);
+    assert.equal(msg, pasted ? 'The token is forgotten in this tab and on this browser. Another tab signed in for that tab alone keeps its sign-in until you forget it there or close it. The personal access token itself stays valid at GitHub until it runs out or you delete it at https://github.com/settings/personal-access-tokens. The repositories you listed stay.' : FORGET_SIGNIN);
     assert.deepEqual(errors, []);
     await context.close();
   });
@@ -1901,7 +1901,7 @@ for (const [way, pasted] of ways) {
     await sleep(500);
     const msg = await page.textContent('#msg');
     console.log('      Forget says:', msg);
-    assert.equal(msg, 'The token is forgotten in this tab and on this browser. Another tab signed in for that tab alone keeps its sign-in until you forget it there or close it. The personal access token itself stays valid at GitHub until it runs out or you delete it at github.com/settings/personal-access-tokens.');
+    assert.equal(msg, 'The token is forgotten in this tab and on this browser. Another tab signed in for that tab alone keeps its sign-in until you forget it there or close it. The personal access token itself stays valid at GitHub until it runs out or you delete it at https://github.com/settings/personal-access-tokens.');
     assert.deepEqual(errors.filter((e) => !/SecurityError|Access is denied/.test(e)), []);
     await context.close();
   });
@@ -1983,7 +1983,7 @@ await check('I10: Forget the token with a classic token pasted for this tab and 
   await sleep(300);
   const msg = await page.textContent('#msg');
   console.log('      Forget says:', msg);
-  assert.equal(msg, 'The token is forgotten in this tab and on this browser. Another tab signed in for that tab alone keeps its sign-in until you forget it there or close it. The personal access tokens themselves stay valid at GitHub until they run out or you delete them at github.com/settings/tokens and github.com/settings/personal-access-tokens. The repositories you listed stay.');
+  assert.equal(msg, 'The token is forgotten in this tab and on this browser. Another tab signed in for that tab alone keeps its sign-in until you forget it there or close it. The personal access tokens themselves stay valid at GitHub until they run out or you delete them at https://github.com/settings/tokens and https://github.com/settings/personal-access-tokens. The repositories you listed stay.');
   assert.deepEqual(errors, []);
   await context.close();
 });

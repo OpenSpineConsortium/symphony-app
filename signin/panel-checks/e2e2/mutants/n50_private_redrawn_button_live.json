@@ -1,0 +1,1 @@
+[["      priv.disabled = !!nbPrivateBusy();\n", "      priv.disabled = false;\n"], ["    if (nbPrivateBusy()) { say(nbPrivating + ' is being made private; press again once GitHub has answered.'); return; }\n", ""]]
