@@ -168,7 +168,7 @@ ghu_TEST or github_pat_X.
   suite alone), and holds that the storage is asked one plain read with no token and no header of
   GitHub's. XP9 switches the repository while the tab is open, and XP10 holds that an epic whose
   sub-issues could not be read says so.
-- `e2e2/notebooks.test.mjs`: 26 checks of the console's Notebooks tab, /symphony/control/#notebooks
+- `e2e2/notebooks.test.mjs`: 32 checks of the console's Notebooks tab, /symphony/control/#notebooks
   (site pull request #82, 2026-10-19), against a mocked GitHub that keeps notebooks.json and
   catalog.json on the branch drive-catalog as GitHub does: read as objects with their sha, a file
   over 1 MB by its blob, written over only with the sha it has (422 without one, 409 with another).
@@ -186,8 +186,15 @@ ghu_TEST or github_pat_X.
   is. N24 to N26, from the third: a refusal whose sha cannot be read again frees the lock, a refused
   read before the write asks for no write access, and a write that lands after a sign-out and a
   sign-in again frees no lock a later write holds; N19 and N20 grew there too (the lock a write after
-  a sign-in again holds, and the x on an internal repository's notebook).
-- `e2e2/mutants/`: 299 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+  a sign-in again holds, and the x on an internal repository's notebook). N27 to N32 (site branch
+  claude/make-private, 2026-10-19, after the owner's "Add the button"): Make private on a public
+  notebook repository asks once, saying what GitHub erases, then changes the repository as the
+  person and says it is private by GitHub's answer; an internal repository's confirmation says what
+  becomes of its forks; a person GitHub says does not administer the repository gets no button; a
+  refusal is said in GitHub's words with the access it needs, and a rate limit is not taken for
+  missing access; the button waits while GitHub is asked, and a sign-out on the way leaves no lock;
+  GitHub's answer, not the press, says what the repository is now.
+- `e2e2/mutants/`: 308 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
@@ -223,7 +230,11 @@ ghu_TEST or github_pat_X.
   claude/panel-feedback at f025b08 on 2026-10-19, where every other suite passes too. The 39 of
   the Notebooks tab (`n*`, each naming notebooks.test.mjs) were caught against site branch
   claude/notebooks at 1656fbb on 2026-10-19 after its third review, n35 to n39 for its findings, where
-  every other suite passes too; N6 to N9 and N18 have no mutant of their own (N9 and N18 hold the stylesheet, which no mutant of the script reaches).
+  every other suite passes too; N6 to N9 and N18 have no mutant of their own (N9 and N18 hold the stylesheet, which no mutant of the script reaches). The nine of Make private (n40 to n48: no
+  confirmation, the catalog's repository changed in place of the notebook's, the change not
+  recorded, the lock kept after the answer or past a sign-out, the button for a person who does not
+  administer, the access words for a rate limit, the answer ignored, and an internal repository told
+  as a public one) were caught against site branch claude/make-private at 7d3255f on 2026-10-19.
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
   and every page action, visibility read and locator action on a selector first opens the tab that
