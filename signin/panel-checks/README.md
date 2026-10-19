@@ -28,7 +28,7 @@ ghu_TEST or github_pat_X.
   answer, the issue read again before each question and replaced when closed, one press at a time,
   a sign-in changed under the page, a watch read on after a sign-in, and Stop watching; its cadence
   constants are shortened in the served script, and a check may serve its own.
-- `e2e2/graph.test.mjs`: 37 checks of the panel's Dependencies tab (site branch
+- `e2e2/graph.test.mjs`: 42 checks of the panel's Dependencies tab (site branch
   claude/graph-section, 2026-10-18; a section of the long page until the console): the chart text
   the page hands the drawing, byte for byte the two blocks symphony-protocol's board writes for its
   fixture board-epics.json (board-epics-STATE.md, copied into the check from symphony-protocol
@@ -70,7 +70,12 @@ ghu_TEST or github_pat_X.
   count, a goal listed with the epics, a repository switched mid-draw, the tables' words, the
   repository's record unread, a repository renamed, a claim shown by its open pull request (and a
   fork's not), one chart that cannot be drawn among others, the last repository taken off the
-  list, and an open list cut short. Each check opens the Dependencies tab by its rail button before
+  list, and an open list cut short, and the focus strip (AA to AE): where there are two charts or
+  more, a strip of chips shows one epic's chart at a time, a zoomed-out goals chart, or All, the
+  first chart shown by default and the rest hidden, a chip showing its chart and hiding the others
+  with aria-pressed following, the choice kept per repository in this browser and restored on load
+  and on Refresh, no strip for a single chart, and a kept choice that is gone falling back to the
+  first. Each check opens the Dependencies tab by its rail button before
   it reads or presses inside it, and a press that crosses tabs is read at once with page.evaluate,
   which opens nothing, so the page and not console-tabs.mjs is seen opening the tab. A check that
   wants the drawing recorded instead of made serves a stand-in for the library on its route.
@@ -158,7 +163,7 @@ ghu_TEST or github_pat_X.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
   (`a*`, check O of assistant.test.mjs: the question dropped, the same tab, the state dropped, no
   cut, the encoded form unbounded, the referrer sent, a cut by code unit) were caught against the site branch claude/ask-in-claude. The 79 of the sign-in (`m*`) were caught against master
-  009109c; the 49 of the Dependencies tab (`g*`, five of them for the tab: show dependencies
+  009109c; the 54 of the Dependencies tab (`g*`, five of them for the tab: show dependencies
   opening no tab and leaving the charts' box where it was, the message line unsaid, the focus
   opening no tab, and the window not put back; eleven from the tab's second review: the message
   line said only when the press leaves the tab, a press always opening the Tasks tab, the board's
@@ -172,7 +177,10 @@ ghu_TEST or github_pat_X.
   and a Board chart that could not be drawn losing its text (R4); g41, the draw not seeded from the
   open issues' count, was retired, since every read now updates the count it starts from) against
   site branch claude/graph-section on 2026-10-18 after that review's fold, where the 79 were caught
-  again. The 63 of the Folders tab (`f*`, each with a `.json.suite` naming
+  again; and five from the focus strip (g51 to g55: the default chart not the first (AA), the other
+  charts not hidden (AB), the choice not kept across a press and a Refresh (AC), the strip shown for
+  a single chart (AD), and a gone choice not falling back to the first (AE)) against site branch
+  claude/dependencies-focus on 2026-10-19. The 63 of the Folders tab (`f*`, each with a `.json.suite` naming
   folders.test.mjs) were caught against site branch claude/folders-explorer on 2026-10-18, the
   first 48 also against the site's script at commit 044b8b3, f06 rewritten for the explorer's
   name cell; f56 to f63, the saved catalog's, against site branch claude/folders-catalog the
