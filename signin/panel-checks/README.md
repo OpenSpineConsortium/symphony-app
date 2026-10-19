@@ -207,7 +207,7 @@ ghu_TEST or github_pat_X.
   after Cancel, and the browser's two ways. K14: the link that copies the code and opens GitHub's
   page. K15: the cost page. K16: a code that runs out at the time named though GitHub never says
   so.
-- `e2e2/mutants/`: 336 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/mutants/`: 334 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
@@ -247,7 +247,11 @@ ghu_TEST or github_pat_X.
   2026-10-19. The 39 of
   the Notebooks tab (`n*`, each naming notebooks.test.mjs) were caught against site branch
   claude/notebooks at 1656fbb on 2026-10-19 after its third review, n35 to n39 for its findings, where
-  every other suite passes too; N6 to N9 and N18 have no mutant of their own (N9 and N18 hold the stylesheet, which no mutant of the script reaches).
+  every other suite passes too; N6 to N9 and N18 have no mutant of their own (N9 and N18 hold the stylesheet, which no mutant of the script reaches). The 28 of sign-in by
+  code (`k*`, each naming code.test.mjs) were caught against site branch claude/sign-in-by-code at
+  8ace034 on 2026-10-19; two more were written and dropped as equivalent, the turn checked again
+  when a refusal comes back after Cancel and the timer cleared by Cancel, since the ask itself
+  checks the turn before it sends anything, so neither leaves a request a check could see.
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
   and every page action, visibility read and locator action on a selector first opens the tab that
