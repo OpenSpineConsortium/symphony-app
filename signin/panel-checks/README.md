@@ -192,6 +192,26 @@ ghu_TEST or github_pat_X.
   read before the write asks for no write access, and a write that lands after a sign-out and a
   sign-in again frees no lock a later write holds; N19 and N20 grew there too (the lock a write after
   a sign-in again holds, and the x on an internal repository's notebook).
+- `e2e2/app.test.mjs`: 5 checks of the control panel as a Home Screen app (site branch claude/home-
+  screen-app, 2026-10-19, after the owner's "Build way 1", the first of the three ways in symphony-
+  template's docs/research/native-ios-app.md), against the page as the site serves it, signed out,
+  with every request off the site's origin refused, so it needs no mocked GitHub and reads no script
+  of a mutant's. H1: the page names a manifest that Chromium reads with no error and finds
+  installable, its start, scope and id the panel's own address, standalone, its icons PNGs of the
+  sizes they say, one for any use and one maskable, the largest 512 px. H2: iOS's 180 px touch icon,
+  the head lines that open the page as an app named Symphony under iOS's light status bar, and a
+  viewport that covers the screen. H3: where a screen has no safe areas, a computer's or a phone's,
+  the deck, the status line and the header are where they were. H4 and H5, with a phone's safe areas
+  played through Chromium's Emulation.setSafeAreaInsetsOverride: held upright, the status line's
+  words and buttons stand clear of the home bar; held sideways, the header and the deck's content
+  keep inside the notch on either side while the deck's dark ground still runs to the edges. The
+  manifest, the head and the stylesheet are the build's and no mutant of the panel's script reaches
+  them, so each line they hold was taken out of a served copy by hand on 2026-10-19 and seen to fail
+  its check: the header's insets (H5), the status line's (H4), the deck's foot (H4 and H5) and left
+  side (H5), display, the maskable icon and the scope (H1), the status bar's style, the covering
+  viewport and the touch icon's size (H2), and the manifest's link (H1); a fallback given to env(),
+  which Chromium and Safari never use since both define every inset, was the one change no check
+  saw. Run it with `BASE=<the site's address> node app.test.mjs`.
 - `e2e2/mutants/`: 306 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
