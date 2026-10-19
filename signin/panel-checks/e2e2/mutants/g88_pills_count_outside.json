@@ -1,0 +1,1 @@
+[["      if (own && own.indexOf(it.number) < 0) return;\n", ""]]

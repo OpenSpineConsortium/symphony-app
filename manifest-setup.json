@@ -11,7 +11,9 @@
   "default_permissions": {
     "administration": "write",
     "metadata": "read",
-    "organization_administration": "write"
+    "organization_administration": "write",
+    "organization_secrets": "write",
+    "organization_actions_variables": "write"
   },
   "default_events": []
 }

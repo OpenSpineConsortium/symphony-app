@@ -27,15 +27,19 @@
 // ARIA, the first chart shown by default and the rest hidden, a chip showing its chart and hiding
 // the others with aria-pressed following, the choice kept per repository in this browser and
 // restored on load and on Refresh, no strip for a single chart, and a kept choice that is gone
-// falling back to the first. Each check states what the page promises; a FAIL is a
-// defect. Every token is a stand-in.
+// falling back to the first, and (AF to AI) the console's look: each chart a card with its bar and
+// its pills and its list folded, the key, the nodes shaded by their state in place of the board's
+// light colours, and a wide chart opened at its middle, and (AJ to AU) the tiles, the moves between
+// the charts and what the look's second review found. Each check states what the page promises;
+// a FAIL is a defect. Every token is a stand-in.
 //
 // The console shows one tab at a time, so each check opens the Dependencies tab by its rail button
 // before it reads or presses inside it, and console-tabs.mjs opens any other tab a press names, as
 // the other suites do. A press that crosses tabs is read right after it with page.evaluate, which
 // opens nothing, so the page and not the helper is what opened the tab. The window is a laptop's,
 // 1366 x 657, where the console fills the window and the site's foot lies below it, so the page
-// could scroll and no press may move it.
+// could scroll and no press may move it; AI, AJ and AS open a phone's too, 390 x 844, and AM and AR
+// a window 800 px wide, where the page scrolls as a whole.
 //
 // The mutants that prove the checks bite are e2e2/mutants/g*.json, each with the checks that must
 // catch it (.only) and this file named as its suite (.suite); e2e2/run-mutants.sh runs them.
@@ -161,6 +165,95 @@ function fixtureRoutes(f) {
   for (const n of Object.keys(f.blockedBy)) routes['GET /repos/acme/demo/issues/' + n + '/dependencies/blocked_by'] = f.blockedBy[n];
   return routes;
 }
+// the colours the stylesheet gives each state, as getComputedStyle gives them, and the edge each
+// has; no two of the six differ by hue alone (assertNotHueAlone): blocked thick, claimed dotted,
+// closed dashed and struck through, in review on a fill lit well above to do's, and open with a thin
+// pale edge far lighter than to do's green
+const SHADES = {
+  todo: { fill: 'rgb(16, 38, 27)', stroke: 'rgb(63, 185, 80)', width: '1.5px', dash: 'none' },
+  claimed: { fill: 'rgb(42, 36, 18)', stroke: 'rgb(227, 179, 65)', width: '2.5px', dash: '0.5px, 5px' },
+  review: { fill: 'rgb(34, 70, 111)', stroke: 'rgb(88, 166, 255)', width: '1.5px', dash: 'none' },
+  blocked: { fill: 'rgb(69, 28, 32)', stroke: 'rgb(248, 81, 73)', width: '3px', dash: 'none' },
+  closed: { fill: 'rgb(21, 27, 26)', stroke: 'rgb(111, 125, 120)', width: '1.5px', dash: '4px, 3px' },
+  '': { fill: 'rgb(22, 34, 31)', stroke: 'rgb(194, 204, 200)', width: '1px', dash: 'none' },
+};
+// every drawn node under a box, as AH and R5 read them: its number and state, any colour left on its
+// own elements, its shade, edge and corners, its words' colour and line, and whether its words are
+// wider or taller than its box
+const readNodes = (page, box) => page.$$eval(box + ' .control__chart g.node', (gs) => gs.map((g) => {
+  const rect = g.querySelector(':scope > rect.label-container');
+  const fo = g.querySelector('foreignObject'), div = fo && fo.firstElementChild, words = g.querySelector('.nodeLabel');
+  const cs = rect ? getComputedStyle(rect) : {}, ws = words ? getComputedStyle(words) : {};
+  return {
+    n: Number(/-flowchart-i([0-9]+)-/.exec(g.id)[1]),
+    state: ['todo', 'claimed', 'review', 'blocked', 'closed'].find((c) => g.classList.contains(c)) || '',
+    inline: [g].concat(Array.from(g.querySelectorAll('[style]'))).flatMap((e) => ['fill', 'stroke', 'color'].filter((k) => e.style.getPropertyValue(k))),
+    fill: cs.fill, stroke: cs.stroke, width: cs.strokeWidth, dash: cs.strokeDasharray, rx: rect ? rect.getAttribute('rx') : null, color: ws.color, line: ws.textDecorationLine,
+    // Mermaid's box is 2 px shorter than its words' own height, whatever their face; a label cut
+    // short loses a whole line, 20 px and more
+    cut: !div || div.scrollWidth > Number(fo.getAttribute('width')) + 1 || div.scrollHeight > Number(fo.getAttribute('height')) + 4,
+  };
+}));
+function assertShaded(nodes) {
+  for (const x of nodes) {
+    assert.deepEqual(x.inline, [], 'node #' + x.n + ' keeps the board\'s colours on its own elements, where the stylesheet cannot reach');
+    const want = SHADES[x.state];
+    assert.deepEqual([x.fill, x.stroke, x.width, x.dash], [want.fill, want.stroke, want.width, want.dash], 'node #' + x.n + ' (' + (x.state || 'plain') + ') is not shaded and edged by its state');
+    assert.equal(x.rx, '10', 'node #' + x.n + '\'s box is not rounded');
+    assert.deepEqual([x.color, x.line], x.state === 'closed' ? ['rgb(138, 152, 147)', 'line-through'] : ['rgb(228, 236, 232)', 'none'], 'node #' + x.n + '\'s words');
+    assert.equal(x.cut, false, 'node #' + x.n + '\'s words are wider or taller than its box');
+  }
+}
+// WCAG's relative luminance of a colour as getComputedStyle gives it, and the ratio of two such
+const luminance = (c) => c.match(/[0-9.]+/g).slice(0, 3).map(Number).map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }).reduce((sum, x, i) => sum + x * [0.2126, 0.7152, 0.0722][i], 0);
+const lightRatio = (a, b) => { const p = luminance(a) + 0.05, q = luminance(b) + 0.05; return Math.max(p, q) / Math.min(p, q); };
+// no two of the six states, as drawn, differ by hue alone, so a reader who does not tell red from
+// green or blue from green, or a screen of greys, still tells them apart: each pair differs in its
+// edge's dash, in its edge's width by a pixel or more, in its words' line, or by 1.4 to 1 or more in
+// the lightness of its edge or of its fill, a step that shows in greys
+function assertNotHueAlone(nodes) {
+  const byState = {};
+  for (const x of nodes) byState[x.state] = x;
+  const states = Object.keys(byState);
+  assert.equal(states.length, 6, 'not every state is drawn: ' + states.join());
+  for (let i = 0; i < states.length; i++) {
+    for (let j = i + 1; j < states.length; j++) {
+      const a = byState[states[i]], b = byState[states[j]];
+      const apart = a.dash !== b.dash || Math.abs(parseFloat(a.width) - parseFloat(b.width)) >= 1 || a.line !== b.line
+        || lightRatio(a.stroke, b.stroke) >= 1.4 || lightRatio(a.fill, b.fill) >= 1.4;
+      assert.ok(apart, (a.state || 'open') + ' and ' + (b.state || 'open') + ' differ by hue alone: ' + JSON.stringify([a, b]));
+    }
+  }
+}
+// The fixture with a node of each of the six states in epic #20's chart: #23 blocked, and #99, the
+// blocker from outside the epic, in review.
+function fixtureStates() {
+  const f = fixture();
+  f.open = f.open.map((it) => it.number === 23 ? Object.assign({}, it, { labels: [{ name: 'blocked' }] }) : it.number === 99 ? Object.assign({}, it, { labels: [{ name: 'in-review' }] }) : it);
+  return f;
+}
+// The site's face served late and wide: the page's Google Fonts stylesheet answered with one face,
+// "IBM Plex Sans", a local DejaVu Sans drawn 160% wide (size-adjust), whose file waits until release
+// is called; so a chart measured before the face arrives is cut once it does, and one measured after
+// it fits. The drawing script is served from the site's file here, so a check can start a clock when
+// it has been handed over.
+const FACE_FILE = process.env.FACE_FILE || '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
+function lateFace(onScript) {
+  assert.ok(fs.existsSync(FACE_FILE), 'no font file at ' + FACE_FILE + ' to serve as the site\'s face; set FACE_FILE to a .ttf');
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const cors = { 'Access-Control-Allow-Origin': '*' };
+  const css = "@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 100 900; src: url(https://fonts.gstatic.com/late/plex.ttf) format('truetype'); size-adjust: 160%; font-display: swap; }";
+  const routes = [
+    ['https://fonts.googleapis.com/**', (route) => route.fulfill({ status: 200, contentType: 'text/css', headers: cors, body: css })],
+    ['https://fonts.gstatic.com/**', async (route) => { await gate; try { await route.fulfill({ status: 200, contentType: 'font/ttf', headers: cors, body: fs.readFileSync(FACE_FILE) }); } catch (e) { /* the page that asked is gone */ } }],
+    [VENDOR, async (route) => { await route.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(SITE + '/assets/js/vendor/mermaid.min.js') }); onScript(release); }],
+  ];
+  return { routes, release: () => release() };
+}
+// the site's face loaded and laid out, so a label measured in another face would show cut by now
+const faceIn = (page) => page.waitForFunction(() => Array.from(document.fonts).some((f) => f.family.replace(/["']/g, '') === 'IBM Plex Sans' && f.status === 'loaded'), null, { timeout: 15000 })
+  .then(() => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))));
 const dependencyReads = (calls) => calls.filter((c) => /^GET \/repos\/[^/]+\/[^/]+\/issues\/[0-9]+\/(sub_issues|dependencies\/blocked_by)$/.test(c.key)).map((c) => c.key);
 const writes = (calls) => calls.filter((c) => !/^GET /.test(c.key)).map((c) => c.key);
 const EXPECTED_READS = [
@@ -181,7 +274,7 @@ const VIEW = { width: 1366, height: 657 };
 async function open(routes, opts) {
   opts = opts || {};
   const served = opts.constants ? withConstants(script, opts.constants) : script;
-  const context = await browser.newContext({ viewport: VIEW });
+  const context = await browser.newContext({ viewport: opts.viewport || VIEW });
   const calls = [];
   await context.route('https://api.github.com/**', async (route) => {
     const req = route.request();
@@ -205,7 +298,7 @@ async function open(routes, opts) {
     return route.fulfill({ status: spec.status, contentType: 'application/json', headers, body: JSON.stringify(spec.body) });
   });
   await context.route('**/assets/js/symphony-panel.js*', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: served }));
-  if (process.env.NOCSS) await context.route('**/assets/css/control.css*', (route) => route.fulfill({ status: 200, contentType: 'text/css', body: withoutGround() }));
+  if (process.env.NOCSS) await context.route('**/assets/css/control.css*', (route) => route.fulfill({ status: 200, contentType: 'text/css', body: withoutNodeRules() }));
   if (opts.extraRoutes) for (const [pattern, handler] of opts.extraRoutes) await context.route(pattern, handler);
   // every scrollIntoView the page makes, so a check can tell what it centred
   await context.addInitScript(() => {
@@ -226,20 +319,25 @@ async function open(routes, opts) {
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   page.on('request', (r) => requests.push(r.url()));
   page.on('dialog', async (d) => { dialogs.push(d.type() + ': ' + d.message()); await d.dismiss(); });
-  await page.goto(BASE + '/symphony/control/');
+  await page.goto(BASE + '/symphony/control/', { waitUntil: opts.waitUntil || 'load' });
   await page.evaluate((s) => { localStorage.clear(); sessionStorage.clear(); for (const k in s) localStorage.setItem(k, s[k]); }, opts.storage || {});
-  await page.goto(BASE + (opts.path || '/symphony/control/?repo=acme/demo'));
+  // a check that holds a font back waits only for the document, since the load event waits for the font
+  await page.goto(BASE + (opts.path || '/symphony/control/?repo=acme/demo'), { waitUntil: opts.waitUntil || 'load' });
   return { context, page, calls, errors, requests, dialogs, opened };
 }
 function safeJson(req) { try { return req.postDataJSON(); } catch (e) { return req.postData(); } }
-// With NOCSS set, the site's stylesheet is served without the rule that gives a chart its light
-// ground inside the dark console, so a run can show that C and R fail without it (the mutants
-// change only the script).
-const GROUND_RULE = '.console .control__chart { background: #FBFAF4; color: #1A1C18; }';
-function withoutGround() {
+// With NOCSS set, the site's stylesheet is served without its rules for a chart's nodes, the shade,
+// edge and words of each state (the mutants change only the script, and these are the half of the
+// console's look no mutant reaches): a run with NOCSS shows AH and R5 failing, the nodes left in
+// Mermaid's own colours or the board's light ones. Until the console's look this switch took the
+// chart's light ground away and C and R failed; the ground is now a shade off the deck's, which the
+// deck's own ground matches closely enough that nothing fails without it.
+const NODE_RULE = /^:is\(#cp-graph, #cp-board\) \.control__chart \.node[^\n]*\n/gm;
+function withoutNodeRules() {
   const css = fs.readFileSync(SITE + '/assets/css/control.css', 'utf8');
-  assert.ok(css.includes(GROUND_RULE), 'the chart ground rule was not found in the stylesheet');
-  return css.replace(GROUND_RULE, '');
+  const rules = css.match(NODE_RULE) || [];
+  assert.ok(rules.length >= 8, 'the node rules were not found in the stylesheet');
+  return css.replace(NODE_RULE, '');
 }
 // signs in with the pasted token and opens the tab named, the Dependencies tab unless a check wants
 // to stay where the console opened (null)
@@ -393,6 +491,13 @@ await check('A: the chart text handed to the drawing is byte for byte the board\
   assert.deepEqual(await headings(page), ['Goals', 'Epic #20: Draw the board (1/3)']);
   assert.equal(init.securityLevel, 'strict');
   assert.equal(init.startOnLoad, false);
+  // no directive may change these, the sanitizer's settings, the styles and the fonts among them,
+  // which could fetch from elsewhere: the second line of defence behind graphLabel's escapes
+  assert.deepEqual(init.secure, ['secure', 'securityLevel', 'startOnLoad', 'maxTextSize', 'suppressErrorRendering', 'maxEdges',
+    'dompurifyConfig', 'themeCSS', 'themeVariables', 'fontFamily', 'altFontFamily']);
+  // the console's look: Mermaid's own neo look in the deck's colours, its labels wrapped at 190 px
+  // (the neo look turns its arrows at rounded corners whatever curve is asked, so none is)
+  assert.deepEqual([init.look, init.theme, init.themeVariables && init.themeVariables.darkMode, init.themeVariables && init.themeVariables.lineColor, init.flowchart && init.flowchart.wrappingWidth, init.flowchart && init.flowchart.curve], ['neo', 'base', true, '#8A9E97', 190, undefined]);
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -451,7 +556,7 @@ await check('C: the vendored Mermaid, loaded once from the site, draws both char
   assert.equal(byNumber(svgs[1].nodes, 23).text, '#23 Write the body | with "quotes" and <t...');
   assert.equal(byNumber(svgs[0].nodes, 20).text, '#20 Draw the board (1/3)');
   assert.ok(svgs.every((s) => /px$/.test(s.minWidth)), 'a chart keeps its own width: ' + svgs.map((s) => s.minWidth));
-  // the console is dark and Mermaid draws its edges dark, so the charts need a light ground of their own
+  // the arrows and the chart's words must read on the chart's own ground, a shade off the deck's
   const contrast = await chartContrast(page, '#cp-graph');
   console.log('     contrast on the ground:', JSON.stringify(contrast));
   assertContrast(contrast);
@@ -492,9 +597,17 @@ await check('D: a node pressed opens the Tasks tab with the task\'s row centred 
   assert.deepEqual(opened.map((p) => p.url()), []);
   assert.equal(context.pages().length, 1);
   assert.equal(await page.$$eval('#cp-app tr.control__focus', (rows) => rows.length), 1);
-  // Centre its row, the button under the chart, does the same for a browsing Claude, from the
-  // Dependencies tab opened again by its rail button
+  // Centre its row, the button under the chart, does the same for a browsing Claude, which opens
+  // "List of 4 issues" first, from the Dependencies tab opened again by its rail button
   await toTab(page, 'dependencies');
+  // the list is folded under the chart since the console's look (site, claude/dependencies-look), so
+  // it is opened first, as a person opens it; it is folded before and open after, so a list already
+  // open, which the press would fold, fails here and not as a wait on a hidden button
+  const listOf = () => page.$eval('#cp-graph .graph__section[data-focus="epic-20"] details.graph__list', (d) => d.open);
+  assert.equal(await listOf(), false, 'the list was open before it was pressed');
+  await page.click('#cp-graph .graph__section[data-focus="epic-20"] details.graph__list > summary');
+  assert.equal(await listOf(), true, 'the list did not open');
+  assert.equal((await where(page)).y, 0, 'opening the list moved the window');
   await page.click('#cp-graph tr:has(a[href$="/issues/23"]) button');
   const centred = await where(page);
   await sleep(800);
@@ -512,7 +625,7 @@ await check('D: a node pressed opens the Tasks tab with the task\'s row centred 
   await context.close();
 });
 
-await check('E: when the drawing script cannot be loaded, the tables stand alone and the state says so', async () => {
+await check('E: when the drawing script cannot be loaded, the tables stand alone, the key is hidden and the state says so', async () => {
   const { context, page, errors } = await open(fixtureRoutes(fixture()), { extraRoutes: [missingRoute] });
   await signIn(page);
   await waitGraph(page, /^The charts could not be drawn \(the drawing script could not be loaded/);
@@ -521,6 +634,10 @@ await check('E: when the drawing script cannot be loaded, the tables stand alone
   console.log('     state:', state.slice(0, 120), '| tables:', JSON.stringify(tables), '| svgs:', await page.$$eval('#cp-graph svg', (l) => l.length));
   assert.deepEqual(tables, [2, 4]);
   assert.equal(await page.$$eval('#cp-graph svg', (l) => l.length), 0);
+  // each list, folded under its chart, is opened where the charts cannot be drawn
+  assert.deepEqual(await page.$$eval('#cp-graph details.graph__list', (ds) => ds.map((d) => d.open)), [true, true]);
+  // the key is for charts, and none was drawn
+  assert.equal(await page.evaluate(() => document.getElementById('cp-graph-key').hidden), true, 'the key is shown with no chart drawn');
   assert.match(state, /the tables say the same from 4 reads of GitHub: 1 goal and 1 epic with sub-issues\.$/);
   assert.deepEqual(await headings(page), ['Goals', 'Epic #20: Draw the board (1/3)']);
   assert.deepEqual(errors, []);
@@ -958,7 +1075,7 @@ await check('P: a task whose claim branch has an open pull request is shaded cla
 // a stand-in for the drawing library that cannot draw the goals' chart, as Mermaid fails on a text
 // it cannot parse
 const STUB_FAILS_GOALS = "window.mermaid = { initialize: function () {}, render: function (id, text) { (window.__charts = window.__charts || []).push(text); return /==>/.test(text) ? Promise.reject(new Error('Parse error on line 3')) : Promise.resolve({ svg: '<svg data-stub=\"1\"></svg>' }); } };";
-await check('Q: one chart that cannot be drawn leaves the others drawn, and the words name it and count the rest', async () => {
+await check('Q: one chart that cannot be drawn leaves the others drawn, and the words name it and count the rest; with none drawn the key is hidden', async () => {
   const route = [VENDOR, (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: STUB_FAILS_GOALS })];
   const { context, page, errors } = await open(fixtureRoutes(fixture()), { extraRoutes: [route] });
   await signIn(page);
@@ -968,10 +1085,25 @@ await check('Q: one chart that cannot be drawn leaves the others drawn, and the 
   console.log('     state:', state, '| svgs per chart:', JSON.stringify(hosts));
   assert.equal(state, 'Drawn 1 of 2 charts from 4 reads of GitHub: 1 goal and 1 epic with sub-issues; 1 chart could not be drawn (Goals: Parse error on line 3), and the table under it says the same.');
   assert.deepEqual(hosts, [0, 1]);
+  // the chart not drawn has its list opened, and the drawn one's stays folded
+  assert.deepEqual(await page.$$eval('#cp-graph details.graph__list', (ds) => ds.map((d) => d.open)), [true, false]);
   assert.deepEqual(await page.evaluate(() => window.__charts), [GOALS_TEXT, EPIC_20_TEXT]);
   assert.deepEqual(await page.$$eval('#cp-graph table', (ts) => ts.map((t) => t.querySelectorAll('tbody tr').length)), [2, 4]);
+  // one chart drawn keeps the key; none drawn hides it, the cards holding their lists alone
+  assert.equal(await page.evaluate(() => document.getElementById('cp-graph-key').hidden), false, 'the key went with one chart drawn');
   assert.deepEqual(errors, []);
   await context.close();
+  const failsAll = [VENDOR, (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: STUB_FAILS_GOALS.replace('/==>/.test(text)', 'true') })];
+  const none = await open(fixtureRoutes(fixture()), { extraRoutes: [failsAll] });
+  await signIn(none.page);
+  await waitGraph(none.page, /^Drawn 0 of 2 charts/);
+  const lists = await none.page.$$eval('#cp-graph details.graph__list', (ds) => ds.map((d) => d.open));
+  const keyHidden = await none.page.evaluate(() => document.getElementById('cp-graph-key').hidden);
+  console.log('     none drawn:', await stateText(none.page), '| lists open:', JSON.stringify(lists), '| key hidden:', keyHidden);
+  assert.deepEqual(lists, [true, true]);
+  assert.equal(keyHidden, true, 'the key is shown with no chart drawn');
+  assert.deepEqual(none.errors, []);
+  await none.context.close();
 });
 
 await check('R: the board\'s own charts are drawn in the Board tab while it is hidden, never shown as text, show whole when it opens, and a node there opens the Tasks tab with its row centred in that tab\'s box', async () => {
@@ -1100,6 +1232,21 @@ await check('R4: a board chart the drawing script cannot draw keeps its text und
   assert.deepEqual(errors, []);
   await context.close();
 });
+// the Board tab draws through the same graphDraw as the Dependencies tab, so its charts take the
+// same look: the gate's block, a node of each of the six states, drawn there by the real Mermaid
+await check('R5: the Board tab\'s charts are drawn in the console\'s look, each of the six states shaded and edged as its own, no two by hue alone, no node keeping the board\'s light colours, its box rounded', async () => {
+  const { context, page, errors } = await open(boardOnlyRoutes(boardWith([['Epic #67: Every printable character', GATE_TEXT]])));
+  await signIn(page, null);
+  await page.waitForFunction(() => document.querySelectorAll('#cp-board .control__chart svg').length === 1, null, { timeout: 15000 });
+  await toTab(page, 'board');
+  const nodes = await readNodes(page, '#cp-board');
+  console.log('     board nodes:', JSON.stringify(nodes.map((x) => [x.n, x.state, x.fill, x.stroke, x.width, x.dash, x.inline.length, x.rx])));
+  assertShaded(nodes);
+  assertNotHueAlone(nodes);
+  assert.deepEqual(nodes.map((x) => [x.n, x.state]).sort((a, b) => a[0] - b[0]), [[61, 'todo'], [62, 'claimed'], [63, 'review'], [64, 'blocked'], [65, 'closed'], [66, '']]);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
 if (process.env.SYMPHONY_PROTOCOL) {
   await check('R3: the Board tab hands the drawing, unchanged, the block the library named writes now for the gate\'s titles', async () => {
     const fresh = libraryBlock(GATE_ISSUES);
@@ -1139,6 +1286,8 @@ await check('X: the Board tab draws a block of the board\'s text only where ever
       planted: box.querySelectorAll('img, form, input, button, textarea, select, a, iframe, object, embed').length,
       notDrawn: Array.from(box.querySelectorAll('p')).filter((p) => /^Not drawn: this block is not a chart as the board writes it/.test(p.textContent)).length,
       shownAsText: Array.from(box.querySelectorAll('pre')).map((pre) => pre.textContent),
+      // a block shown as text is no chart: its host keeps no chart's class, ground or frame
+      textInChart: Array.from(box.querySelectorAll('pre')).filter((pre) => pre.closest('.control__chart')).length,
       hosts: box.querySelectorAll('[data-chart]').length,
       taskTitle: document.getElementById('cp-task-title') && !!document.getElementById('cp-task-title').closest('#dlg-task'),
       prompt: document.getElementById('cp-task-ask') && !document.getElementById('cp-task-ask').closest('#cp-board'),
@@ -1151,6 +1300,7 @@ await check('X: the Board tab draws a block of the board\'s text only where ever
   assert.equal(seen.planted, 0, 'a planted element is in the Board tab');
   assert.equal(seen.notDrawn, PLANTED.length);
   assert.deepEqual(seen.shownAsText, PLANTED.map((b) => b[1]));
+  assert.equal(seen.textInChart, 0, 'a block shown as text keeps the chart\'s class');
   // only the board's own two blocks keep the text they are drawn from
   assert.equal(seen.hosts, 2, 'a planted block kept its text to be drawn');
   assert.equal(seen.taskTitle, true, 'the task dialog\'s title is not the page\'s own field');
@@ -1380,7 +1530,7 @@ await check('W: a node pressed for a task the tables do not hold stays in this t
 // The focus strip: with two charts or more, chips show one epic's chart at a time, a zoomed-out
 // goals chart, or All, the next step of the owner's 2026-10-17 ask (focus one epic, or a zoomed-out
 // view of epics to goals; docs/research/control-board-graph.md).
-await check('AA: the focus strip lists All, Goals and each epic, shows the first chart by default and hides the rest, with its ARIA', async () => {
+await check('AA: the focus strip lists All, Goals and each epic as tiles, each saying what its chart is, its title and how far it has got, shows the first chart by default and hides the rest, with its ARIA', async () => {
   const { context, page, errors } = await open(fixtureRoutes(fixture()), { extraRoutes: [stubRoute] });
   await signIn(page);
   await page.waitForSelector('#cp-graph .graph__section', { timeout: 15000 });
@@ -1389,7 +1539,8 @@ await check('AA: the focus strip lists All, Goals and each epic, shows the first
     const s = document.getElementById('cp-graph-focus');
     return {
       hidden: s.hidden, role: s.getAttribute('role'), label: s.getAttribute('aria-label'),
-      chips: Array.from(s.querySelectorAll('.graph__chip')).map((b) => [b.getAttribute('data-focus'), b.textContent, b.getAttribute('aria-pressed')]),
+      chips: Array.from(s.querySelectorAll('.graph__chip')).map((b) => [b.getAttribute('data-focus'), b.getAttribute('aria-label'), b.getAttribute('aria-pressed')]),
+      parts: Array.from(s.querySelectorAll('.graph__chip')).map((b) => ['.graph__tkind', '.graph__ttitle', '.graph__tfoot'].map((c) => b.querySelector(c).textContent)),
       sections: Array.from(document.querySelectorAll('#cp-graph .graph__section')).map((sec) => [sec.getAttribute('data-focus'), sec.hidden]),
     };
   });
@@ -1398,8 +1549,8 @@ await check('AA: the focus strip lists All, Goals and each epic, shows the first
   assert.equal(strip.role, 'group');
   assert.ok(strip.label, 'the strip has no accessible name');
   assert.deepEqual(strip.chips.map((c) => c[0]), ['all', 'goals', 'epic-20']);
-  assert.deepEqual([strip.chips[0][1], strip.chips[1][1]], ['All', 'Goals']);
-  assert.match(strip.chips[2][1], /^#20 Draw the board 1\/3$/);
+  assert.deepEqual(strip.chips.map((c) => c[1]), ['All: Every chart, 2 charts', 'Goals: The goal and its epics, 2 issues', 'Epic #20: Draw the board, 1 of 3 closed']);
+  assert.deepEqual(strip.parts, [['All', 'Every chart', '2 charts'], ['Goals', 'The goal and its epics', '2 issues'], ['Epic #20', 'Draw the board', '1 of 3 closed']]);
   assert.deepEqual(strip.chips.map((c) => c[2]), ['false', 'true', 'false'], 'the first chart, Goals, is not the one pressed');
   assert.deepEqual(strip.sections, [['goals', false], ['epic-20', true]], 'the first chart is not shown alone');
   assert.deepEqual(errors, []);
@@ -1491,6 +1642,650 @@ await check('AE: a kept choice that names a chart no longer there falls back to 
   console.log('     gone choice:', JSON.stringify(seen));
   assert.deepEqual(seen.pressed, ['goals'], 'a gone choice did not fall back to the first chart');
   assert.deepEqual(seen.shown, ['goals']);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// The console's look (site branch claude/dependencies-look, 2026-10-19, the owner: "dependencies
+// still doesnt look very good, i want it to look more modern"): a card per chart, a key, the nodes
+// shaded dark by their state in place of the board's light colours, and a wide chart opened at its
+// middle. The chart text stays the board's (A); these check what the page does with the picture.
+await check('AF: each chart is a card: its heading, for an epic a bar of its closed tasks named for its card, a pill per state of its own issues and one for the blockers from outside it, and its list folded under it, named for its card; the key shows with the charts, a swatch per state drawn as its nodes are', async () => {
+  const { context, page, errors } = await open(fixtureRoutes(fixture()), { extraRoutes: [stubRoute] });
+  await signIn(page);
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  const cards = await page.$$eval('#cp-graph .graph__section', (secs) => secs.map((sec) => {
+    const bar = sec.querySelector('.graph__bar'), list = sec.querySelector('details.graph__list');
+    return {
+      key: sec.getAttribute('data-focus'),
+      heading: sec.querySelector('.graph__head > h3').textContent,
+      bar: bar ? [bar.getAttribute('role'), bar.getAttribute('aria-valuemin'), bar.getAttribute('aria-valuenow'), bar.getAttribute('aria-valuemax'), bar.querySelector('span').style.width, bar.getAttribute('aria-label'), bar.getAttribute('aria-valuetext')] : null,
+      done: sec.querySelector('.graph__done') ? sec.querySelector('.graph__done').textContent : null,
+      pills: Array.from(sec.querySelectorAll('.graph__pill')).map((p) => [p.className, p.textContent]),
+      list: list ? [list.open, list.querySelector(':scope > summary').textContent, list.querySelectorAll('table').length, list.querySelector(':scope > summary').getAttribute('aria-label')] : null,
+    };
+  }));
+  const key = await page.evaluate(() => {
+    const k = document.getElementById('cp-graph-key');
+    const edge = (c) => { const b = getComputedStyle(k.querySelector('.graph__swatch--' + c), '::before'); return [b.borderTopStyle, b.borderTopWidth, b.borderTopColor, b.backgroundColor]; };
+    return {
+      hidden: k.hidden, inTab: !!k.closest('#tab-dependencies'), label: k.getAttribute('aria-label'),
+      sets: Array.from(k.children).map((set) => Array.from(set.children).map((c) => c.textContent.trim())),
+      edges: Object.fromEntries(['todo', 'claimed', 'review', 'blocked', 'closed', 'open'].map((c) => [c, edge(c)])),
+    };
+  });
+  console.log('     cards:', JSON.stringify(cards), '| key:', JSON.stringify(key));
+  assert.deepEqual(cards, [
+    { key: 'goals', heading: 'Goals', bar: null, done: null, pills: [['graph__pill graph__pill--todo', '1 to do'], ['graph__pill graph__pill--plain', '1 open']], list: [false, 'List of 2 issues', 1, 'List of 2 issues: Goals'] },
+    // #99 blocks #22 from outside the epic: no task of it, so the pills of its tasks add up to the
+    // bar's three and #99 is counted apart
+    { key: 'epic-20', heading: 'Epic #20: Draw the board (1/3)', bar: ['progressbar', '0', '1', '3', '33%', 'Epic #20: Draw the board (1/3): tasks closed', '1 of 3 closed'], done: '1 of 3 closed',
+      pills: [['graph__pill graph__pill--todo', '1 to do'], ['graph__pill graph__pill--claimed', '1 claimed'], ['graph__pill graph__pill--closed', '1 closed'], ['graph__pill graph__pill--outside', '1 from outside the epic']],
+      list: [false, 'List of 4 issues', 1, 'List of 4 issues: Epic #20: Draw the board (1/3)'] },
+  ]);
+  // each swatch's edge and fill as its nodes are edged and filled (AH): blocked thick, claimed
+  // dotted, closed dashed, in review lit and open's edge pale
+  const swatch = (style, width, c) => [style, width, SHADES[c].stroke, SHADES[c].fill];
+  assert.deepEqual(key, { hidden: false, inTab: true, label: 'Key to the charts',
+    sets: [['To do', 'Claimed', 'In review', 'Blocked', 'Closed', 'Open'], ['blocks', 'blocked, now closed', 'goal to its epic']],
+    edges: {
+      // a border of 1.5 px is drawn, and given, as 1 px on a screen of one pixel to the px
+      todo: swatch('solid', '1px', 'todo'), claimed: swatch('dotted', '2px', 'claimed'), review: swatch('solid', '1px', 'review'),
+      blocked: swatch('solid', '3px', 'blocked'), closed: swatch('dashed', '1px', 'closed'), open: swatch('solid', '1px', ''),
+    } });
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('AG: the key is hidden while there is nothing to draw and while a Refresh reads again, and shows once the charts are there', async () => {
+  const f = fixture();
+  const none = baseRoutes('acme/demo', [issue(99, 'Settle the colours', ['todo'])]);
+  const empty = await open(none, { extraRoutes: [stubRoute] });
+  await signIn(empty.page);
+  await waitGraph(empty.page, /^Nothing to draw yet/);
+  const hiddenEmpty = await empty.page.evaluate(() => document.getElementById('cp-graph-key').hidden);
+  await empty.context.close();
+  const routes = fixtureRoutes(f);
+  let slow = false;
+  routes['GET /repos/acme/demo/issues/20/sub_issues'] = () => (slow ? resp(200, f.subIssues[20], { delayMs: 2500 }) : f.subIssues[20]);
+  const { context, page, errors } = await open(routes, { extraRoutes: [stubRoute] });
+  await signIn(page);
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  const shown = await page.evaluate(() => document.getElementById('cp-graph-key').hidden);
+  slow = true;
+  await page.click('#cp-refresh');
+  await waitGraph(page, /^Reading the sub-issues/);
+  const reading = await page.evaluate(() => document.getElementById('cp-graph-key').hidden);
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  const again = await page.evaluate(() => document.getElementById('cp-graph-key').hidden);
+  // the epic and the goal gone from the open list: a Refresh that finds nothing to draw hides the
+  // key the charts showed
+  slow = false;
+  routes['GET /repos/acme/demo/issues'] = f.open.filter((it) => it.number !== 20 && it.number !== 30);
+  await page.click('#cp-refresh');
+  await waitGraph(page, /^Nothing to draw yet/, 15000);
+  const gone = await page.evaluate(() => document.getElementById('cp-graph-key').hidden);
+  console.log('     key hidden with nothing:', hiddenEmpty, '| drawn:', shown, '| reading:', reading, '| drawn again:', again, '| nothing left to draw:', gone);
+  assert.deepEqual([hiddenEmpty, shown, reading, again, gone], [true, false, true, false, true]);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('AH: drawn by the real Mermaid in the console\'s look, no node keeps the board\'s light colours: each of the six states is shaded and edged as its own, no two by hue alone, its box rounded, a closed one struck through, no label is cut though the site\'s face comes late, and the arrows keep their own look', async () => {
+  // the face is handed over 1.5 s after the drawing script: Mermaid, waiting for it, measures in it
+  const face = lateFace((release) => setTimeout(release, 1500));
+  const { context, page, errors } = await open(fixtureRoutes(fixtureStates()), { extraRoutes: face.routes, waitUntil: 'domcontentloaded' });
+  await signIn(page);
+  await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  await toTab(page, 'dependencies');
+  await page.click('#cp-graph-focus button[data-focus="all"]');
+  await faceIn(page);
+  const nodes = await readNodes(page, '#cp-graph');
+  // the arrows: Mermaid's lines, which graphRestyle leaves alone, are drawn with no fill
+  const edges = await page.$$eval('#cp-graph .control__chart .edgePaths path', (ps) => ps.map((p) => getComputedStyle(p).fill));
+  console.log('     nodes:', JSON.stringify(nodes), '| edges\' fill:', JSON.stringify(edges));
+  assert.equal(nodes.length, 6);
+  assertShaded(nodes);
+  assertNotHueAlone(nodes);
+  assert.deepEqual(nodes.map((x) => [x.n, x.state]).sort((a, b) => a[0] - b[0]), [[20, ''], [21, 'closed'], [22, 'claimed'], [23, 'blocked'], [30, 'todo'], [99, 'review']]);
+  assert.ok(edges.length >= 3, 'the arrows were not found');
+  assert.ok(edges.every((e) => e === 'none'), 'an arrow is drawn filled');
+  assert.deepEqual(errors, []);
+  face.release();
+  await context.close();
+});
+
+// The wait for the site's face is bounded: where its file never comes, as on a network that stalls
+// the font host, the charts are drawn in the fallback face a moment later, never held for good.
+await check('AP: a site face that never arrives holds the charts back no longer than the page\'s wait of 2.5 s, drawn within 5.5 s of the drawing script', async () => {
+  let handed = 0;
+  const face = lateFace(() => { handed = Date.now(); });
+  const { context, page, errors } = await open(fixtureRoutes(fixture()), { extraRoutes: face.routes, waitUntil: 'domcontentloaded' });
+  await signIn(page);
+  await waitGraph(page, /^Drawn from 4 reads/, 20000);
+  const took = Date.now() - handed;
+  const svgs = await page.$$eval('#cp-graph svg', (l) => l.length);
+  console.log('     drawn', took, 'ms after the drawing script was handed over, with the face never served | charts:', svgs);
+  assert.equal(svgs, 2);
+  assert.ok(handed > 0, 'the drawing script was never asked for');
+  // it waited for the face (2.5 s), and no longer than that and the drawing take, about a second
+  // here: 5.5 s leaves room for a slower machine and fails a wait of 6 s, which drew at 6.9 s
+  assert.ok(took >= 2300 && took < 5500, 'the charts were drawn ' + took + ' ms after the script came');
+  assert.deepEqual(errors, []);
+  face.release();
+  await context.close();
+});
+
+await check('AI: a chart wider than its box opens at its middle on a phone, though it was drawn in a hidden tab, and is then left where the person scrolls it', async () => {
+  const kids = Array.from({ length: 12 }, (_, i) => issue(71 + i, 'Task number ' + (i + 1) + ' of the wide epic', ['todo']));
+  const routes = baseRoutes('acme/demo', [issue(70, 'A wide epic', ['epic'], subs(0, 12))].concat(kids));
+  routes['GET /repos/acme/demo/issues/70/sub_issues'] = kids;
+  const opened = await open(routes, { viewport: { width: 390, height: 844 } });
+  const { page, errors } = opened;
+  await signIn(page, null);
+  await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+  await waitGraph(page, /^Drawn from 1 read/, 15000);
+  const hiddenWhileDrawn = await page.evaluate(() => document.getElementById('tab-dependencies').hidden);
+  await toTab(page, 'dependencies');
+  await page.waitForFunction(() => { const h = document.querySelector('#cp-graph .control__chart'); return h && h.clientWidth > 0 && h.scrollLeft > 0; }, null, { timeout: 8000 });
+  const box = () => page.$eval('#cp-graph .control__chart', (h) => ({ left: h.scrollLeft, width: h.scrollWidth, shown: h.clientWidth }));
+  const first = await box();
+  await page.$eval('#cp-graph .control__chart', (h) => { h.scrollLeft = 0; });
+  await page.setViewportSize({ width: 420, height: 844 });
+  await sleep(400);
+  const after = await box();
+  console.log('     drawn hidden:', hiddenWhileDrawn, '| opened at:', JSON.stringify(first), '| after the person scrolled and the window changed:', JSON.stringify(after));
+  assert.equal(hiddenWhileDrawn, true);
+  assert.ok(first.width > first.shown * 2, 'the chart is not wide enough to say anything: ' + JSON.stringify(first));
+  assert.ok(Math.abs(first.left - (first.width - first.shown) / 2) <= 2, 'the chart did not open at its middle: ' + JSON.stringify(first));
+  assert.equal(after.left, 0, 'the chart was scrolled back to its middle after the person scrolled it');
+  assert.deepEqual(errors, []);
+  await opened.context.close();
+});
+
+// The tiles, the stepping and the moving about (the owner, 2026-10-19: "make the epics more intuitive
+// and navigating that page more fluent"): a bar of each chart's issues by state on its tile, several
+// tiles to a row on a laptop and one sideways row on a phone with the chosen one in view, Previous and
+// Next on each card, the arrow keys on the tiles, a chart dragged with the mouse, Fit, and a fade.
+const segs = (page, key) => page.$eval('#cp-graph-focus .graph__chip[data-focus="' + key + '"] .graph__tbar', (bar) => [bar.getAttribute('aria-hidden')].concat(Array.from(bar.children).map((s) => s.className.replace('graph__seg graph__seg--', '') + ' ' + s.style.width)));
+await check('AJ: each tile carries a bar of its chart\'s own issues by state, an epic\'s tasks without its blockers from outside, All every epic\'s tasks; the tiles share a row on a laptop, and on a phone are one row that scrolls sideways, the chosen tile brought into view, a kept one too when the tab opens after the draw', async () => {
+  // epic #20 with a fourth task, #26 to do, so its tasks are two to do, one claimed and one closed;
+  // #99, which blocks #22 from outside the epic, is no task of it and not in its bar
+  const f = fixture();
+  const i26 = issue(26, 'Draw the legend', ['todo']);
+  f.open = f.open.map((it) => it.number === 20 ? Object.assign({}, it, subs(1, 4)) : it).concat([i26]);
+  f.subIssues[20] = f.subIssues[20].concat([i26]);
+  const { context, page, errors } = await open(fixtureRoutes(f), { extraRoutes: [stubRoute] });
+  await signIn(page);
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  const bars = { all: await segs(page, 'all'), goals: await segs(page, 'goals'), epic: await segs(page, 'epic-20') };
+  const row = await page.$$eval('#cp-graph-focus .graph__chip', (bs) => bs.map((b) => [Math.round(b.getBoundingClientRect().top), Math.round(b.getBoundingClientRect().width)]));
+  console.log('     bars:', JSON.stringify(bars), '| laptop tiles (top, width):', JSON.stringify(row));
+  assert.deepEqual(bars.epic, ['true', 'todo 50%', 'claimed 25%', 'closed 25%']);
+  assert.deepEqual(bars.all, bars.epic, 'All\'s bar is not every epic\'s tasks together');
+  assert.deepEqual(bars.goals, ['true', 'todo 50%', 'plain 50%']);
+  assert.ok(row.every((r) => r[0] === row[0][0]), 'the tiles do not share a row on a laptop');
+  assert.ok(row.every((r) => r[1] >= 150), 'a tile is narrower than 150 px on a laptop');
+  assert.deepEqual(errors, []);
+  await context.close();
+  const phone = await open(fixtureRoutes(fixture()), { extraRoutes: [stubRoute], viewport: { width: 390, height: 844 } });
+  await signIn(phone.page);
+  await waitGraph(phone.page, /^Drawn from 4 reads/, 15000);
+  const stripOf = (page) => page.evaluate(() => {
+    const s = document.getElementById('cp-graph-focus'), sr = s.getBoundingClientRect();
+    const on = s.querySelector('[aria-pressed="true"]').getBoundingClientRect();
+    const tops = Array.from(s.querySelectorAll('.graph__chip')).map((b) => Math.round(b.getBoundingClientRect().top));
+    return { scrolls: s.scrollWidth > s.clientWidth, oneRow: tops.every((t) => t === tops[0]), left: s.scrollLeft, inView: on.left >= sr.left - 1 && on.right <= sr.right + 1, page: document.documentElement.scrollWidth };
+  });
+  await phone.page.$eval('#cp-graph-focus', (s) => { s.scrollLeft = 0; });
+  await phone.page.$eval('#cp-graph-focus .graph__chip[data-focus="epic-20"]', (b) => b.click());
+  const pressed = await stripOf(phone.page);
+  console.log('     phone strip after a press on the last tile:', JSON.stringify(pressed));
+  assert.equal(pressed.scrolls, true, 'the phone\'s tiles do not scroll sideways');
+  assert.equal(pressed.oneRow, true, 'the phone\'s tiles are not one row');
+  assert.equal(pressed.inView, true, 'the tile pressed is not in view in its row');
+  assert.ok(pressed.page <= 390, 'the tiles widen the page past the phone: ' + pressed.page);
+  assert.deepEqual(phone.errors, []);
+  await phone.context.close();
+  // the last tile kept as the choice and the charts drawn while the console stands on another tab,
+  // where the strip has no width: its tile is brought into view once the tab opens
+  const later = await open(fixtureRoutes(fixture()), { extraRoutes: [stubRoute], viewport: { width: 390, height: 844 }, storage: { symphony_panel_graph_focus: JSON.stringify({ 'acme/demo': 'epic-20' }) } });
+  await signIn(later.page, null);
+  await waitGraph(later.page, /^Drawn from 4 reads/, 15000);
+  const hiddenWhileDrawn = await later.page.evaluate(() => document.getElementById('tab-dependencies').hidden);
+  await toTab(later.page, 'dependencies');
+  await later.page.waitForFunction(() => document.getElementById('cp-graph-focus').clientWidth > 0, null, { timeout: 5000 });
+  await sleep(300);
+  const kept = await stripOf(later.page);
+  console.log('     drawn on another tab:', hiddenWhileDrawn, '| the kept tile once the tab opened:', JSON.stringify(kept));
+  assert.equal(hiddenWhileDrawn, true, 'the charts were not drawn while the tab was hidden');
+  assert.equal(kept.scrolls, true, 'the strip does not scroll sideways, so this says nothing');
+  assert.equal(kept.inView, true, 'the kept tile is not in view once the tab opened after the draw');
+  assert.deepEqual(later.errors, []);
+  await later.context.close();
+});
+
+const stepState = (page) => page.evaluate(() => {
+  const shown = Array.from(document.querySelectorAll('#cp-graph .graph__section')).filter((s) => !s.hidden);
+  const a = document.activeElement;
+  return {
+    shown: shown.map((s) => s.getAttribute('data-focus')),
+    steps: shown.map((s) => { const n = s.querySelector('.graph__step'); return n && getComputedStyle(n).display !== 'none' ? [n.querySelector('.graph__prev').disabled, n.querySelector('.graph__pos').textContent, n.querySelector('.graph__next').disabled] : null; }),
+    focus: a && a.closest && a.closest('.graph__section') ? a.closest('.graph__section').getAttribute('data-focus') + ' ' + a.className.replace('graph__stepbtn ', '') : (a ? a.tagName : ''),
+    kept: localStorage.getItem('symphony_panel_graph_focus'),
+  };
+});
+await check('AK: Previous and Next on each card step to the chart beside it, keeping the keyboard on the card they show and the choice for next time; the first has no Previous, the last no Next, and All shows none', async () => {
+  const { context, page, errors } = await open(fixtureRoutes(fixture()), { extraRoutes: [stubRoute] });
+  await signIn(page);
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  const first = await stepState(page);
+  const next = await page.$eval('#cp-graph .graph__section[data-focus="goals"] .graph__next', (b) => [b.getAttribute('aria-label'), b.title]);
+  await page.click('#cp-graph .graph__section[data-focus="goals"] .graph__next');
+  const second = await stepState(page);
+  await page.keyboard.press('Enter');
+  const back = await stepState(page);
+  await page.click('#cp-graph-focus button[data-focus="all"]');
+  const all = await stepState(page);
+  console.log('     first:', JSON.stringify(first), '| Next:', JSON.stringify(next), '| after Next:', JSON.stringify(second), '| Enter on the button kept:', JSON.stringify(back), '| All:', JSON.stringify(all));
+  assert.deepEqual(first.shown, ['goals']);
+  assert.deepEqual(first.steps, [[true, '1 of 2', false]]);
+  assert.deepEqual(next, ['Next chart: Epic #20: Draw the board (1/3)', 'Epic #20: Draw the board (1/3)']);
+  assert.deepEqual([second.shown, second.steps, second.focus], [['epic-20'], [[false, '2 of 2', true]], 'epic-20 graph__prev']);
+  assert.deepEqual(JSON.parse(second.kept), { 'acme/demo': 'epic-20' });
+  assert.deepEqual([back.shown, back.focus], [['goals'], 'goals graph__next'], 'Enter on the kept button did not step back');
+  assert.deepEqual([all.shown, all.steps], [['goals', 'epic-20'], [null, null]], 'All shows the cards\' Previous and Next');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('AL: the arrow keys move from tile to tile and show its chart, Home and End across every tile to the first and the last, and a key at either end, which moves nowhere, changes nothing: no fade again and no choice written', async () => {
+  const { context, page, errors } = await open(fixtureRoutes(fixture()), { extraRoutes: [stubRoute] });
+  await signIn(page);
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  // the tile with the keyboard, the tile pressed, the charts shown, whether a chart shown faded in
+  // again, and the choice kept, which is set aside before each key so a key that writes it shows
+  const at = () => page.evaluate(() => {
+    const shown = Array.from(document.querySelectorAll('#cp-graph .graph__section')).filter((s) => !s.hidden);
+    return [document.activeElement.getAttribute('data-focus'), Array.from(document.querySelectorAll('#cp-graph-focus .graph__chip')).filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.getAttribute('data-focus')).join(),
+      shown.map((s) => s.getAttribute('data-focus')).join(), shown.some((s) => s.classList.contains('graph__section--enter')), localStorage.getItem('symphony_panel_graph_focus')];
+  });
+  await page.focus('#cp-graph-focus button[data-focus="all"]');
+  const seen = [];
+  // End is pressed from the first tile and Home from the last, so each crosses two tiles, where a
+  // key that moved one would stop short
+  for (const key of ['ArrowRight', 'ArrowRight', 'ArrowRight', 'ArrowLeft', 'Home', 'End', 'Home', 'ArrowLeft']) {
+    await page.evaluate(() => { document.querySelectorAll('#cp-graph .graph__section').forEach((s) => s.classList.remove('graph__section--enter')); localStorage.setItem('symphony_panel_graph_focus', '{}'); });
+    await page.keyboard.press(key);
+    seen.push([key].concat(await at()));
+  }
+  console.log('     keys:', JSON.stringify(seen));
+  const kept = (key) => JSON.stringify({ 'acme/demo': key });
+  assert.deepEqual(seen, [
+    ['ArrowRight', 'goals', 'goals', 'goals', true, kept('goals')],
+    ['ArrowRight', 'epic-20', 'epic-20', 'epic-20', true, kept('epic-20')],
+    ['ArrowRight', 'epic-20', 'epic-20', 'epic-20', false, '{}'],
+    ['ArrowLeft', 'goals', 'goals', 'goals', true, kept('goals')],
+    ['Home', 'all', 'all', 'goals,epic-20', true, kept('all')],
+    ['End', 'epic-20', 'epic-20', 'epic-20', true, kept('epic-20')],
+    ['Home', 'all', 'all', 'goals,epic-20', true, kept('all')],
+    ['ArrowLeft', 'all', 'all', 'goals,epic-20', false, '{}'],
+  ]);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// an epic of twelve tasks and no blockers, drawn by the real Mermaid twelve boxes wide
+function wideRoutes(extra) {
+  const kids = Array.from({ length: 12 }, (_, i) => issue(71 + i, 'Task number ' + (i + 1) + ' of the wide epic', ['todo']));
+  const routes = baseRoutes('acme/demo', [issue(70, 'A wide epic', ['epic'], subs(0, 12))].concat(kids, extra || []));
+  routes['GET /repos/acme/demo/issues/70/sub_issues'] = kids;
+  return routes;
+}
+const panState = (page) => page.evaluate(() => {
+  const h = document.querySelector('#cp-graph .control__chart'), box = h.closest('.console__scroll');
+  return { left: h.scrollLeft, top: box.scrollTop, tab: location.hash, said: document.getElementById('cp-graph-said').textContent, cursor: getComputedStyle(h).cursor };
+});
+await check('AM: a chart is dragged with the mouse, sideways in its box and up and down the tab, or the page where the page scrolls as a whole; a drag presses no node, even one that ends where it began, and a press that shakes a little still presses its node', async () => {
+  const { context, page, errors } = await open(wideRoutes(), { viewport: { width: 1280, height: 700 } });
+  await signIn(page);
+  await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+  await waitGraph(page, /^Drawn from 1 read/, 15000);
+  await page.$eval('#cp-graph details.graph__list', (d) => { d.open = true; });
+  await page.waitForFunction(() => { const h = document.querySelector('#cp-graph .control__chart'); return h.scrollLeft > 0; }, null, { timeout: 8000 });
+  const r = await page.$eval('#cp-graph .control__chart', (h) => { const b = h.getBoundingClientRect(); return { x: b.left + 8, y: b.top + 8 }; });
+  const before = await panState(page);
+  await page.mouse.move(r.x, r.y);
+  await page.mouse.down();
+  await page.mouse.move(r.x - 150, r.y - 40, { steps: 6 });
+  await page.mouse.up();
+  const dragged = await panState(page);
+  // a drag that starts on a node and comes back to it, which the browser ends with a click on that node
+  // the middle of a node the box shows, since most of a wide chart is scrolled out of its box
+  const visibleNode = () => page.$eval('#cp-graph .control__chart', (h) => {
+    const hb = h.getBoundingClientRect();
+    const g = Array.from(h.querySelectorAll('g.node')).map((n) => n.getBoundingClientRect()).find((b) => b.left > hb.left + 10 && b.right < hb.right - 10 && b.top > hb.top && b.bottom < hb.bottom);
+    return { x: g.left + g.width / 2, y: g.top + g.height / 2 };
+  });
+  const node = await visibleNode();
+  await page.mouse.move(node.x, node.y);
+  await page.mouse.down();
+  await page.mouse.move(node.x - 120, node.y, { steps: 4 });
+  await page.mouse.move(node.x, node.y, { steps: 4 });
+  await page.mouse.up();
+  await sleep(200);
+  const roundTrip = await panState(page);
+  const node2 = await visibleNode();
+  await page.mouse.move(node2.x, node2.y);
+  await page.mouse.down();
+  await page.mouse.move(node2.x + 2, node2.y + 1);
+  await page.mouse.up();
+  await page.waitForFunction(() => location.hash === '#tasks', null, { timeout: 5000 }).catch(() => {});
+  const shaken = await panState(page);
+  console.log('     before:', JSON.stringify(before), '| dragged:', JSON.stringify(dragged), '| a drag from a node and back:', JSON.stringify(roundTrip), '| a shaken press:', JSON.stringify([shaken.tab, shaken.said.slice(0, 40)]));
+  assert.equal(before.cursor, 'grab');
+  assert.ok(Math.abs(dragged.left - before.left - 150) <= 2, 'the chart did not move sideways with the drag: ' + JSON.stringify([before, dragged]));
+  assert.ok(Math.abs(dragged.top - before.top - 40) <= 2, 'the tab did not move up and down with the drag: ' + JSON.stringify([before, dragged]));
+  assert.deepEqual([dragged.tab, dragged.said], ['#dependencies', ''], 'the drag pressed something');
+  assert.deepEqual([roundTrip.tab, roundTrip.said], ['#dependencies', ''], 'a drag that came back to its node pressed it');
+  assert.equal(shaken.tab, '#tasks', 'a press that shook a little did not press its node');
+  assert.deepEqual(errors, []);
+  await context.close();
+  // a window 800 px wide, where the page scrolls as a whole and the tab's box does not: the drag's
+  // up and down moves the page
+  const narrow = await open(wideRoutes(), { viewport: { width: 800, height: 700 } });
+  await signIn(narrow.page);
+  await narrow.page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+  await waitGraph(narrow.page, /^Drawn from 1 read/, 15000);
+  await narrow.page.$eval('#cp-graph details.graph__list', (d) => { d.open = true; });
+  // the site's stylesheet scrolls the page smoothly, so the window is put there at once, before it is read
+  await narrow.page.evaluate(() => { const h = document.querySelector('#cp-graph .control__chart'); window.scrollTo({ top: Math.round(h.getBoundingClientRect().top + window.scrollY - 200), behavior: 'instant' }); });
+  await sleep(200);
+  const pageState = () => narrow.page.evaluate(() => ({ left: document.querySelector('#cp-graph .control__chart').scrollLeft, y: Math.round(window.scrollY), scrolls: getComputedStyle(document.getElementById('console')).overflow !== 'hidden' }));
+  const p = await narrow.page.$eval('#cp-graph .control__chart', (h) => { const b = h.getBoundingClientRect(); return { x: b.left + 8, y: b.top + 8 }; });
+  const start = await pageState();
+  await narrow.page.mouse.move(p.x, p.y);
+  await narrow.page.mouse.down();
+  await narrow.page.mouse.move(p.x - 150, p.y - 40, { steps: 6 });
+  await narrow.page.mouse.up();
+  const end = await pageState();
+  console.log('     where the page scrolls: before', JSON.stringify(start), '| after the drag', JSON.stringify(end));
+  assert.equal(start.scrolls, true, 'the page does not scroll as a whole at 800 px, so this says nothing');
+  assert.ok(Math.abs(end.left - start.left - 150) <= 2, 'the chart did not move sideways with the drag: ' + JSON.stringify([start, end]));
+  assert.ok(Math.abs(end.y - start.y - 40) <= 2, 'the page did not move up and down with the drag: ' + JSON.stringify([start, end]));
+  assert.deepEqual(narrow.errors, []);
+  await narrow.context.close();
+});
+
+await check('AT: a press on a chart whose release never comes, as when a menu opened on the press takes it, is no drag: the first move made with no button held ends it, nothing moves with the bare mouse, and the next click is not taken for a drag\'s end', async () => {
+  const { context, page, errors } = await open(wideRoutes(), { viewport: { width: 1280, height: 800 } });
+  await signIn(page);
+  await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+  await waitGraph(page, /^Drawn from 1 read/, 15000);
+  await page.waitForFunction(() => !document.querySelector('#cp-graph .graph__fit').hidden && document.querySelector('#cp-graph .control__chart').scrollLeft > 0, null, { timeout: 8000 });
+  const r = await page.$eval('#cp-graph .control__chart', (h) => { const b = h.getBoundingClientRect(); return { x: b.left + 8, y: b.top + 8 }; });
+  // the mouse's own pointer id, read from a real move, so the press made below is the mouse's
+  await page.evaluate(() => { window.__pid = null; window.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') window.__pid = e.pointerId; }); });
+  await page.mouse.move(r.x, r.y);
+  const pid = await page.evaluate(() => window.__pid);
+  const before = await panState(page);
+  // the press alone, with no release after it, as a Mac's Ctrl+click gives it: the menu it opens
+  // takes the release
+  await page.evaluate(({ x, y, pid }) => {
+    document.querySelector('#cp-graph .control__chart').dispatchEvent(new PointerEvent('pointerdown', { pointerId: pid, pointerType: 'mouse', isPrimary: true, button: 0, buttons: 1, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+  }, { x: r.x, y: r.y, pid });
+  await page.mouse.move(r.x - 150, r.y - 40, { steps: 6 });
+  const moved = await panState(page);
+  const panning = await page.$eval('#cp-graph .control__chart', (h) => h.classList.contains('control__chart--panning'));
+  await page.click('#cp-graph .graph__fit');
+  const fit = await page.$eval('#cp-graph .graph__fit', (b) => b.getAttribute('aria-pressed'));
+  console.log('     mouse pointer:', pid, '| before:', JSON.stringify(before), '| after the bare move:', JSON.stringify(moved), '| panning:', panning, '| Fit after a click:', fit);
+  assert.ok(pid !== null, 'no move of the mouse was seen');
+  assert.deepEqual([moved.left, moved.top], [before.left, before.top], 'the chart moved with the mouse though no button was held');
+  assert.equal(panning, false, 'the chart is still being dragged');
+  assert.equal(fit, 'true', 'the click after the lost release was taken for the end of a drag');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('AN: Fit shows only on a chart wider than its card, though the chart was drawn in a hidden tab or a hidden card, draws the whole chart at the card\'s width, and pressed again gives it back its own size at its middle', async () => {
+  const narrow = await open(fixtureRoutes(fixture()), { viewport: { width: 1280, height: 800 } });
+  await signIn(narrow.page);
+  await narrow.page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+  await waitGraph(narrow.page, /^Drawn from 4 reads/, 15000);
+  await sleep(300);
+  const narrowFit = await narrow.page.$$eval('#cp-graph .graph__section', (secs) => secs.map((s) => [s.getAttribute('data-focus'), s.querySelector('.graph__fit').hidden]));
+  assert.deepEqual(narrow.errors, []);
+  await narrow.context.close();
+  // the wide chart drawn while the console stands on another tab, where its box has no width yet, so
+  // Fit can show only once the tab opens and the box is laid out with one
+  const { context, page, errors } = await open(wideRoutes(), { viewport: { width: 1280, height: 800 } });
+  await signIn(page, null);
+  await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+  await waitGraph(page, /^Drawn from 1 read/, 15000);
+  const hiddenWhileDrawn = await page.evaluate(() => document.getElementById('tab-dependencies').hidden);
+  await toTab(page, 'dependencies');
+  await page.waitForFunction(() => !document.querySelector('#cp-graph .graph__fit').hidden, null, { timeout: 5000 }).catch(() => {});
+  const fitState = () => page.evaluate(() => {
+    const h = document.querySelector('#cp-graph .control__chart'), b = document.querySelector('#cp-graph .graph__fit');
+    return { hidden: b.hidden, pressed: b.getAttribute('aria-pressed'), svg: Math.round(h.querySelector('svg').getBoundingClientRect().width), box: h.clientWidth, scrolls: h.scrollWidth > h.clientWidth + 1, left: h.scrollLeft, mid: Math.round((h.scrollWidth - h.clientWidth) / 2) };
+  });
+  const wide = await fitState();
+  await page.click('#cp-graph .graph__fit');
+  const fitted = await fitState();
+  await page.click('#cp-graph .graph__fit');
+  const back = await fitState();
+  console.log('     narrow charts\' Fit hidden:', JSON.stringify(narrowFit), '| drawn in a hidden tab:', hiddenWhileDrawn, '| wide:', JSON.stringify(wide), '| fitted:', JSON.stringify(fitted), '| back:', JSON.stringify(back));
+  assert.deepEqual(narrowFit, [['goals', true], ['epic-20', true]], 'Fit shows on a chart that fits its card');
+  assert.equal(hiddenWhileDrawn, true, 'the wide chart was not drawn in a hidden tab');
+  assert.deepEqual([wide.hidden, wide.pressed, wide.scrolls], [false, 'false', true]);
+  assert.deepEqual([fitted.hidden, fitted.pressed, fitted.scrolls], [false, 'true', false]);
+  assert.ok(fitted.svg <= fitted.box, 'the fitted chart is wider than its box: ' + JSON.stringify(fitted));
+  assert.deepEqual([back.hidden, back.pressed, back.scrolls], [false, 'false', true]);
+  assert.ok(Math.abs(back.left - back.mid) <= 2, 'the chart did not come back at its middle: ' + JSON.stringify(back));
+  assert.deepEqual(errors, []);
+  await context.close();
+  // the wide epic under a goal: the Goals chart is shown first, so the epic's card is hidden when it
+  // is drawn, and Fit shows on it once its tile is pressed
+  const routes = wideRoutes([issue(1, 'Ship it', ['goal'], subs(0, 1))]);
+  routes['GET /repos/acme/demo/issues/1/sub_issues'] = [issue(70, 'A wide epic', ['epic'], subs(0, 12))];
+  const card = await open(routes, { viewport: { width: 1280, height: 800 } });
+  await signIn(card.page);
+  await card.page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+  await waitGraph(card.page, /^Drawn from 2 reads/, 15000);
+  const cardHidden = await card.page.$eval('#cp-graph .graph__section[data-focus="epic-70"]', (sec) => sec.hidden);
+  await card.page.click('#cp-graph-focus button[data-focus="epic-70"]');
+  await card.page.waitForFunction(() => !document.querySelector('#cp-graph .graph__section[data-focus="epic-70"] .graph__fit').hidden, null, { timeout: 5000 }).catch(() => {});
+  const cardFit = await card.page.$eval('#cp-graph .graph__section[data-focus="epic-70"] .graph__fit', (b) => b.hidden);
+  console.log('     the wide epic\'s card hidden when drawn:', cardHidden, '| its Fit hidden once its tile is pressed:', cardFit);
+  assert.deepEqual([cardHidden, cardFit], [true, false], 'Fit does not show on a wide chart drawn in a hidden card');
+  assert.deepEqual(card.errors, []);
+  await card.context.close();
+});
+
+await check('AO: the chart a person chooses fades in, the one shown on load does not, and nothing fades where the system asks for less motion', async () => {
+  const fades = (page) => page.$$eval('#cp-graph .graph__section', (secs) => secs.filter((s) => !s.hidden).map((s) => [s.getAttribute('data-focus'), s.classList.contains('graph__section--enter'), getComputedStyle(s).animationName]));
+  const { context, page, errors } = await open(fixtureRoutes(fixture()), { extraRoutes: [stubRoute] });
+  await signIn(page);
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  const onLoad = await fades(page);
+  await page.click('#cp-graph-focus button[data-focus="epic-20"]');
+  const pressed = await fades(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.click('#cp-graph-focus button[data-focus="goals"]');
+  const still = await fades(page);
+  console.log('     on load:', JSON.stringify(onLoad), '| pressed:', JSON.stringify(pressed), '| less motion:', JSON.stringify(still));
+  assert.deepEqual(onLoad, [['goals', false, 'none']]);
+  assert.deepEqual(pressed, [['epic-20', true, 'graph-enter']]);
+  assert.deepEqual(still, [['goals', true, 'none']]);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// The look's review (2026-10-19): an epic's sub-issues in another repository, the strip on a laptop
+// with many epics, a card's tools in one place, and the small words' contrast.
+await check('AQ: an epic\'s sub-issue in another repository, which GitHub\'s summary and so the bar count and no chart draws, has a pill of its own, so the pills add up to the bar\'s total', async () => {
+  // epic #20 with a fourth sub-issue, closed and in another repository: GitHub's summary gives 2 of 4
+  const f = fixture();
+  const away = issue(5, 'Settled elsewhere', ['todo'], { state: 'closed', repository_url: OTHER_REPO, html_url: 'https://github.com/other/place/issues/5' });
+  f.open = f.open.map((it) => it.number === 20 ? Object.assign({}, it, subs(2, 4)) : it);
+  f.subIssues[20] = f.subIssues[20].concat([away]);
+  const { context, page, errors } = await open(fixtureRoutes(f), { extraRoutes: [stubRoute] });
+  await signIn(page);
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  const card = await page.$eval('#cp-graph .graph__section[data-focus="epic-20"]', (sec) => ({
+    done: sec.querySelector('.graph__done').textContent,
+    pills: Array.from(sec.querySelectorAll('.graph__pill')).map((p) => [p.className.replace('graph__pill graph__pill--', ''), Number(p.querySelector('b').textContent), p.textContent]),
+    list: sec.querySelector('details.graph__list > summary').textContent,
+  }));
+  console.log('     epic #20\'s card:', JSON.stringify(card));
+  assert.equal(card.done, '2 of 4 closed');
+  assert.deepEqual(card.pills, [['todo', 1, '1 to do'], ['claimed', 1, '1 claimed'], ['closed', 1, '1 closed'], ['elsewhere', 1, '1 in another repository'], ['outside', 1, '1 from outside the epic']]);
+  assert.equal(card.pills.filter((p) => p[0] !== 'outside').reduce((sum, p) => sum + p[1], 0), 4, 'the pills do not add up to the bar\'s total');
+  // the chart draws this repository's issues alone: #21, #22, #23 and the blocker #99
+  assert.equal(card.list, 'List of 4 issues');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// A goal over n epics, numbered 100, 200 and on: the first epic has one task, the second two and so
+// on to five, then again, one in each state where there are enough, so the cards' pills differ; the
+// titles run from a word to two lines of a heading. With wide, the second epic has twelve tasks
+// side by side instead, a chart wider than its card.
+const MANY_TITLES = ['Dependencies look modern', 'Sign in from the phone', 'Make the console scale on every screen from a phone held upright to a twenty-seven inch monitor, with the tiles filling each row and the charts taking the rest of the deck', 'Ship', 'Chain the release pipeline'];
+function manyRoutes(n, wide) {
+  const listed = [issue(1, 'Ship the console to everyone', ['goal'], subs(0, n))];
+  const reads = {}, epics = [];
+  const states = [['todo'], ['claimed'], ['in-review'], ['blocked'], []];
+  for (let e = 0; e < n; e++) {
+    const num = 100 * (e + 1), isWide = wide && e === 1, count = isWide ? 12 : 1 + (e % 5);
+    const kids = Array.from({ length: count }, (_, k) => issue(num + k + 1, 'Task ' + (k + 1) + ' of epic ' + num, isWide ? ['todo'] : states[k % 5]));
+    const epic = issue(num, MANY_TITLES[e % MANY_TITLES.length], ['epic'], subs(0, count));
+    epics.push(epic);
+    listed.push(epic, ...kids);
+    reads['GET /repos/acme/demo/issues/' + num + '/sub_issues'] = kids;
+  }
+  reads['GET /repos/acme/demo/issues/1/sub_issues'] = epics;
+  return Object.assign(baseRoutes('acme/demo', listed), reads);
+}
+
+await check('AR: on a laptop the tiles are one compact row however many epics there are, so the charts keep most of the deck; the row scrolls sideways, by the mouse\'s wheel too, its ends fade where more tiles lie past them, and where the page scrolls as a whole the wheel scrolls the page', async () => {
+  const { context, page, errors } = await open(manyRoutes(12), { extraRoutes: [stubRoute], viewport: { width: 1280, height: 800 } });
+  await signIn(page);
+  await waitGraph(page, /^Drawn from 13 reads/, 15000);
+  const lay = () => page.evaluate(() => {
+    const s = document.getElementById('cp-graph-focus'), panel = document.getElementById('tab-dependencies'), box = panel.querySelector('.console__scroll');
+    const tops = Array.from(s.querySelectorAll('.graph__chip')).map((b) => Math.round(b.getBoundingClientRect().top));
+    return { tiles: tops.length, oneRow: tops.every((t) => t === tops[0]), strip: Math.round(s.getBoundingClientRect().height), panel: Math.round(panel.getBoundingClientRect().height),
+      box: Math.round(box.getBoundingClientRect().height), left: Math.round(s.scrollLeft), more: s.getAttribute('data-more'), boxTop: box.scrollTop, y: window.scrollY };
+  });
+  const first = await lay();
+  const r = await page.$eval('#cp-graph-focus', (s) => { const b = s.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; });
+  await page.mouse.move(r.x, r.y);
+  await page.mouse.wheel(0, 300);
+  await sleep(300);
+  const wheeled = await lay();
+  await page.focus('#cp-graph-focus button[data-focus="all"]');
+  await page.keyboard.press('End');
+  await sleep(300);
+  const last = await lay();
+  console.log('     a goal and twelve epics at 1280 x 800:', JSON.stringify(first), '| after the wheel:', JSON.stringify(wheeled), '| after End:', JSON.stringify(last));
+  assert.deepEqual([first.tiles, first.oneRow], [14, true], 'the tiles are not one row');
+  assert.ok(first.strip <= 100, 'the strip is taller than one compact row: ' + first.strip + ' px');
+  assert.ok(first.box >= 0.6 * first.panel, 'the charts keep less than three fifths of the deck: ' + first.box + ' of ' + first.panel + ' px');
+  assert.equal(first.more, 'right', 'the strip\'s end does not show that more tiles lie past it');
+  assert.ok(wheeled.left >= 250, 'the wheel did not turn the strip sideways: ' + wheeled.left);
+  assert.equal(wheeled.more, 'both');
+  assert.deepEqual([wheeled.boxTop, wheeled.y], [first.boxTop, first.y], 'the wheel over the strip moved the tab or the window');
+  assert.equal(last.more, 'left', 'the strip was not brought to its last tile, or its start does not show that more tiles lie before it');
+  assert.deepEqual(errors, []);
+  await context.close();
+  // 800 px wide, where the page scrolls as a whole: the wheel over the strip scrolls the page
+  const narrow = await open(manyRoutes(12), { extraRoutes: [stubRoute], viewport: { width: 800, height: 700 } });
+  await signIn(narrow.page);
+  await waitGraph(narrow.page, /^Drawn from 13 reads/, 15000);
+  await narrow.page.evaluate(() => { const s = document.getElementById('cp-graph-focus'); window.scrollTo({ top: Math.round(s.getBoundingClientRect().top + window.scrollY - 200), behavior: 'instant' }); });
+  await sleep(200);
+  const spot = () => narrow.page.evaluate(() => ({ left: Math.round(document.getElementById('cp-graph-focus').scrollLeft), y: Math.round(window.scrollY), overflows: document.getElementById('cp-graph-focus').scrollWidth > document.getElementById('cp-graph-focus').clientWidth }));
+  const at = await spot();
+  const q = await narrow.page.$eval('#cp-graph-focus', (s) => { const b = s.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; });
+  await narrow.page.mouse.move(q.x, q.y);
+  await narrow.page.mouse.wheel(0, 300);
+  await sleep(300);
+  const after = await spot();
+  console.log('     where the page scrolls: before the wheel', JSON.stringify(at), '| after', JSON.stringify(after));
+  assert.equal(at.overflows, true, 'the strip does not run past its end at 800 px, so this says nothing');
+  assert.equal(after.left, at.left, 'the wheel turned the strip where the page scrolls as a whole');
+  assert.ok(after.y >= at.y + 100, 'the wheel over the strip did not scroll the page');
+  assert.deepEqual(narrow.errors, []);
+  await narrow.context.close();
+});
+
+await check('AS: a card\'s tools, Fit and Previous and Next, keep one place on every card however long its heading and however many its pills, so Next pressed again and again by the mouse steps through every chart; on a phone they share one row at the top of the card', async () => {
+  const { context, page, errors } = await open(manyRoutes(5, true), { viewport: { width: 1366, height: 768 } });
+  await signIn(page);
+  await waitGraph(page, /^Drawn from 6 reads/, 30000);
+  await sleep(300);
+  const nextAt = () => page.evaluate(() => {
+    const sec = Array.from(document.querySelectorAll('#cp-graph .graph__section')).find((x) => !x.hidden);
+    const b = sec.querySelector('.graph__next').getBoundingClientRect();
+    return { card: sec.getAttribute('data-focus'), x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2), heading: Math.round(sec.querySelector('.graph__head h3').getBoundingClientRect().height),
+      pills: sec.querySelectorAll('.graph__pill').length, fit: !sec.querySelector('.graph__fit').hidden };
+  });
+  const seen = [await nextAt()];
+  // the mouse pressed where Next stood on the first card, again and again, as a person stepping through does
+  for (let i = 0; i < 5; i++) { await page.mouse.click(seen[0].x, seen[0].y); await sleep(300); seen.push(await nextAt()); }
+  console.log('     Next on each card in turn:', JSON.stringify(seen));
+  assert.deepEqual(seen.map((c) => c.card), ['goals', 'epic-100', 'epic-200', 'epic-300', 'epic-400', 'epic-500'], 'Next pressed at one spot did not step through every chart');
+  assert.ok(new Set(seen.map((c) => c.heading)).size > 1 && new Set(seen.map((c) => c.pills)).size > 1 && seen.some((c) => c.fit) && seen.some((c) => !c.fit), 'the cards do not differ in their headings, pills and Fit, so this says nothing');
+  assert.ok(seen.every((c) => Math.abs(c.x - seen[0].x) <= 1 && Math.abs(c.y - seen[0].y) <= 1), 'Next moved from card to card');
+  assert.deepEqual(errors, []);
+  await context.close();
+  const phone = await open(manyRoutes(5, true), { viewport: { width: 390, height: 844 }, storage: { symphony_panel_graph_focus: JSON.stringify({ 'acme/demo': 'epic-200' }) } });
+  await signIn(phone.page);
+  await waitGraph(phone.page, /^Drawn from 6 reads/, 30000);
+  await phone.page.waitForFunction(() => !document.querySelector('#cp-graph .graph__section[data-focus="epic-200"] .graph__fit').hidden, null, { timeout: 5000 }).catch(() => {});
+  const tools = await phone.page.$eval('#cp-graph .graph__section[data-focus="epic-200"]', (sec) => {
+    const r = (sel) => { const b = sec.querySelector(sel).getBoundingClientRect(); return { top: Math.round(b.top), bottom: Math.round(b.bottom), mid: Math.round(b.top + b.height / 2) }; };
+    return { fit: r('.graph__fit'), step: r('.graph__step'), heading: r('.graph__head h3'), fitShown: !sec.querySelector('.graph__fit').hidden };
+  });
+  console.log('     a phone\'s wide card:', JSON.stringify(tools));
+  assert.equal(tools.fitShown, true, 'Fit does not show on the wide chart, so this says nothing');
+  assert.ok(Math.abs(tools.fit.mid - tools.step.mid) <= 2, 'Fit and Previous and Next are not on one row');
+  assert.ok(tools.step.bottom <= tools.heading.top, 'the tools are not at the top of the card, above its heading');
+  assert.deepEqual(phone.errors, []);
+  await phone.context.close();
+});
+
+// the contrast of a node's words on the ground it shows on, each background up the tree laid over
+// the one under it, as a translucent tile's is
+const wordsContrast = (page, selector) => page.$eval(selector, (node) => {
+  const rgba = (c) => { const m = /rgba?\(([^)]+)\)/.exec(c || ''); if (!m) return null; const v = m[1].split(',').map(parseFloat); return v.length < 4 ? v.concat(1) : v; };
+  const over = (top, under) => [0, 1, 2].map((i) => top[i] * top[3] + under[i] * (1 - top[3]));
+  const chain = [];
+  for (let n = node; n; n = n.parentElement) chain.unshift(rgba(getComputedStyle(n).backgroundColor));
+  let ground = [255, 255, 255];
+  for (const c of chain) if (c && c[3] > 0) ground = over(c, ground);
+  const ink = over(rgba(getComputedStyle(node).color), ground);
+  const lum = (c) => c.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const a = lum(ink) + 0.05, b = lum(ground) + 0.05;
+  return Math.round(100 * Math.max(a, b) / Math.min(a, b)) / 100;
+});
+await check('AU: the small words of the tiles and the cards read at 4.5 to 1 on their ground: a tile\'s kind and its count, at rest and under the pointer, and a card\'s place among the charts', async () => {
+  const { context, page, errors } = await open(fixtureRoutes(fixture()), { extraRoutes: [stubRoute] });
+  await signIn(page);
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  const tile = '#cp-graph-focus .graph__chip[data-focus="epic-20"] ';
+  const rest = { kind: await wordsContrast(page, tile + '.graph__tkind'), foot: await wordsContrast(page, tile + '.graph__tfoot') };
+  await page.hover(tile.trim());
+  await sleep(400);
+  const hover = { kind: await wordsContrast(page, tile + '.graph__tkind'), foot: await wordsContrast(page, tile + '.graph__tfoot') };
+  const place = await wordsContrast(page, '#cp-graph .graph__section[data-focus="goals"] .graph__pos');
+  console.log('     at rest:', JSON.stringify(rest), '| under the pointer:', JSON.stringify(hover), '| a card\'s place:', place);
+  for (const [name, ratio] of [['kind at rest', rest.kind], ['count at rest', rest.foot], ['kind under the pointer', hover.kind], ['count under the pointer', hover.foot], ['card\'s place', place]]) {
+    assert.ok(ratio >= 4.5, 'a tile\'s or a card\'s small words read at ' + ratio + ' to 1 (' + name + ')');
+  }
   assert.deepEqual(errors, []);
   await context.close();
 });

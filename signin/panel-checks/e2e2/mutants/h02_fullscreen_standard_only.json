@@ -1,0 +1,1 @@
+[["var can = document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen;", "var can = document.documentElement.requestFullscreen;"]]

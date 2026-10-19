@@ -1,0 +1,1 @@
+[["[node].concat(Array.prototype.slice.call(node.querySelectorAll('[style]')))", "[node]"]]
