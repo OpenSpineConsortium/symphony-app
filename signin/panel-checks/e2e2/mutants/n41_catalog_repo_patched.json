@@ -1,0 +1,1 @@
+[["gh('PATCH', '/repos/' + full, { visibility: 'private' })", "gh('PATCH', '/repos/' + nb.repo, { visibility: 'private' })"]]
