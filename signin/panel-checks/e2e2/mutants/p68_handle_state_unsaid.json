@@ -1,0 +1,1 @@
+[["    if (bar.handle) bar.handle.setAttribute('aria-expanded', 'true');\n", "\n"]]

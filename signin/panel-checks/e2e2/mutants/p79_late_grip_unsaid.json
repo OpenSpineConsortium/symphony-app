@@ -1,0 +1,1 @@
+[["    c.addEventListener('focusin', function (e) { if (e.target.hasAttribute && e.target.hasAttribute('data-split')) sayGrips(); });\n", "\n"]]

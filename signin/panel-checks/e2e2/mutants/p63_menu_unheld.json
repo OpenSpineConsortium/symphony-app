@@ -1,0 +1,1 @@
+[["    return bar.over || keyed || !!($('navLinks') && $('navLinks').classList.contains('is-open'));\n", "    return bar.over || keyed;\n"]]

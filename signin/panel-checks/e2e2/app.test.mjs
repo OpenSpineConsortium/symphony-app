@@ -89,8 +89,15 @@ function headerBox() {
   return { nav: box('#nav'), brand: box('#nav .nav__brand'), toggle: box('#navToggle'), toggleShown: getComputedStyle(document.getElementById('navToggle')).display !== 'none',
     width: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth };
 }
-// opens the header's drawer with its button, as a person taps it, and gives where its links are
+// opens the header's drawer with its button, as a person taps it, and gives where its links are. On
+// the control page the bar hides itself over the deck (site branch claude/panel-resize-autohide), so
+// the person first taps the handle at the top, which slides the bar back, as P35 of signin.test.mjs
+// holds; the bar is then whole in the window before its button is pressed
 async function openNavDrawer(page) {
+  if (await page.evaluate(() => document.body.classList.contains('console-bar-auto'))) {
+    await page.tap('.console__barhandle');
+    await page.waitForFunction(() => Math.abs(document.getElementById('nav').getBoundingClientRect().top) < 0.5, null, { timeout: 3000 });
+  }
   await page.click('#navToggle');
   await page.waitForTimeout(500);
   return page.evaluate(partEdges, [['the header\'s drawer', '#navLinks a']]);

@@ -1,0 +1,1 @@
+[["    if (document.body.classList.contains('console-bar-auto')) return parseFloat(getComputedStyle(document.body).paddingTop) || 0;\n", ""]]

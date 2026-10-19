@@ -13,7 +13,7 @@ ghu_TEST or github_pat_X.
 
 ## What is here
 
-- `e2e2/signin.test.mjs`: 136 checks of the sign-in and the console's foot, run against a mocked
+- `e2e2/signin.test.mjs`: 160 checks of the sign-in and the console's foot, run against a mocked
   api.github.com, a mocked GitHub authorize page and a mocked sign-in service at
   https://signin.example.test. Some checks run both ways in, Sign in with GitHub and a pasted
   token. P1 to P22 (site pull request #78, 2026-10-19) hold the work a button starts, spoken at
@@ -37,6 +37,74 @@ ghu_TEST or github_pat_X.
   none selected, and a list an older page left readable by the private repositories, or by all,
   closed, its value kept, when an owner opens the Tokens tab, a close GitHub refuses let go without
   a word, and the last repository taken off deleting the list.
+  P25 to P38 (site branch claude/panel-resize-autohide, 2026-10-19, after the owner's "i should be
+  able to resize all 3, when im in the control panel the top nav panel should hide and reappear when
+  the mouse is over it, like windows does with its taskbar") hold the message foot as the third part
+  a person sizes, and the site's bar hiding itself on the control page. The foot's grip lies along
+  its top, its bottom on the foot's top edge, a separator with a quiet bar, over none of the
+  message's words, that a mouse drags, up to grow the foot and down to shrink it, the stage giving
+  up or taking back exactly what the foot takes (P25); a finger drags it on a phone either way up
+  without scrolling the page, the grip a thumb's, 96 to 160 px wide about its bar, and over none of
+  the message's words, the foot's buttons or the empty foot's placeholder (P26); the arrow keys step
+  it by 16 px and a double-click puts it back as tall as its message (P27); its size is kept across
+  a reload, read back only as a number in the part's bounds with the rest of the record kept, held
+  to what the window leaves, and a window made shorter takes the foot down and gives it back (P28);
+  it is held between one line of message with Clear and its buttons, whole and pressable, and what
+  leaves the stage 180 px, at 1280 x 800, 1440 x 900 and 1920 x 1080, at the smallest and the
+  largest text, on a phone upright and sideways, while the Ask Claude bar grows, and in a narrow
+  window by the mouse or on a phone by a finger with the smallest or the largest text saved, which
+  neither applies, a grip dragged past the window's top calling no bar (P29, and P41 for any press
+  held there); the grip follows the pointer under every text size, and a finger on a phone whatever
+  text size a computer saved (P30); and a long task box, a failed run of fourteen steps with its
+  log, keeps a small foot its size, its first line showing, Clear pressable and the rest scrolled
+  inside the message box, fills a foot sized tall past the box's usual cap, and grows a foot nobody
+  sized to that cap as before (P31). On a computer every one of them finds the deck filling the
+  window with no page scroll either way; a phone's page scrolls under its sticky foot by design
+  (P6), so there the page is held to the window's width, the foot to the window's bottom and the
+  drags to scroll nothing. The bar is hidden from the start, wholly above the window, the deck
+  starting at the window's top or the Home Screen app's top inset, with neither the hot strip nor
+  the phone's handle over a control of the deck or the words of its title (P32); the pointer at the
+  top edge brings it back over the deck, which does not move, and it stays while the pointer is over
+  it, though the focus passes through it and out, or over a section strip it dropped, goes a moment
+  after the pointer leaves and not at once, comes for a pointer leaving the window across the top
+  and not for one passing just under the edge or leaving by a side near the top, goes after its wait
+  when a pointer grazes the edge and is back on the deck before the bar is under it, and is opaque
+  over the deck (P33); Tab from the page's start brings it, it goes after its wait when the focus
+  leaves and stays while the focus moves in it, and Escape sends it away at once with the focus
+  (P34); on a phone the handle, a tab in the site's colours at the top centre, shows it for a tap or
+  a swipe down, a tap outside sends it at once and four seconds do too, a touch in the bar starts
+  the wait again, the menu opened from it holds it past that wait and closes with it, the menu
+  opened and closed by two taps on its button leaves the bar to go after its wait, since a tap's
+  focus is no keyboard's, and a swipe down on the handle with the page scrolled shows the bar and
+  scrolls nothing (P35); full screen hides the bar, the strip and the handle, and leaving it gives
+  them back (P36); where less motion is asked the bar shows with no slide, on a computer and on a
+  phone, and slides otherwise (P37); and the rest of the site, /symphony/, the cost page and the
+  home page, keeps its bar at the top with no strip and no handle (P38). P39 to P48 (the same branch
+  and day, after its adversarial review) hold what that review found: the foot's grip lies in the
+  gap above the foot and in the Ask Claude bar's bottom padding, over none of the foot's buttons and
+  none of the bar's content at any text size, sized or not, so a press just inside a button's top
+  edge is the button's and a double press on A+ leaves the foot its size (P39); on a fresh load with
+  the script slow to come, the bar is above the window from the first frame the page paints and
+  never slides, and the deck never moves, on a computer and on a phone (P40); a text selection or a
+  press run up to the window's top, or a pointer leaving across the top just after a move with a
+  button held, brings no bar, and the edge still brings it to a pointer with no button held (P41); a
+  grip pressed while the focus is in the shown bar sends the bar away with the focus, so Enter
+  follows no link nobody sees (P42); where the page scrolls, the foot rests on the window's bottom
+  on every phone tab at the page's top, and its grip stays under the finger or the mouse at every
+  step of a drag as well as after it, on a short tab and with the page scrolled past the deck's end,
+  on a phone either way up, a tablet upright and a narrow window (P43); a thumb swiping up beside
+  the grip's middle scrolls the page and leaves the foot its size (P44); on a touch-first screen
+  with a mouse too, the mouse leaving across the top brings the bar and the mouse resting on it
+  keeps it past a touch's wait (P45: the screen is made by a stub of matchMedia, since Chromium's
+  emulation answers no hover feature as such a screen does, and the strip along the top is held by
+  reading the stylesheet's own rule, shown under (any-hover: hover), which nothing in Chromium can
+  show on such a screen); the handle's whole press area is the tab a person sees, so a tap just
+  below it presses what is there and shows no bar (P46); on a tablet either way up the grip is a
+  thumb's, over none of the buttons, the message's words or the placeholder, which stands where a
+  message's words do, and a finger drags it (P47); and each grip says its part's size and the bounds
+  it is held to as a separator, and the new size as a drag or the arrow keys change it, the foot's,
+  the side column's and a token's panel's, which the script draws later (P48). `CSS_MUTANT` names a
+  list of pairs for control.css, served in its place, as `MUTANT` names one for the script.
 - `e2e2/panel.test.mjs`: the panel's walkthrough on both pages.
 - `e2e2/hostile.test.mjs`: 13 hostile-input checks.
 - `e2e2/assistant.test.mjs`: 26 checks of the panel's assistant (site branch claude/assistant-panel,
@@ -49,7 +117,7 @@ ghu_TEST or github_pat_X.
   answer, the issue read again before each question and replaced when closed, one press at a time,
   a sign-in changed under the page, a watch read on after a sign-in, and Stop watching; its cadence
   constants are shortened in the served script, and a check may serve its own.
-- `e2e2/graph.test.mjs`: 85 checks of the panel's Dependencies tab (site branch
+- `e2e2/graph.test.mjs`: 89 checks of the panel's Dependencies tab (site branch
   claude/graph-section, 2026-10-18; a section of the long page until the console): the chart text
   the page hands the drawing, byte for byte the two blocks symphony-protocol's board writes for its
   fixture board-epics.json (board-epics-STATE.md, copied into the check from symphony-protocol
@@ -184,8 +252,9 @@ ghu_TEST or github_pat_X.
   day, after four reviewers' thirty-five findings): on a phone held either way the page held still
   while the tab is shown, a finger drawn up or down the tab's head, its tiles, a card's tools or the
   foot and the wheel moving nothing, a pinch off the stage zooming the chart and never the page, the
-  tab brought back whole when the phone turns, and held sideways the site's header given up and the
-  stage at least two fifths of the screen (BL); the tab's help never scrolling, in pages of
+  tab brought back whole when the phone turns, and held either way the site's header taking none of
+  the screen, hidden above it until its handle brings it, and held sideways the stage at least two
+  fifths of the screen (BL); the tab's help never scrolling, in pages of
   paragraphs under arrows where it does not fit, at 1366 x 768 at 100% and 170%, 1920 x 1080 and
   on a phone held either way, and closed by Escape from inside it (BM); a card's list a stage of
   its own, laid out as a table at the width that draws its rows largest, or as cards in columns
@@ -205,7 +274,39 @@ ghu_TEST or github_pat_X.
   lines at the most with its whole in its tooltip, and the key folding where it would be cut or the
   tab is short, at 1280 x 800 too (BT); and a zoomed chart kept inside its edges when its stage
   changes size, a focus drawn once kept, a swipe between two neighbours the same way going to the
-  nearer, and a short swipe on one tile turning the tiles' page and pressing nothing (BU). Two
+  nearer, and a short swipe on one tile turning the tiles' page and pressing nothing (BU). From
+  the merge with site pull request #93 (the foot the person sizes and the site's bar that hides
+  itself, 2026-10-19), BV to BY: on a phone held either way the bar's handle at the window's top
+  centre, over nothing of the tab but the rail's own button, a tap or a swipe down from it bringing
+  the bar over the deck with nothing under it moving and the bar going after its wait, a swipe down
+  a chart bringing none, and the phone turned while the bar shows keeping the rail at the window's
+  top and the tab its height (BV); a foot the person sized leaving the tab 280 px and staying under
+  it on a phone, given its size back on another tab, dragged with the window held still, kept to
+  two rows with its message over Clear on a short screen, and on a laptop at 100% and 150% dragged
+  to the window's top still leaving the tab its least with every chart whole (BW); one Escape doing
+  one thing: with the keyboard in the bar it sends the bar away and leaves the help open, and with
+  the bar brought by the pointer it first leaves a focus, folds the key or closes the help, from
+  inside the tab and from the page, and only the next one sends the bar away (BX); and every chart
+  fitted whole, nothing past its box or under the foot, through a foot sized up and down, the side
+  column widened and narrowed, the window made smaller and larger, and the bar shown and gone,
+  which moves no chart (BY). Five were rewritten for the merge, since it changed on purpose what
+  they measured: the deck now takes the whole window under a bar that floats over it, so at
+  1280 x 800 the tiles fit one page and the key no longer folds, and AR, BT and BU, which need the
+  tiles in pages or the key folded, run at 1280 x 720; AJ reads one row within a pixel, since the
+  window brought to the rail now leaves the mouse over a tile, whose hover lifts it one; and BL
+  asks the header to stand above the window's top, where the bar's own hiding puts it, in place of
+  being taken out of the page held sideways. Six were made stricter where a mutant got past
+  them: D puts the window 40 px down the room the check gives the page before Centre its row,
+  since the deck now fills the window from its top, where a window at its own top could only move
+  up to centre the row and so never moved; AM drags from a node and back the way the picture can
+  still follow, since the taller stage leaves the picture against its far edge after the drags past
+  each corner, so the node no longer came back under the pointer; BL puts the window off the rail before each turn and asks the turn to bring the rail back
+  to the window's top, since the page above the rail now keeps its height either way up, so a turn
+  that left the window where it was had nothing to show; AY holds the node under the pointer still both ways, since the merged deck draws the wide
+  chart with that node at the stage's middle across, where a zoom about the middle leaves it; AZ
+  reads each scroll of a stage as it comes, before the stage's own listener puts it back, so the
+  keys that scroll a box are seen if they scroll it for a moment; and AV asks a short tab, a phone's
+  held sideways, to keep its card's heading at no height with its words kept for a reader. Two
   helpers and six checks were rewritten for that review: assertWhole, which every check of a whole
   picture goes through, now
   asks the fit and the centring of the part of the stage the floating tools leave (it let a
@@ -398,8 +499,12 @@ ghu_TEST or github_pat_X.
   button once the script marks it hidden (H8). Two changes no check sees: a fallback given to env(), which Chromium and Safari never
   use since both define every inset, and the deck's foot padded by the home bar in the phone layout
   too, which only widens the dark band under the status line, since H4 holds the status line's
-  place alone. Run it with `SITE=<the site's checkout> BASE=<the site's address> node
-  app.test.mjs`.
+  place alone. Since the site's bar hides itself on the control page (site branch
+  claude/panel-resize-autohide, 2026-10-19), H5 and H6 open the header's drawer as a person then
+  does, by tapping the handle at the top, which slides the bar back, and pressing the menu button
+  once the bar is whole in the window; they failed on that branch only because the button stood
+  above the window, where the hidden bar keeps it. Run it with `SITE=<the site's checkout>
+  BASE=<the site's address> node app.test.mjs`.
 - `e2e2/code.test.mjs`: 29 checks of sign-in by code (site branch claude/sign-in-by-code,
   2026-10-19), the Home Screen app's way in: GitHub's device flow through the sign-in service's
   routes /device and /device/token, against a mocked service that answers as signin/worker.js
@@ -449,7 +554,7 @@ ghu_TEST or github_pat_X.
   (signin/README.md, step 9). GitHub's 5xx and 429 while the person types the code are the
   service's to answer, as github_unreachable, which K5 holds the page asks again at the same
   pace; test_worker.mjs holds the service's side.
-- `e2e2/mutants/`: 486 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/mutants/`: 537 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
@@ -571,7 +676,7 @@ ghu_TEST or github_pat_X.
   least size and come in pages, so the heading's height chose another grid at none of 56 screens
   and text sizes tried (1280 x 800, 1366 x 768, 1440 x 900 and 1920 x 1080, 100% to 170%, six and
   twelve epics), where no check can see it. The stylesheet's part of the zoom, which no mutant of the
-  script reaches, is proved by the twenty-two changed copies of assets/css/control.css under
+  script reaches, is proved by the twenty-five changed copies of assets/css/control.css under
   `e2e2/styles/`, each a `.json` of pairs that `CSSEDIT` applies, with its `.only` and `.suite`, run
   by the same runner and each seen failing its check: the tiles (s01) or the card's heading (s02)
   keeping their room from a focus on a phone (BB), the focus's title cut at two lines on a short
@@ -582,13 +687,36 @@ ghu_TEST or github_pat_X.
   fade where less motion is asked (s10, BJ; the script itself sets no glide then, so the fade is
   the stylesheet's own part); and from the zoom's review, s11 to s22: the body left to scroll on a
   phone (BL, AV), the tab's touch left to the browser (BL), the site's header kept on a phone held
-  sideways (BL), a finger's ring drawn round the stage (BR), a card's heading unclamped (BT), the
-  short tiles' number unsaid (BT), the help's head left sticky over it (BM), the list's zoom hidden
+  sideways (BL; since the merge with the bar that hides itself, s13 drops the bar's own hiding,
+  which now keeps the header off the held page, the rule it first took away having gone), a
+  finger's ring drawn round the stage (BR), a card's heading unclamped (BT), the short tiles'
+  number unsaid (BT), the help's head left sticky over it (BM), the list's zoom hidden
   (BN), a short tab's full tiles on one row (BL), the focus's card unbounded under the stage (BO),
   the cards in one column (BN) and the arrows' words kept out of sight from the keyboard (BO); s03
   was rewritten as the short form's focus title cut to one line whatever its room (BB), since the
   rule it changed is gone. m7 (E5's 404 unsaid) was already STALE before the zoom, its text gone
-  from the script, and is left as it was. The 63 of the Folders tab (`f*`, each with a `.json.suite` naming
+  from the script, and is left as it was. From the merge with site pull request #93, against site
+  branch claude/dependencies-zoom on 2026-10-19, eight more, g183 to g190, each caught: the held
+  page keeping room for a bar that floats over it (BV); the foot left only the stage's 180 px while
+  the tab is shown, a sized foot not held when the tab opens, no least for the tab on a computer,
+  and a phone's least counting the tab and not the rail above it (BW); Escape in the bar heard
+  by the tab too, Escape outside it taken by the bar after the tab took it, and the bar hearing it
+  before the tab (BX); and three more changed stylesheets: the header given up again on a sideways
+  phone, so its handle goes with it (s23, BV), a sized foot's message held to one row (s24, BW),
+  and the held page left to the browser's scroll anchoring, which carries the rail off the window's
+  top after a turn (s25, BV). Three were aimed again at the text the merge left: p44 (the foot's
+  room unkept, now the least the tab asks, P29), p57 (Escape ignored, now in both of the bar's
+  listeners, P34) and s13 (above); g111 (the stage's resize unwatched) now names BY too. Seven got
+  past their checks on the merge and are caught again by the stricter checks above: g116 (the wheel
+  about the stage's middle, AY), whose node the merged deck put at the middle across, g157 (a
+  phone's turn leaving the window where it was, BL), g33 (the window not put back after a press
+  crosses tabs, D) and g78 (a drag that comes back to where it began taken for a press, AM), and
+  three that got past them at the zoom's own heads too, before the merge: s04 (the stage left to scroll,
+  AZ), which the stage's listener putting back a scroll hid, s09 (the card's heading kept on a short
+  tab, AV), whose stage now fits its chart either way, and s05 (BA), aimed now at both rules that
+  keep a finger's touch for the stage, its own and the tab's, since the tab's, from the zoom's
+  review, holds every stage in it alone and the Board's stage sets its own.
+  The 63 of the Folders tab (`f*`, each with a `.json.suite` naming
   folders.test.mjs) were caught against site branch claude/folders-explorer on 2026-10-18, the first
   48 also against the site's script at commit 044b8b3, f06 rewritten for the explorer's name cell;
   f56 to f63, the saved catalog's, against site branch claude/folders-catalog the same day, f60 to
@@ -632,6 +760,34 @@ ghu_TEST or github_pat_X.
   2026-10-19, after its adversarial review, where app.test.mjs, signin.test.mjs, panel.test.mjs and
   hostile.test.mjs pass whole; H1 to H7 hold the build's head and the stylesheet, which no mutant of
   the script reaches.
+  The 31 of the foot and the bar (p41 to p71, for P25 to P38) were caught against site branch
+  claude/panel-resize-autohide at 2d22660 on 2026-10-19, that branch's work with master merged in,
+  where every other suite passes too: the foot's grip never drawn or dragged the wrong way (P25);
+  the foot's bounds unheld, the stage's 180 px unkept, a phone's least foot without its buttons, and
+  the Ask Claude bar's growth unwatched (P29); a window made shorter not taking the foot down, and a
+  kept size read whatever its value (P28); a sized foot never marked as sized (P31); the drag's scale
+  taken from the saved text size, which a phone does not use (P30); the bar never set to hide, its
+  hot strip never drawn, and a strip that takes the pointer a browser makes up as the page loads
+  (P32); the bar never shown, gone at once, gone under the pointer or from a section strip, and deaf
+  to a pointer leaving across the top (P33); the focus ignored, Escape ignored, and Escape leaving the
+  focus in the hidden bar (P34); and the handle never drawn, its tap or its swipe dead, a tap outside
+  ignored, a touch's bar kept for good, the open menu not holding the bar or left open after it, a
+  touch in the bar not starting the wait again, its aria-expanded unsaid, and every pointer taken for
+  one that hovers (P35).
+  The 12 from that branch's adversarial review (p72 to p83) were caught against it at 41217a9 on
+  2026-10-19, where every suite passes: a phone's room for the foot taken from the text size a
+  computer saved, which a phone does not apply (P29); the blur that sends the focus out of the bar
+  as it hides, removed, which leaves the focus in the hidden bar after a grip's press (P42, as p73)
+  and after Escape (P34, as p58, aimed again at that line, since hideBar now does for every way the
+  bar goes what Escape did for itself); a drag with a button held, and a pointer leaving across the
+  top just after one, bringing the bar (P41); the page left where it is while the grip is dragged,
+  and the page scrolled by a glide that catches the pointer up only once the drag is over (P43); the
+  hover asked of the main pointer alone (P45); the grips' sizes unsaid, and a grip the script draws
+  later unsaid when it takes the focus (P48); the strip's pointerleave dead, and a pointer leaving by
+  a side taken for one leaving across the top (P33); and every focus in the bar holding it, a tap's
+  too (P35). p43, whose text the new sayGrips matched first, was aimed again at sizeWithin's line,
+  and caught again (P29). m7_no404 reports STALE: its text left the script before this branch, on
+  master as here.
   The 48 of sign-in by code (`k*`, each naming code.test.mjs) were caught against site branch
   claude/sign-in-by-code at 201a419 on 2026-10-19, with the switch turned on by the suite as it
   serves the script. k01 to k30 came with the code way (two were written and dropped as
@@ -655,6 +811,27 @@ ghu_TEST or github_pat_X.
   but not the words, and each of its three cases of GitHub's return catches it alone), and the
   site shipping the switch on (K29); k33, whose line in storeSignin that fix rewrote, was aimed
   at it as it now reads and caught again (K18).
+- `e2e2/css-mutants/`: 28 lists of pairs for the stylesheet control.css, each with its `.json.only`,
+  for the part of the foot and the bar that is the stylesheet's, which no mutant of the script
+  reaches; `run-mutants.sh` serves a path under css-mutants/ in place of control.css through
+  `CSS_MUTANT`. Each was caught by its check against the same branch the same day: the page keeping
+  the bar's padding over the deck, the bar never hidden, the phone's section strip standing in the
+  page or never hidden, the handle under the Home Screen app's top inset (P32); the bar see-through
+  over the deck and the hot strip never shown (P33); the handle never shown (P35); full screen
+  leaving the strip and the handle (P36); the bar sliding where less motion is asked (P37); a sized
+  foot not held to its size and its message box held to the usual cap (P31); a phone's sized foot
+  not laid out as message over buttons (P29); and the phone's grip too thin for a thumb, no room
+  kept for it at the foot's top, so that it lies over the message's words, the grips scrolling the
+  page under a finger, and the grip's quiet bar not drawn (P26 and P25; c15, whose rule the review's
+  fix rewrote, aimed again at it as it now reads). The 11 from the branch's adversarial review (c18
+  to c28) were caught against it at 41217a9 the same day: the foot's grip back over the buttons'
+  top edge (P39); the deck short of the window until the script sets its height, so it jumps as the
+  page loads (P40); a phone's deck no taller than its tab, so the foot stands above the window's
+  bottom (P43); a phone's grip the foot's whole width, so a thumb beside it sizes the foot (P44);
+  the strip along the top drawn only where the main pointer hovers (P45); the handle's tab smaller
+  than its press area (P46); a tablet's grip too thin for a thumb, no room kept for it at the foot's
+  top, and the tablet's placeholder left above a message's line (P47); the handle letting the page
+  pan under a swipe (P35); and the phone's placeholder left under the grip's bar (P26).
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
   and every page action, visibility read and locator action on a selector first opens the tab that
@@ -679,13 +856,17 @@ ghu_TEST or github_pat_X.
    - `ONLY=I11b,G7` runs only the checks whose names start with those prefixes, each followed by
      a colon.
    - `MUTANT=mutants/m33_noended.json` runs the checks against that mutant, and
-     `CSSEDIT=styles/s01_near_keeps_tiles.json` the graph suite against that changed stylesheet.
+     `CSS_MUTANT=css-mutants/c02_bar_never_hidden.json` the checks of signin.test.mjs against that
+     stylesheet, and `CSSEDIT=styles/s01_near_keeps_tiles.json` the graph suite against its
+     changed stylesheet.
    - `e2e2/run-mutants.sh` expects a server already on port 8077, or on the address `BASE`
      names, and reports each mutant as KILLED, SURVIVED, STALE or ERROR; name mutants to run only
      those, by their paths from e2e2/ (`bash run-mutants.sh mutants/g*.json styles/*.json` there
      runs the Dependencies tab's and its stylesheet's, `mutants/f*.json` the Folders tab's,
-     `mutants/n*.json` the Notebooks tab's, `mutants/h*.json` the Home Screen app's, with `SITE`
-     set as for the checks, and `mutants/k*.json` sign-in by code's, the same way).
+     `mutants/n*.json` the Notebooks tab's, `mutants/h*.json` the Home Screen app's,
+     `mutants/k*.json` sign-in by code's, `css-mutants/*.json` the foot's and the bar's
+     stylesheet's, with `SITE` set as for the checks); named none, it runs every one under
+     mutants/, css-mutants/ and styles/, each served the way its folder says.
 
 The site sets the two constants to the live service and SymphonyBoard's Client ID (site pull
 request #24). The checks set them for themselves, whatever the shipped script holds: the

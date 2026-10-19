@@ -1,0 +1,1 @@
+[["c.classList.toggle('console--foot', layout.foot != null);", "c.classList.toggle('console--foot', false);"]]

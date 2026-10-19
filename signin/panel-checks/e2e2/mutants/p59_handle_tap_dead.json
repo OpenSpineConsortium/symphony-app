@@ -1,0 +1,1 @@
+[["      if (!swiped) { if (barShown()) hideBar(); else showForTouch(); }\n", "      if (!swiped) { if (barShown()) hideBar(); }\n"]]

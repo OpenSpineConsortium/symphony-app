@@ -1,0 +1,1 @@
+[["var keyed = inBar(focus) && focus.matches && focus.matches(':focus-visible');", "var keyed = inBar(focus);"]]

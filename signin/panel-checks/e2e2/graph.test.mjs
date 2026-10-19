@@ -748,16 +748,23 @@ await check('D: a node pressed opens it in focus in this tab, and its Centre its
   assert.deepEqual([pressed.hash, pressed.shown, pressed.y], ['#dependencies', ['dependencies'], 0], 'the press left the tab or moved the window');
   assert.deepEqual([near.open, near.num, near.button], [true, '#22', 'Centre its row']);
   assert.equal(await page.$$eval('#cp-app tr.control__focus', (rows) => rows.length), 0, 'the press centred a row before Centre its row was pressed');
-  await page.click('#cp-graph .graph__section[data-focus="epic-20"] .graph__nearacts button');
+  // the deck fills the window from its top, so a row centred in its box lies where a window at its
+  // own top could only move up to centre it, which it cannot: the window is put 40 px down the
+  // room the check gave the page, where a move either way shows, and pressed where it stands, as a
+  // finger presses it, with nothing of the check's own scrolling it into view
+  const offset = await page.evaluate(() => { window.scrollTo({ top: 40, behavior: 'instant' }); return window.pageYOffset; });
+  assert.equal(offset, 40, 'the window could not be put down the check\'s room, so this says nothing');
+  await page.$eval('#cp-graph .graph__section[data-focus="epic-20"] .graph__nearacts button', (b) => b.click());
   // read at once, before any call that would open a tab itself
   const after = await where(page);
   await sleep(800);
   const settled = await where(page);
   const view = await inBox(page, '#cp-claimed tr[data-number="22"]');
   console.log('     after Centre its row:', JSON.stringify(after), '| a moment later:', settled.y, '| row:', view);
-  assert.deepEqual([after.hash, after.shown, after.y], ['#tasks', ['tasks'], 0], 'Centre its row did not open the Tasks tab alone, or moved the window');
-  assert.equal(settled.y, 0, 'the window moved once the press settled');
+  assert.deepEqual([after.hash, after.shown, after.y], ['#tasks', ['tasks'], 40], 'Centre its row did not open the Tasks tab alone, or moved the window');
+  assert.equal(settled.y, 40, 'the window moved once the press settled');
   assert.equal(view, 'in view');
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
   await page.waitForSelector('#cp-claimed tr[data-number="22"].control__focus', { timeout: 8000 });
   const said = await page.textContent('#cp-graph-said');
   const scrolled = await page.evaluate(() => window.__scrolled);
@@ -2083,7 +2090,9 @@ await check('AJ: each tile carries a bar of its chart\'s own issues by state, an
     const on = s.querySelector('[aria-pressed="true"]'), r = on.getBoundingClientRect();
     const shown = Array.from(s.querySelectorAll('.graph__chip')).filter((b) => !b.hidden);
     const tops = shown.map((b) => Math.round(b.getBoundingClientRect().top));
-    return { scrolls: s.scrollWidth > s.clientWidth + 1 || s.scrollHeight > s.clientHeight + 1, shown: shown.length, oneRow: tops.every((t) => t === tops[0]),
+    // the mouse a click left over a tile lifts it a pixel (its hover), which is no second row: the
+    // window the tab brings to the rail now scrolls a tile under where the rail's button was pressed
+    return { scrolls: s.scrollWidth > s.clientWidth + 1 || s.scrollHeight > s.clientHeight + 1, shown: shown.length, oneRow: tops.every((t) => Math.abs(t - tops[0]) <= 1),
       inside: shown.every((b) => { const x = b.getBoundingClientRect(); return x.left >= sr.left - 1 && x.right <= sr.right + 1; }),
       pressed: on.getAttribute('data-focus'), inView: !on.hidden && r.width > 0 && r.left >= sr.left - 1 && r.right <= sr.right + 1, paged: Array.from(s.querySelectorAll('.graph__page')).some((b) => !b.hidden), page: document.documentElement.scrollWidth };
   });
@@ -2248,11 +2257,13 @@ await check('AM: a chart zoomed in is dragged with the mouse like a map, both wa
   await drag(page, r, { x: r.x - 3000, y: r.y - 3000 }, 12);
   const bottomRight = await stageRead(page);
   const edges = [topLeft.pic.l - topLeft.inner.l, topLeft.pic.t - topLeft.inner.t, bottomRight.inner.r - bottomRight.pic.r, bottomRight.inner.b - bottomRight.pic.b].map(Math.round);
-  // a drag that starts on a node and comes back to it, which the browser ends with a click on that node
+  // a drag that starts on a node and comes back to it, which the browser ends with a click on that node;
+  // the last drag left the picture against its far edge, so this one goes the way the picture can
+  // follow and back, the node ending under the pointer again, where a press would find it
   const node = await nodeAt(page, 23);
   await page.mouse.move(node.x, node.y);
   await page.mouse.down();
-  await page.mouse.move(node.x - 120, node.y, { steps: 4 });
+  await page.mouse.move(node.x + 120, node.y, { steps: 4 });
   await page.mouse.move(node.x, node.y, { steps: 4 });
   await page.mouse.up();
   await sleep(600);
@@ -2447,7 +2458,9 @@ await check('AQ: an epic\'s sub-issue in another repository, which GitHub\'s sum
 });
 
 await check('AR: on a laptop the tiles never scroll however many epics there are: with a goal and twelve epics they show a page at a time in one compact row, turned by its arrows, by a swipe across it and by the arrow keys past a page\'s end, so the charts keep most of the deck; and where the console is one long page, in a window 800 px wide, which the tab holds still while it is shown, the wheel over the tiles turns nothing and moves nothing', async () => {
-  const { context, page, errors } = await open(manyRoutes(12), { extraRoutes: [stubRoute], viewport: { width: 1280, height: 800 } });
+  // a laptop's 1280 x 720: the deck takes the whole window, the site's bar hidden over it, so at
+  // 1280 x 800 the tab is tall enough to spare the tiles a second row, and they all fit on one page
+  const { context, page, errors } = await open(manyRoutes(12), { extraRoutes: [stubRoute], viewport: { width: 1280, height: 720 } });
   await signIn(page);
   await waitGraph(page, /^Drawn from 13 reads/, 15000);
   const lay = () => page.evaluate(() => {
@@ -2455,7 +2468,7 @@ await check('AR: on a laptop the tiles never scroll however many epics there are
     const tiles = Array.from(s.querySelectorAll('.graph__chip')), shown = tiles.filter((b) => !b.hidden);
     const tops = shown.map((b) => Math.round(b.getBoundingClientRect().top));
     const arrows = Array.from(s.querySelectorAll('.graph__page')).map((b) => (b.hidden ? 'hidden' : b.disabled ? 'off' : 'on'));
-    return { tiles: tiles.length, shown: shown.map((b) => b.getAttribute('data-focus')), oneRow: tops.every((t) => t === tops[0]), strip: Math.round(s.getBoundingClientRect().height), panel: Math.round(panel.getBoundingClientRect().height),
+    return { tiles: tiles.length, shown: shown.map((b) => b.getAttribute('data-focus')), oneRow: tops.every((t) => Math.abs(t - tops[0]) <= 1), strip: Math.round(s.getBoundingClientRect().height), panel: Math.round(panel.getBoundingClientRect().height),
       box: Math.round(box.getBoundingClientRect().height), scrolls: s.scrollWidth > s.clientWidth + 1, arrows, pressed: (tiles.find((b) => b.getAttribute('aria-pressed') === 'true') || {}).getAttribute('data-focus'), keyed: document.activeElement.getAttribute('data-focus'), y: window.scrollY };
   });
   const first = await lay();
@@ -2484,7 +2497,7 @@ await check('AR: on a laptop the tiles never scroll however many epics there are
   const keyed = await lay();
   await page.keyboard.press('End');
   const last = await lay();
-  console.log('     a goal and twelve epics at 1280 x 800:', JSON.stringify(first), '| after a swipe:', JSON.stringify(swiped.shown), '| back and on by the arrows:', JSON.stringify([turnedBack.shown[0], turned.shown[0]]), '| after the wheel:', JSON.stringify([wheeled.shown, wheeled.y]), '| ArrowRight past the page:', JSON.stringify([keyed.shown, keyed.pressed, keyed.keyed]), '| End:', JSON.stringify([last.shown, last.pressed, last.arrows]));
+  console.log('     a goal and twelve epics at 1280 x 720:', JSON.stringify(first), '| after a swipe:', JSON.stringify(swiped.shown), '| back and on by the arrows:', JSON.stringify([turnedBack.shown[0], turned.shown[0]]), '| after the wheel:', JSON.stringify([wheeled.shown, wheeled.y]), '| ArrowRight past the page:', JSON.stringify([keyed.shown, keyed.pressed, keyed.keyed]), '| End:', JSON.stringify([last.shown, last.pressed, last.arrows]));
   const per = first.shown.length;
   assert.deepEqual([first.tiles, first.oneRow, first.scrolls], [14, true, false], 'the tiles are not one row that never scrolls');
   assert.ok(per >= 6 && per < 14, 'the tiles are not a page at a time, or a page holds fewer than six: ' + per);
@@ -2690,6 +2703,18 @@ await check('AV: nothing scrolls in the Dependencies tab: at 1280 x 800, 1366 x 
       line.push('| the tab on the screen:', JSON.stringify(held));
       assert.ok(held.top >= held.header - 1 && held.bottom <= held.foot + 1, what + ': the tab is not wholly on the screen between the header and the foot: ' + JSON.stringify(held));
       assert.ok(held.wider <= 1, what + ': the page is wider than the screen by ' + held.wider + ' px');
+      // a short tab, as a phone's held sideways is, gives its card's heading's room to the chart: the
+      // heading keeps no height of its own, and its words stay for a screen reader; one chart shown,
+      // since All, which everyChart leaves shown, heads each of its cells
+      await pick(page, 'epic-100');
+      await sleep(250);
+      const heading = await page.evaluate(() => {
+        const sec = Array.from(document.querySelectorAll('#cp-graph .graph__section')).find((s) => !s.hidden), h = sec.querySelector('.graph__head h3');
+        return { short: document.getElementById('tab-dependencies').classList.contains('graph--short'), height: Math.round(h.getBoundingClientRect().height), words: h.textContent.trim().length > 0 };
+      });
+      line.push('| the heading:', JSON.stringify(heading));
+      if (height <= 520) assert.equal(heading.short, true, what + ': the tab is not short on a phone held sideways, so this says nothing');
+      if (heading.short) assert.ok(heading.height <= 1 && heading.words, what + ': a short tab keeps its card\'s heading\'s room from the chart: ' + JSON.stringify(heading));
     } else {
       // every step of the text size, smallest to largest, with the first chart and All; every chart
       // again at the two ends
@@ -2877,20 +2902,23 @@ await check('AY: a chart zooms by the wheel and by the trackpad\'s pinch about t
   await sleep(600);
   const dblAtMost = await stageRead(page);
   const end = await panState(page);
-  console.log('     whole:', fit, '| the wheel:', wheeled.k, JSON.stringify([a.x, a1.x].map(Math.round)), '| ctrl and the wheel:', pinched.k, JSON.stringify([a2.x].map(Math.round)), '| + and -:', plus.k, minus.k, '| keys + - 0 -:', keyPlus.k, keyMinus.k, keyZero.k, pastOut.k,
-    '| a double click:', dbl.k, JSON.stringify([b.x, b1.x].map(Math.round)), dblNear.open, '| far out:', out.k, outButton.idle, '| far in:', most.k, pastIn.k, '| a double click at the most:', dblAtMost.k, '| the page:', JSON.stringify([still.top, still.win, end.top, end.win]));
+  console.log('     whole:', fit, '| the wheel:', wheeled.k, JSON.stringify([a, a1].map((q) => [q.x, q.y].map(Math.round))), '| ctrl and the wheel:', pinched.k, JSON.stringify([a2.x, a2.y].map(Math.round)), '| + and -:', plus.k, minus.k, '| keys + - 0 -:', keyPlus.k, keyMinus.k, keyZero.k, pastOut.k,
+    '| a double click:', dbl.k, JSON.stringify([b, b1].map((q) => [q.x, q.y].map(Math.round))), dblNear.open, '| far out:', out.k, outButton.idle, '| far in:', most.k, pastIn.k, '| a double click at the most:', dblAtMost.k, '| the page:', JSON.stringify([still.top, still.win, end.top, end.win]));
   assert.ok(fit < 1, 'the wide chart is not shrunk to its stage, so this says nothing');
   assert.ok(near1(wheeled.k / fit, Math.exp(0.2)), 'a notch of the wheel did not zoom in: ' + wheeled.k);
-  assert.ok(Math.abs(a1.x - a.x) <= 1.5, 'the node under the pointer moved with the wheel: ' + JSON.stringify([a.x, a1.x]));
+  // both ways, since a node the layout puts at the stage's middle one way stays there that way
+  // whatever point the zoom is about
+  const stayed = (p, q) => Math.abs(q.x - p.x) <= 1.5 && Math.abs(q.y - p.y) <= 1.5;
+  assert.ok(stayed(a, a1), 'the node under the pointer moved with the wheel: ' + JSON.stringify([a, a1]));
   assert.ok(near1(pinched.k / wheeled.k, Math.exp(0.3)), 'the trackpad\'s pinch did not zoom in: ' + pinched.k);
-  assert.ok(Math.abs(a2.x - a.x) <= 1.5, 'the node under the pointer moved with the trackpad\'s pinch');
+  assert.ok(stayed(a, a2), 'the node under the pointer moved with the trackpad\'s pinch: ' + JSON.stringify([a, a2]));
   assert.ok(near1(plus.k / pinched.k, 1.4) && near1(minus.k, pinched.k), 'the card\'s + and - did not zoom in and out: ' + JSON.stringify([pinched.k, plus.k, minus.k]));
   assert.ok(near1(keyPlus.k / minus.k, 1.4) && near1(keyMinus.k, minus.k), 'the keys + and - did not zoom in and out');
   assert.ok(near1(keyZero.k, fit, 1e-6), 'the key 0 did not draw the chart whole');
   assertWhole(keyZero, 'the chart after the key 0');
   assert.ok(near1(pastOut.k, fit, 1e-6), 'the key - zoomed out past the whole view');
   assert.ok(near1(dbl.k, 2 * fit), 'a double click did not zoom in twice: ' + dbl.k);
-  assert.ok(Math.abs(b1.x - b.x) <= 1.5, 'the node double clicked moved');
+  assert.ok(stayed(b, b1), 'the node double clicked moved: ' + JSON.stringify([b, b1]));
   assert.equal(dblNear.open, false, 'a double click on a node opened it in focus');
   assert.ok(near1(out.k, fit, 1e-6) && out.k > 0, 'the wheel far out did not stop at the whole view: ' + out.k);
   assertWhole(out, 'the chart after the wheel far out');
@@ -2914,11 +2942,16 @@ await check('AZ: a chart zoomed in pans by the arrow keys, 60 px a press, and by
   const press = async (key, times) => { for (let i = 0; i < times; i++) await page.keyboard.press(key); await sleep(400); };
   // the keys a box that scrolls answers by itself, which this stage leaves alone: its picture moves
   // by the arrows alone, so the stage itself never scrolls under it
-  // each read after its own key, since Shift and Space scroll back what Space scrolled
+  // each read after its own key, since Shift and Space scroll back what Space scrolled; and every
+  // scroll of a stage is read as it comes, before the stage's own listener puts back one the browser
+  // made to show a button given the keyboard, so a scroll the keys made is seen for its moment too
+  await page.evaluate(() => { window.__stageScrolls = []; document.addEventListener('scroll', (e) => { const t = e.target; if (t instanceof Element && t.classList.contains('control__chart') && (t.scrollLeft || t.scrollTop)) window.__stageScrolls.push([t.scrollLeft, t.scrollTop]); }, true); });
   const unscrolled = await panState(page), byKey = [];
   for (const key of ['PageDown', 'End', 'Space', 'Shift+Space']) { await press(key, 1); byKey.push(await panState(page)); }
-  console.log('     the keys a scrolling box takes:', JSON.stringify(byKey.map((s) => s.stage)), JSON.stringify([unscrolled.x, unscrolled.y].concat(byKey.map((s) => [s.x, s.y]))));
+  const scrolledBy = await page.evaluate(() => window.__stageScrolls);
+  console.log('     the keys a scrolling box takes:', JSON.stringify(byKey.map((s) => s.stage)), JSON.stringify([unscrolled.x, unscrolled.y].concat(byKey.map((s) => [s.x, s.y]))), '| the stage scrolled for a moment:', JSON.stringify(scrolledBy));
   assert.deepEqual(byKey.map((s) => s.stage), [[0, 0], [0, 0], [0, 0], [0, 0]], 'the keys of a scrolling box scrolled the stage');
+  assert.deepEqual(scrolledBy, [], 'the keys of a scrolling box scrolled the stage, if only until it was put back');
   assert.deepEqual(byKey.map((s) => [s.x, s.y, s.top, s.win]), byKey.map(() => [unscrolled.x, unscrolled.y, 0, 0]), 'the keys of a scrolling box moved the chart, the tab or the page');
   await press('ArrowLeft', 20);
   await press('ArrowUp', 20);
@@ -3600,7 +3633,7 @@ const stageAgainstFoot = (page) => page.evaluate(() => {
   return { top: Math.round(st.top), bottom: Math.round(st.bottom), height: Math.round(st.height), foot: Math.round(foot.top) };
 });
 
-await check('BL: on a phone held either way the tab holds the page still while it is shown: a finger drawn up or down its head, its tiles, a card\'s tools or the foot, and the wheel, move nothing, and a pinch on its head or its tiles zooms no page; held sideways the site\'s header gives way, so the stage takes two fifths of the screen at the least; a phone turned either way brings the tab back between the header and the foot; and another tab lets the page scroll again', async () => {
+await check('BL: on a phone held either way the tab holds the page still while it is shown: a finger drawn up or down its head, its tiles, a card\'s tools or the foot, and the wheel, move nothing, and a pinch on its head or its tiles zooms no page; held either way the site\'s header takes none of the screen, hidden above it until its handle brings it, so held sideways the stage takes two fifths of the screen at the least; a phone turned either way brings the tab back between the header and the foot; and another tab lets the page scroll again', async () => {
   const { context, page, errors } = await open(fixtureRoutes(fixture()), { viewport: { width: 390, height: 844 }, mobile: true, storage: { symphony_panel_graph_focus: JSON.stringify({ 'acme/demo': 'epic-20' }) } });
   const cdp = await context.newCDPSession(page);
   await signIn(page);
@@ -3639,25 +3672,37 @@ await check('BL: on a phone held either way the tab holds the page still while i
   };
   await tryAll('390 x 844');
   const upright = await heldOnPhone(page);
-  // turned sideways: the tab comes back between the header, which gives way, and the foot
+  // before each turn the window is put off the rail, as the keyboard's way to the page above the
+  // tab would put it, so the turn itself must bring the rail back to the window's top: the page
+  // above the rail keeps its height either way up, and nothing else would move the window
+  const offRail = () => page.evaluate(() => { window.scrollTo({ top: 0, behavior: 'instant' }); return window.scrollY; });
+  const railTop = () => page.evaluate(() => Math.round(document.querySelector('.console__rail').getBoundingClientRect().top));
+  // turned sideways: the tab comes back between the header, which hides itself above the window on
+  // this page whichever way the phone is held, and the foot
+  const offBefore = [await offRail()];
   await page.setViewportSize({ width: 844, height: 390 });
   await sleep(800);
-  const sideways = await heldOnPhone(page), stage = await stageAgainstFoot(page);
+  const sideways = await heldOnPhone(page), stage = await stageAgainstFoot(page), railSideways = await railTop();
   await tryAll('844 x 390');
   // and upright again
+  offBefore.push(await offRail());
   await page.setViewportSize({ width: 390, height: 844 });
   await sleep(800);
-  const back = await heldOnPhone(page), stageBack = await stageAgainstFoot(page);
+  const back = await heldOnPhone(page), stageBack = await stageAgainstFoot(page), railBack = await railTop();
   // another tab: the page is no longer held
   await toTab(page, 'board');
   await sleep(300);
   const free = await page.evaluate(() => ({ held: document.documentElement.classList.contains('graph--held'), overflow: getComputedStyle(document.body).overflowY }));
-  console.log('     ' + JSON.stringify(seen), '| upright:', JSON.stringify(upright), '| turned sideways:', JSON.stringify(sideways), JSON.stringify(stage), '| upright again:', JSON.stringify(back), JSON.stringify(stageBack), '| the Board tab:', JSON.stringify(free));
+  console.log('     ' + JSON.stringify(seen), '| upright:', JSON.stringify(upright), '| turned sideways:', JSON.stringify(sideways), JSON.stringify(stage), '| upright again:', JSON.stringify(back), JSON.stringify(stageBack), '| the window put off the rail at', JSON.stringify(offBefore), 'and the rail after each turn at', JSON.stringify([railSideways, railBack]), '| the Board tab:', JSON.stringify(free));
+  assert.deepEqual(offBefore, [0, 0], 'the window could not be put off the rail before a turn, so this says nothing');
+  assert.deepEqual([railSideways, railBack].map((t) => Math.abs(t) <= 1), [true, true], 'a turn did not bring the rail of tabs back to the window\'s top: ' + JSON.stringify([railSideways, railBack]));
   for (const [what, held, st] of [['turned sideways', sideways, stage], ['turned upright again', back, stageBack]]) {
     assert.ok(held.top >= held.header - 1 && held.bottom <= held.foot + 1, what + ': the tab is not back between the header and the foot: ' + JSON.stringify(held));
     assert.ok(st.top >= held.header - 1 && st.bottom <= st.foot + 1, what + ': the stage runs under the header or the foot: ' + JSON.stringify(st));
   }
-  assert.equal(sideways.header, 0, 'held sideways the site\'s header still takes the screen\'s top');
+  // the bar slides above the window, its bottom edge at or over the window's top, rather than going
+  // from the page as it did before it hid itself, so the handle can bring it back sideways too
+  for (const [what, held] of [['upright', upright], ['turned sideways', sideways], ['upright again', back]]) assert.ok(held.header <= 0, what + ' the site\'s header still takes the screen\'s top: ' + JSON.stringify(held));
   assert.ok(stage.height >= 0.4 * 390, 'held sideways the stage takes less than two fifths of the screen: ' + stage.height + ' px');
   assert.deepEqual([free.held, free.overflow !== 'hidden'], [false, true], 'another tab still holds the page');
   assert.deepEqual(errors, []);
@@ -4148,8 +4193,10 @@ await check('BT: where the tab is short an epic\'s tile says its number before i
   const short = await page.evaluate(() => document.getElementById('tab-dependencies').classList.contains('graph--short'));
   const tiles = await page.$$eval('#cp-graph-focus .graph__chip:not([hidden]) .graph__ttitle[data-num]', (ts) => ts.map((t) => [t.getAttribute('data-num'), getComputedStyle(t, '::before').content]));
   const cutLarge = await overflows(page);
-  // a laptop's 1280 x 800, where the tab is under the height the key's line may take from the stage
-  const small = await open(manyRoutes(5), { extraRoutes: [stubRoute], viewport: { width: 1280, height: 800 } });
+  // a laptop's 1280 x 720, where the tab is under the height the key's line may take from the stage;
+  // at 1280 x 800 the deck takes the whole window, the site's bar hidden over it, and the tab, 657
+  // px tall, has the room for the key's line
+  const small = await open(manyRoutes(5), { extraRoutes: [stubRoute], viewport: { width: 1280, height: 720 } });
   await signIn(small.page);
   await waitGraph(small.page, /^Drawn from 6 reads/, 15000);
   await sleep(300);
@@ -4157,9 +4204,9 @@ await check('BT: where the tab is short an epic\'s tile says its number before i
   const cutSmall = await overflows(small.page);
   assert.deepEqual(small.errors, []);
   await small.context.close();
-  console.log('     epic #300\'s heading at 100%:', JSON.stringify(usual), 'at ' + size + ':', JSON.stringify(large), '| the key at 100%:', JSON.stringify(keyUsual), 'at ' + size + ':', JSON.stringify(keyLarge), 'at 1280 x 800:', JSON.stringify(keySmall), '| short:', short, '| the tiles:', JSON.stringify(tiles));
+  console.log('     epic #300\'s heading at 100%:', JSON.stringify(usual), 'at ' + size + ':', JSON.stringify(large), '| the key at 100%:', JSON.stringify(keyUsual), 'at ' + size + ':', JSON.stringify(keyLarge), 'at 1280 x 720:', JSON.stringify(keySmall), '| short:', short, '| the tiles:', JSON.stringify(tiles));
   assert.deepEqual([cutLarge, cutSmall], [[], []], 'something holds more than its box: ' + JSON.stringify([cutLarge, cutSmall]));
-  assert.equal(keySmall.fold, true, 'at 1280 x 800, a tab ' + keySmall.tab + ' px tall, the key does not fold, so its line takes the stage\'s room');
+  assert.equal(keySmall.fold, true, 'at 1280 x 720, a tab ' + keySmall.tab + ' px tall, the key does not fold, so its line takes the stage\'s room');
   for (const [at, h] of [['100%', usual], [size, large]]) {
     assert.ok(!h.shown || h.lines <= 2.05, 'at ' + at + ' the heading takes more than two lines: ' + h.lines);
     assert.equal(h.tooltip, true, 'at ' + at + ' the heading has no tooltip that holds it whole');
@@ -4240,8 +4287,10 @@ await check('BU: a zoomed chart keeps inside its edges when its stage changes si
   assert.deepEqual(t.errors, []);
   await t.context.close();
   // the short swipe on one tile, drawn by the mouse on a laptop's tiles, a goal and twelve epics, where
-  // a press and its release on one tile make a click, which a finger's swipe never does
-  const s = await open(manyRoutes(12), { extraRoutes: [stubRoute], viewport: { width: 1280, height: 800 } });
+  // a press and its release on one tile make a click, which a finger's swipe never does; at 1280 x
+  // 720, since at 1280 x 800 the deck, which takes the whole window with the site's bar hidden over
+  // it, spares the tiles a second row and all of them fit on one page
+  const s = await open(manyRoutes(12), { extraRoutes: [stubRoute], viewport: { width: 1280, height: 720 } });
   await signIn(s.page);
   await waitGraph(s.page, /^Drawn from 13 reads/, 15000);
   await sleep(300);
@@ -4265,6 +4314,306 @@ await check('BU: a zoomed chart keeps inside its edges when its stage changes si
   assert.equal(tie.num, '#62', 'a swipe went to the farther of two neighbours the same way');
   assert.notDeepEqual(after.shown, before.shown, 'a short swipe on one tile did not turn the tiles\' page');
   assert.equal(after.pressed, before.pressed, 'a short swipe on one tile pressed it');
+});
+
+// BV to BY: the zoom beside the console's own sizing and the site's bar that hides itself (site pull
+// request #93): the bar hidden above the held tab on a phone and brought back over it by its handle
+// (BV), a foot the person sized leaving the tab its least (BW), one Escape doing one thing with the
+// bar shown (BX), and every chart staying whole as the foot, the side column, the window and the
+// bar change round it (BY).
+
+// the site's bar as the held tab sees it: whether it is shown and seen, its box, the handle's, the
+// rail's and the tab's places, the window's offset, the shown chart's transform and the tile pressed
+const barOver = (page) => page.evaluate(() => {
+  const r = (e) => { if (!e || !e.getClientRects().length) return null; const b = e.getBoundingClientRect(); return { l: Math.round(b.left), t: Math.round(b.top), r: Math.round(b.right), b: Math.round(b.bottom) }; };
+  const sec = Array.from(document.querySelectorAll('#cp-graph .graph__section')).find((s) => !s.hidden);
+  const svg = sec && Array.from(sec.querySelectorAll('.control__chart > svg')).find((s) => s.style.display !== 'none');
+  const nav = document.getElementById('nav'), pressed = document.querySelector('#cp-graph-focus [aria-pressed="true"]');
+  return {
+    shown: document.body.classList.contains('console-bar-shown'), nav: r(nav),
+    seen: !!nav && nav.getClientRects().length > 0 && getComputedStyle(nav).visibility !== 'hidden' && nav.getBoundingClientRect().bottom > 0,
+    handle: r(document.querySelector('.console__barhandle')), rail: r(document.querySelector('.console__rail')), tab: r(document.getElementById('tab-dependencies')),
+    y: Math.round(scrollY), picture: svg ? svg.style.transform : null, pressed: pressed ? pressed.getAttribute('data-focus') : null,
+  };
+});
+// the rail's buttons that lie under the handle, the handle let through for the look, each marked *
+// where it is the tab shown
+const underHandle = (page) => page.evaluate(() => {
+  const h = document.querySelector('.console__barhandle'), b = h.getBoundingClientRect(), seen = [];
+  h.style.pointerEvents = 'none';
+  for (let x = b.left + 1; x < b.right; x += 6) {
+    for (const y of [b.top + 2, b.top + b.height / 2, b.bottom - 2]) {
+      const at = document.elementFromPoint(x, y), tab = at && at.closest('[data-tab]');
+      if (tab) seen.push(tab.getAttribute('data-tab') + (tab.getAttribute('aria-selected') === 'true' ? '*' : ''));
+    }
+  }
+  h.style.pointerEvents = '';
+  return Array.from(new Set(seen));
+});
+await check('BV: on a phone held either way the site\'s bar, hidden above the held tab, comes back over it from its handle: the handle at the window\'s top centre lies over no button of the rail but the shown tab\'s own; a tap and a swipe down from it each show the bar over the tab, held sideways as upright, with the page, the tab, its chart and its tiles left as they were, and it goes again after its wait; a swipe down a chart from near its top shows no bar; and a phone turned while the bar shows brings the tab back with the rail at the window\'s top and its whole height, as it stays once the bar has gone', async () => {
+  const seen = {};
+  for (const [width, height] of [[390, 844], [844, 390]]) {
+    const what = width + ' x ' + height;
+    const { context, page, errors } = await open(fixtureRoutes(fixture()), { viewport: { width, height }, mobile: true });
+    const cdp = await context.newCDPSession(page);
+    await signIn(page);
+    await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+    await waitGraph(page, /^Drawn from 4 reads/, 15000);
+    await sleep(500);
+    const rest = await barOver(page), under = await underHandle(page);
+    assert.equal(rest.shown, false, what + ': the bar shows over the held tab before anyone asks for it');
+    assert.ok(rest.nav && rest.nav.b <= 0, what + ': the bar takes the screen\'s top: ' + JSON.stringify(rest.nav));
+    assert.ok(rest.handle && rest.handle.t === 0 && Math.abs((rest.handle.l + rest.handle.r) / 2 - width / 2) <= 1, what + ': no handle at the top centre: ' + JSON.stringify(rest.handle));
+    assert.ok(rest.rail && rest.rail.t === 0, what + ': the held tab does not bring the rail to the window\'s top: ' + JSON.stringify(rest.rail));
+    assert.ok(under.length > 0 && under.every((t) => t.endsWith('*')), what + ': the handle lies over a button of the rail other than the shown tab\'s: ' + JSON.stringify(under));
+    const same = (b, why) => assert.deepEqual([b.y, b.tab, b.rail, b.picture, b.pressed], [rest.y, rest.tab, rest.rail, rest.picture, rest.pressed], what + ': ' + why + ' moved the page, the tab, its chart or its tiles');
+    const mid = { x: (rest.handle.l + rest.handle.r) / 2, y: (rest.handle.t + rest.handle.b) / 2 };
+    await page.touchscreen.tap(mid.x, mid.y);
+    await sleep(400);
+    const tapped = await barOver(page);
+    assert.ok(tapped.shown && tapped.seen, what + ': a tap on the handle showed no bar: ' + JSON.stringify(tapped.nav));
+    same(tapped, 'the tap on the handle');
+    await sleep(4600);
+    assert.equal((await barOver(page)).shown, false, what + ': the bar stayed past its wait');
+    await swipe(cdp, mid, { x: mid.x, y: mid.y + 140 }, 8);
+    await sleep(300);
+    const swiped = await barOver(page);
+    assert.ok(swiped.shown && swiped.seen, what + ': a swipe down from the handle showed no bar: ' + JSON.stringify(swiped.nav));
+    same(swiped, 'the swipe down from the handle');
+    await sleep(4600);
+    // a swipe down a chart from near its top is the chart's, never the bar's
+    const st = await stageRead(page), x = (st.inner.l + st.inner.r) / 2;
+    await swipe(cdp, { x, y: st.inner.t + 8 }, { x, y: st.inner.t + 120 }, 8);
+    await sleep(400);
+    const onChart = await barOver(page);
+    assert.deepEqual([onChart.shown, onChart.y], [false, rest.y], what + ': a swipe down a chart showed the bar or moved the page');
+    // turned while the bar shows, and back
+    await page.touchscreen.tap(mid.x, mid.y);
+    await sleep(300);
+    await page.setViewportSize({ width: height, height: width });
+    await sleep(700);
+    await page.setViewportSize({ width, height });
+    await sleep(700);
+    const turned = await barOver(page);
+    await sleep(4600);
+    const after = await barOver(page);
+    seen[what] = { nav: rest.nav, handle: rest.handle, under, tapped: tapped.nav, swiped: swiped.nav, turned: [turned.shown, turned.rail, turned.tab], after: [after.shown, after.rail, after.tab] };
+    assert.equal(turned.shown, true, what + ': the bar went before the phone was turned back, so the turn says nothing');
+    for (const [when, b] of [['turned while the bar showed', turned], ['once the bar went', after]]) {
+      assert.equal(b.rail.t, 0, what + ', ' + when + ': the rail is not at the window\'s top: ' + JSON.stringify(b.rail));
+      assert.deepEqual(b.tab, rest.tab, what + ', ' + when + ': the tab did not take back its whole height');
+    }
+    assert.deepEqual(errors, [], what);
+    await context.close();
+  }
+  console.log('     ' + JSON.stringify(seen));
+});
+
+// the foot and the tab against each other: the foot's box and the size it was given, its message's
+// box and Clear's, the tab's box and its height in its own pixels, the shown stage's box and the
+// window's offset
+const footTab = (page) => page.evaluate(() => {
+  const r = (e) => { const b = e.getBoundingClientRect(); return { t: Math.round(b.top), b: Math.round(b.bottom), h: Math.round(b.height) }; };
+  const tab = document.getElementById('tab-dependencies'), sec = Array.from(document.querySelectorAll('#cp-graph .graph__section')).find((s) => !s.hidden);
+  return {
+    foot: r(document.querySelector('.console__status')), given: getComputedStyle(document.getElementById('console')).getPropertyValue('--foot-h').trim(),
+    msg: r(document.getElementById('msg')), clear: r(document.getElementById('cp-msg-close')),
+    tab: tab.hidden ? null : r(tab), own: tab.hidden ? 0 : tab.clientHeight, stage: sec && !tab.hidden ? r(sec.querySelector('.control__chart')) : null, y: Math.round(scrollY),
+  };
+});
+// the tab and its stage wholly above the foot, the tab at its least or taller
+function assertAboveFoot(f, what, least) {
+  assert.ok(f.tab && f.tab.b <= f.foot.t + 1 && f.stage.b <= f.foot.t + 1, what + ': the tab or its stage runs under the foot: ' + JSON.stringify(f));
+  if (least) assert.ok(f.own >= least - 1, what + ': the tab is ' + f.own + ' of its pixels tall, under its least of ' + least);
+}
+await check('BW: a foot the person sized leaves the Dependencies tab its least wherever the tab is shown: on a phone, a foot kept from before that is taller than the tab can spare, and its grip dragged up as far as it goes, stop where the tab keeps 280 of its pixels, the tab and its stage wholly above the foot, the window unmoved and every chart whole, and another tab gives the foot back the size it was given; on a short screen the sized foot keeps its message over its buttons, filling its row; and on a computer at the usual and at 150% text, its grip dragged to the window\'s top leaves the tab 280 and every chart whole, with nothing past its box', async () => {
+  const seen = {};
+  {
+    const what = '390 x 844, a foot kept 700 px tall';
+    const { context, page, errors } = await open(fixtureRoutes(fixture()), { viewport: { width: 390, height: 844 }, mobile: true, storage: { symphony_panel_layout: JSON.stringify({ foot: 700 }) } });
+    const cdp = await context.newCDPSession(page);
+    await signIn(page);
+    await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+    await waitGraph(page, /^Drawn from 4 reads/, 15000);
+    await sleep(500);
+    const kept = await footTab(page);
+    assertAboveFoot(kept, what, 280);
+    assert.ok(kept.foot.h > 300, what + ': the foot is not tall at all, so its bound says nothing: ' + JSON.stringify(kept.foot));
+    await everyChart(page, what);
+    await toTab(page, 'board');
+    await sleep(400);
+    const board = await footTab(page);
+    assert.equal(board.foot.h, 844 - 180, what + ': another tab did not give the foot back the size it was given, as far as the window holds it');
+    await toTab(page, 'dependencies');
+    await sleep(600);
+    const back = await footTab(page);
+    assertAboveFoot(back, what + ', the tab opened again', 280);
+    const g = await midOf(page, '.console__split--foot');
+    await swipe(cdp, g, { x: g.x, y: 40 }, 14);
+    await sleep(600);
+    const dragged = await footTab(page);
+    assertAboveFoot(dragged, what + ', the grip dragged up', 280);
+    assert.equal(dragged.y, kept.y, what + ': dragging the grip moved the window the tab holds');
+    await everyChart(page, what + ', the grip dragged up');
+    seen[what] = { kept: [kept.foot, kept.own], board: board.foot.h, back: [back.foot.h, back.own], dragged: [dragged.foot.h, dragged.own, dragged.y] };
+    assert.deepEqual(errors, [], what);
+    await context.close();
+  }
+  {
+    // a short screen, a window 900 x 500 that takes the phone's layout, the foot kept 400 px tall:
+    // held to what leaves the tab its least, and laid out as on every other tab, the message over
+    // Clear and the buttons, filling the row they leave it
+    const what = '900 x 500, a foot kept 400 px tall';
+    const { context, page, errors } = await open(fixtureRoutes(fixture()), { viewport: { width: 900, height: 500 }, storage: { symphony_panel_layout: JSON.stringify({ foot: 400 }) } });
+    await signIn(page);
+    await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+    await waitGraph(page, /^Drawn from 4 reads/, 15000);
+    await sleep(500);
+    const f = await footTab(page);
+    seen[what] = f;
+    assertAboveFoot(f, what, 0);
+    assert.ok(f.foot.h > 100, what + ': the foot is not sized, so its rows say nothing: ' + JSON.stringify(f.foot));
+    assert.ok(f.msg.b <= f.clear.t && f.clear.t - f.msg.b <= 12, what + ': the message does not fill the row over Clear and the buttons: ' + JSON.stringify([f.msg, f.clear]));
+    await everyChart(page, what);
+    assert.deepEqual(errors, [], what);
+    await context.close();
+  }
+  for (const [width, height, ups] of [[1366, 768, 0], [1280, 720, 4]]) {
+    const { context, page, errors } = await open(fixtureRoutes(fixture()), { viewport: { width, height } });
+    await signIn(page);
+    await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+    await waitGraph(page, /^Drawn from 4 reads/, 15000);
+    if (ups) await textTo(page, '#cp-zoom-up', ups);
+    await sleep(400);
+    const what = width + ' x ' + height + ' at ' + await textSize(page);
+    const g = await midOf(page, '.console__split--foot');
+    await drag(page, g, { x: g.x, y: 5 }, 12);
+    await sleep(600);
+    const f = await footTab(page);
+    seen[what] = [f.foot, f.own];
+    assertAboveFoot(f, what + ', the grip dragged to the top', 280);
+    await everyChart(page, what + ', the grip dragged to the top');
+    assert.deepEqual(errors, [], what);
+    await context.close();
+  }
+  console.log('     ' + JSON.stringify(seen));
+});
+
+await check('BX: one Escape does one thing with the site\'s bar shown over the Dependencies tab: with the keyboard in the bar it sends the bar away and leaves the tab\'s help open; with the bar brought by the pointer, Escape goes back from a node\'s focus, closes the folded key and closes the help, from inside the tab and from the page itself, each leaving the bar, and the next Escape, which nothing else takes, sends the bar away', async () => {
+  const { context, page, errors } = await open(fixtureRoutes(fixture()), { viewport: { width: 1280, height: 720 }, storage: { symphony_panel_graph_focus: JSON.stringify({ 'acme/demo': 'epic-20' }) } });
+  await signIn(page);
+  await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  await sleep(400);
+  const state = () => page.evaluate(() => ({
+    bar: document.body.classList.contains('console-bar-shown'), help: document.querySelector('#tab-dependencies .console__help').open,
+    key: document.getElementById('cp-graph-keybtn').getAttribute('aria-expanded') === 'true',
+    near: !!document.querySelector('#cp-graph .graph__section:not([hidden]) .control__chart > svg.graph__nearsvg'),
+    inBar: !!document.activeElement && !!document.activeElement.closest('#nav, #flyouts'),
+  }));
+  const barByPointer = async () => {
+    await page.mouse.move(640, 300);
+    await page.mouse.move(640, 3, { steps: 10 });
+    await page.waitForFunction(() => document.body.classList.contains('console-bar-shown'), null, { timeout: 3000 });
+    await page.mouse.move(640, 30, { steps: 3 });
+  };
+  const seen = {};
+  const helpOpen = async () => { await page.click('#tab-dependencies .console__help > summary'); await page.waitForFunction(() => document.querySelector('#tab-dependencies .console__help').open, null, { timeout: 3000 }); };
+  // the keyboard in the bar, the help open under it
+  await helpOpen();
+  await page.focus('#navLinks a');
+  await sleep(200);
+  const inBar = await state();
+  await page.keyboard.press('Escape');
+  await sleep(300);
+  seen['the keyboard in the bar'] = [inBar, await state()];
+  assert.deepEqual([inBar.bar, inBar.inBar, inBar.help], [true, true, true], 'the keyboard in the bar did not show it over the open help');
+  assert.deepEqual(Object.values(await state()).slice(0, 2), [false, true], 'Escape with the keyboard in the bar did not send the bar away alone: ' + JSON.stringify(await state()));
+  await page.click('#tab-dependencies .console__help > summary');
+  await sleep(300);
+  // the bar brought by the pointer over each thing Escape closes; the first Escape closes that, the
+  // second sends the bar away
+  const ways = {
+    'a node\'s focus, the keyboard on its stage': [async () => { const p = await nodeAt(page, 22); await page.mouse.click(p.x, p.y); await waitNear(page, 22); await page.focus(STAGE_SHOWN); }, (s) => s.near],
+    'the folded key': [async () => { await page.click('#cp-graph-keybtn'); }, (s) => s.key],
+    'the help, the keyboard on its ?': [helpOpen, (s) => s.help],
+    'the help, the keyboard on the page': [async () => { await helpOpen(); await page.evaluate(() => document.activeElement.blur()); }, (s) => s.help],
+  };
+  for (const [what, [make, isOpen]] of Object.entries(ways)) {
+    await make();
+    await sleep(300);
+    await barByPointer();
+    const before = await state();
+    await page.keyboard.press('Escape');
+    await sleep(300);
+    const first = await state();
+    await page.keyboard.press('Escape');
+    await sleep(300);
+    const second = await state();
+    seen[what] = [before, first, second];
+    assert.deepEqual([isOpen(before), before.bar], [true, true], what + ': not open with the bar shown over it, so Escape says nothing');
+    assert.deepEqual([isOpen(first), first.bar], [false, true], what + ': the first Escape did not close it alone, leaving the bar');
+    assert.equal(second.bar, false, what + ': the second Escape, which nothing else took, did not send the bar away');
+    await page.mouse.move(640, 500);
+    await sleep(900);
+  }
+  console.log('     ' + JSON.stringify(seen));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('BY: on a laptop every Dependencies chart stays whole on its stage as the console changes round it: the foot sized up and down by its grip, the side column wider and narrower by its grip, the window made smaller and larger, and the site\'s bar brought over the deck by the pointer and sent away, which leaves each chart where it was; nothing past its box and nothing under the foot', async () => {
+  const { context, page, errors } = await open(manyRoutes(3), { extraRoutes: [stubRoute], viewport: { width: 1366, height: 768 } });
+  await signIn(page);
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  await sleep(500);
+  const whole = async (what) => {
+    await sleep(400);
+    for (const key of ['goals', 'all']) {
+      await pick(page, key);
+      await sleep(300);
+      assert.deepEqual(await overflows(page), [], what + ', ' + key + ' shown: something holds more than its box');
+      for (const k of await shownKeys(page)) assertWhole(await stageRead(page, stageOfCard(k)), what + ', ' + key + ' shown, the chart ' + k);
+      const f = await footTab(page);
+      assert.ok(f.tab.b <= f.foot.t + 1, what + ': the tab runs under the foot: ' + JSON.stringify([f.tab, f.foot]));
+    }
+  };
+  const seen = [];
+  const foot = await midOf(page, '.console__split--foot');
+  await drag(page, foot, { x: foot.x, y: foot.y - 220 }, 10);
+  seen.push(['foot up', (await footTab(page)).foot.h]);
+  await whole('the foot sized up');
+  const footNow = await midOf(page, '.console__split--foot');
+  await drag(page, footNow, { x: footNow.x, y: footNow.y + 150 }, 10);
+  seen.push(['foot down', (await footTab(page)).foot.h]);
+  await whole('the foot sized down');
+  for (const dx of [220, -320]) {
+    const side = await midOf(page, '[data-split="side"]');
+    await drag(page, side, { x: side.x + dx, y: side.y }, 10);
+    seen.push(['side ' + dx, await page.$eval('.console__side', (s) => s.offsetWidth)]);
+    await whole('the side column sized by ' + dx + ' px');
+  }
+  for (const [w, h] of [[1100, 640], [1700, 980], [1366, 768]]) {
+    await page.setViewportSize({ width: w, height: h });
+    await whole('the window at ' + w + ' x ' + h);
+  }
+  await pick(page, 'goals');
+  await sleep(300);
+  const rest = await barOver(page);
+  await page.mouse.move(683, 300);
+  await page.mouse.move(683, 3, { steps: 10 });
+  await page.waitForFunction(() => document.body.classList.contains('console-bar-shown'), null, { timeout: 3000 });
+  const shown = await barOver(page);
+  await page.mouse.move(683, 500, { steps: 6 });
+  await page.waitForFunction(() => !document.body.classList.contains('console-bar-shown'), null, { timeout: 3000 });
+  await sleep(400);
+  const gone = await barOver(page);
+  seen.push(['bar', rest.picture, shown.picture, gone.picture]);
+  assert.deepEqual([shown.picture, gone.picture, shown.tab, gone.tab], [rest.picture, rest.picture, rest.tab, rest.tab], 'the bar showing or going moved the chart or the tab');
+  await whole('the bar shown and gone');
+  console.log('     ' + JSON.stringify(seen));
+  assert.deepEqual(errors, []);
+  await context.close();
 });
 
 await browser.close();

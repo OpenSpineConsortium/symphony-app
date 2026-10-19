@@ -1,0 +1,1 @@
+[["    strip.addEventListener('pointermove', function (e) { if (reachesBar(e)) showBar(); });\n", "    strip.addEventListener('pointerover', function (e) { if (hovering(e)) showBar(); });\n"]]

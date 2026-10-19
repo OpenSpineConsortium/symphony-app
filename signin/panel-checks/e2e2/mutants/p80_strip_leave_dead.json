@@ -1,0 +1,1 @@
+[["    strip.addEventListener('pointerleave', function (e) { if (hovering(e)) hideBarSoon(); });\n", "\n"]]
