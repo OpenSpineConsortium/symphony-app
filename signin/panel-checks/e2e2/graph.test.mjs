@@ -8,10 +8,10 @@
 // ones it never makes, the vendored Mermaid loaded from the site only when there is a chart and
 // drawing both charts with their nodes and classes, a tab of its own in the console's rail after
 // Tasks, with its ARIA and its address, the charts drawn while the tab is hidden and shown whole
-// when it opens, a node pressed in this tab or in the Board tab opening the Tasks tab with the
-// task's row centred inside that tab's own box and the window left where it was, the assistant's
-// "show dependencies" opening this tab at its first chart, the tables alone when the drawing script
-// cannot load, a hostile title inert, each stop said in words with nothing half drawn (a 403, a
+// when it opens, a node pressed in this tab or in the Board tab opening it in focus, whose Centre
+// its row opens the Tasks tab with the task's row centred inside that tab's own box and the window
+// left where it was, the assistant's "show dependencies" opening this tab at its first chart, each
+// card's list in its chart's place when the drawing script cannot load, a hostile title inert, each stop said in words with nothing half drawn (a 403, a
 // 429, the cap, the rate limit's reserve), nothing drawn without an epic, a Refresh redrawing the
 // new count, a goal listed with the epics and not as an other issue, a repository switched
 // mid-load, a second page of sub-issues read and counted, pull requests and another repository's
@@ -28,8 +28,8 @@
 // the others with aria-pressed following, the choice kept per repository in this browser and
 // restored on load and on Refresh, no strip for a single chart, and a kept choice that is gone
 // falling back to the first, and (AF to AI) the console's look: each chart a card with its bar and
-// its pills and its list folded, the key, the nodes shaded by their state in place of the board's
-// light colours, and a wide chart opened at its middle, and (AJ to AU) the tiles, the moves between
+// its pills and its list behind List, the key, the nodes shaded by their state in place of the
+// board's light colours, and a wide chart opened whole, and (AJ to AU) the tiles, the moves between
 // the charts and what the look's second review found, and (AV to BK) the zoom: nothing scrolling at
 // four laptop and monitor sizes at every text size and on a phone held either way, the tiles and the
 // buttons sized from the screen, each chart opened whole, the zoom, the pan and the pinch, a node's
@@ -453,12 +453,17 @@ const stageRead = (page, sel) => page.evaluate((sel) => {
   const sb = svg.getBoundingClientRect();
   const nodes = Array.from(svg.querySelectorAll('g.node')).map((g) => {
     const r = g.getBoundingClientRect();
-    return { n: Number((/-flowchart-i([0-9]+)-/.exec(g.id) || [])[1]), x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2, l: r.left, t: r.top, r: r.right, b: r.bottom };
+    return { n: Number((/-flowchart-i([0-9]+)-/.exec(g.id) || [])[1]), x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2, l: r.left, t: r.top, r: r.right, b: r.bottom, focal: g.classList.contains('graph__focal') };
   });
   const sec = host.closest('.graph__section'), tools = sec && sec.querySelector('.graph__tools');
   const floating = tools && getComputedStyle(tools).position === 'absolute' ? tools.getBoundingClientRect() : null;
+  // the corner the floating tools take from the stage, in the stage's own pixels with 4 to spare,
+  // as the page reckons it (graphCorner), where they lie over it
+  const corner = floating && !(floating.right <= hb.left || floating.bottom <= hb.top || floating.left >= hb.right || floating.top >= hb.bottom)
+    ? { w: (floating.right - hb.left) / z - host.clientLeft + 4, h: (floating.bottom - hb.top) / z - host.clientTop + 4 } : null;
+  const w = svg.viewBox ? svg.viewBox.baseVal.width : svg.offsetWidth, h = svg.viewBox ? svg.viewBox.baseVal.height : svg.offsetHeight;
   return {
-    k: Number(m[3]), x: Number(m[1]), y: Number(m[2]), w: svg.viewBox.baseVal.width, h: svg.viewBox.baseVal.height, box: [host.clientWidth, host.clientHeight], z, inner,
+    k: Number(m[3]), x: Number(m[1]), y: Number(m[2]), w, h, box: [host.clientWidth, host.clientHeight], z, inner, corner,
     pic: { l: sb.left, t: sb.top, r: sb.right, b: sb.bottom }, nodes,
     outside: nodes.filter((r) => r.l < inner.l - 1 || r.r > inner.r + 1 || r.t < inner.t - 1 || r.b > inner.b + 1).map((r) => r.n),
     under: floating ? nodes.filter((r) => r.r > floating.left && r.l < floating.right && r.b > floating.top && r.t < floating.bottom).map((r) => r.n) : [],
@@ -470,19 +475,49 @@ const stageRead = (page, sel) => page.evaluate((sel) => {
 // over its corner; never larger than cap times its natural size (1 for a chart, 2 for a focus); and
 // fitted, at that most or touching the stage's padding (12 px) on one side or the other, and, where
 // no tools float over the stage, centred both ways
+// the scale a stage fits its picture whole at and the part of it the picture is fitted to, as the
+// stage reckons them: its box less 12 px each side, or, where the card's tools float over its corner,
+// the part below them or the part beside them, whichever draws the picture larger
+function fitOf(s, cap) {
+  const W = s.box[0], H = s.box[1];
+  const scale = (r) => (r.w > 24 && r.h > 24 ? Math.min((r.w - 24) / s.w, (r.h - 24) / s.h, cap) : 0);
+  const all = { x: 0, y: 0, w: W, h: H };
+  if (!s.corner) return { k: scale(all), room: all };
+  const below = { x: 0, y: s.corner.h, w: W, h: H - s.corner.h }, beside = { x: s.corner.w, y: 0, w: W - s.corner.w, h: H };
+  const room = scale(below) >= scale(beside) ? below : beside;
+  return { k: scale(room), room };
+}
+// a picture drawn whole: every node inside its stage and none under the floating tools, at the
+// scale that fits it to its room, at most cap, and centred in that room
 function assertWhole(s, what, cap) {
   cap = cap || 1;
   assert.ok(s, what + ': no picture on the stage');
   assert.deepEqual(s.outside, [], what + ': a node lies outside the stage: ' + JSON.stringify({ k: s.k, box: s.box, outside: s.outside }));
   assert.deepEqual(s.under, [], what + ': a node is drawn under the card\'s tools');
   assert.ok(s.k > 0 && s.k <= cap + 1e-6, what + ': drawn at ' + s.k + ' times its size, past ' + cap);
-  const pw = (s.pic.r - s.pic.l) / s.z, ph = (s.pic.b - s.pic.t) / s.z;
-  const tight = Math.abs(s.k - cap) < 1e-6 || Math.abs(pw - (s.box[0] - 24)) <= 1.5 || Math.abs(ph - (s.box[1] - 24)) <= 1.5 || s.floating;
-  assert.ok(tight, what + ': not fitted to its stage: ' + JSON.stringify({ k: s.k, picture: [Math.round(pw), Math.round(ph)], box: s.box }));
-  if (!s.floating) {
-    const sides = [s.pic.l - s.inner.l, s.inner.r - s.pic.r, s.pic.t - s.inner.t, s.inner.b - s.pic.b].map((v) => v / s.z);
-    assert.ok(Math.abs(sides[0] - sides[1]) <= 1.5 && Math.abs(sides[2] - sides[3]) <= 1.5, what + ': not centred on its stage: ' + JSON.stringify(sides.map(Math.round)));
-  }
+  const fit = fitOf(s, cap);
+  assert.ok(Math.abs(s.k - fit.k) <= 1e-3 * Math.max(1, fit.k), what + ': not fitted to its stage: ' + JSON.stringify({ k: s.k, fit: fit.k, box: s.box, corner: s.corner }));
+  const left = (s.pic.l - s.inner.l) / s.z, top = (s.pic.t - s.inner.t) / s.z, pw = (s.pic.r - s.pic.l) / s.z, ph = (s.pic.b - s.pic.t) / s.z;
+  const off = [left + pw / 2 - (fit.room.x + fit.room.w / 2), top + ph / 2 - (fit.room.y + fit.room.h / 2)];
+  assert.ok(Math.abs(off[0]) <= 1.5 && Math.abs(off[1]) <= 1.5, what + ': not centred on its stage: ' + JSON.stringify({ off: off.map((v) => Math.round(v * 10) / 10), room: fit.room }));
+}
+// A focus blows its node up (the owner: "if I select a node it will be blown up"): drawn whole where
+// that draws it at least NEAR_GROW times the scale its whole chart was drawn at, and otherwise at that
+// scale about its node, which lies inside the stage, centred on it unless an edge of the picture,
+// kept 12 px inside the stage's, holds it there
+const NEAR_GROW = 1.25;
+function assertFocus(s, what, wholeK) {
+  assert.ok(s && s.near, what + ': no focus on the stage');
+  const fit = fitOf(s, 2), floor = Math.min(2, wholeK * NEAR_GROW);
+  if (fit.k >= floor - 1e-6) return assertWhole(s, what, 2);
+  assert.ok(Math.abs(s.k - floor) <= 1e-3 * floor, what + ': drawn at ' + s.k + ' where its fit is ' + fit.k + ', not ' + NEAR_GROW + ' times the whole chart\'s ' + wholeK);
+  const f = s.nodes.find((g) => g.focal);
+  assert.ok(f, what + ': no node is marked as the focus');
+  assert.ok(f.l >= s.inner.l - 1 && f.r <= s.inner.r + 1 && f.t >= s.inner.t - 1 && f.b <= s.inner.b + 1, what + ': the focus\'s own node runs past its stage');
+  const room = fit.room, z = s.z;
+  const mid = [s.inner.l + (room.x + room.w / 2) * z, s.inner.t + (room.y + room.h / 2) * z];
+  const held = [[s.pic.l - s.inner.l, s.inner.r - s.pic.r], [s.pic.t - s.inner.t, s.inner.b - s.pic.b]].map((p) => p.some((v) => Math.abs(v / z - 12) <= 1.5));
+  assert.ok((Math.abs(f.x - mid[0]) / z <= 1.5 || held[0]) && (Math.abs(f.y - mid[1]) / z <= 1.5 || held[1]), what + ': the focus is not drawn about its node: ' + JSON.stringify({ node: [f.x, f.y], mid, held }));
 }
 // where a node of the picture shown is on the screen, by its number
 const nodeAt = (page, n, sel) => stageRead(page, sel).then((s) => { const x = s && s.nodes.find((g) => g.n === n); assert.ok(x, '#' + n + ' is not drawn on the stage'); return { x: x.x, y: x.y }; });
@@ -959,7 +994,7 @@ await check('K: switching repositories mid-draw never shows the earlier reposito
   await context.close();
 });
 
-await check('L: the table under each chart says the state, what blocks each task and the worker, in words', async () => {
+await check('L: each chart\'s list says the state, what blocks each task and the worker, in words', async () => {
   const { context, page, errors } = await open(fixtureRoutes(fixture()), { extraRoutes: [stubRoute] });
   await signIn(page);
   await waitGraph(page, /^Drawn from 4 reads/);
@@ -1948,7 +1983,7 @@ await check('AP: a site face that never arrives holds the charts back no longer 
   await context.close();
 });
 
-await check('AI: a chart wider than its stage opens whole on a phone, though it was drawn in a hidden tab, is drawn whole again when the window changes, and once the person zooms in keeps their zoom when it changes', async () => {
+await check('AI: a chart far larger than its stage opens whole on a phone, in whichever of its two layouts draws it larger, though it was drawn in a hidden tab, is drawn whole again when the window grows and when it shrinks, and once the person zooms in by a double tap keeps their zoom when it changes', async () => {
   const kids = Array.from({ length: 12 }, (_, i) => issue(71 + i, 'Task number ' + (i + 1) + ' of the wide epic', ['todo']));
   const routes = baseRoutes('acme/demo', [issue(70, 'A wide epic', ['epic'], subs(0, 12))].concat(kids));
   routes['GET /repos/acme/demo/issues/70/sub_issues'] = kids;
@@ -1963,26 +1998,33 @@ await check('AI: a chart wider than its stage opens whole on a phone, though it 
   await sleep(300);
   const first = await stageRead(page);
   assertWhole(first, 'the wide chart opened on a phone');
-  // the window changes while the chart is whole: it is fitted to its new size
-  await page.setViewportSize({ width: 420, height: 844 });
+  // the window changes while the chart is whole, wider and taller, so its stage grows whichever way
+  // limits the fit: it is fitted to its new size
+  await page.setViewportSize({ width: 420, height: 900 });
   await sleep(500);
   const turned = await stageRead(page);
   assertWhole(turned, 'the wide chart once the window changed');
-  // a double tap zooms in about its point, and the window changing then keeps that zoom
+  // and back, narrower and shorter, so its stage shrinks: fitted again, never left larger than it
+  await page.setViewportSize({ width: 390, height: 844 });
+  await sleep(500);
+  const shrunk = await stageRead(page);
+  assertWhole(shrunk, 'the wide chart once the window shrank');
+  // a finger's double tap zooms in about its point, and the window changing then keeps that zoom
   const m = await stageMid(page);
   await page.touchscreen.tap(m.x, m.y);
   await sleep(60);
   await page.touchscreen.tap(m.x, m.y);
   await sleep(500);
   const zoomed = await stageRead(page);
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 420, height: 900 });
   await sleep(500);
   const after = await stageRead(page);
-  console.log('     drawn hidden:', hiddenWhileDrawn, '| opened at:', JSON.stringify([first.k, first.w, first.box]), '| the window wider:', JSON.stringify([turned.k, turned.box]), '| zoomed:', zoomed.k, '| the window back:', JSON.stringify([after.k, after.box]));
+  console.log('     drawn hidden:', hiddenWhileDrawn, '| opened at:', JSON.stringify([first.k, first.w, first.box]), '| the window wider:', JSON.stringify([turned.k, turned.box]), '| back:', JSON.stringify([shrunk.k, shrunk.box]), '| zoomed:', zoomed.k, '| the window wider again:', JSON.stringify([after.k, after.box]));
   assert.equal(hiddenWhileDrawn, true);
-  assert.ok(first.w > first.box[0] * 2, 'the chart is not wide enough to say anything: ' + JSON.stringify([first.w, first.box]));
+  assert.ok(first.k < 0.5, 'the chart is not large enough beside its stage to say anything: ' + JSON.stringify([first.k, first.w, first.h, first.box]));
   assert.ok(turned.k > first.k * 1.05, 'the chart was not fitted again to the wider window');
-  assert.ok(Math.abs(zoomed.k - 2 * turned.k) < 1e-3, 'the double tap did not zoom in twice: ' + zoomed.k);
+  assert.ok(shrunk.k < turned.k / 1.05, 'the chart was not fitted again to the narrower window');
+  assert.ok(Math.abs(zoomed.k - 2 * shrunk.k) < 1e-3, 'the double tap did not zoom in twice: ' + zoomed.k);
   assert.ok(Math.abs(after.k - zoomed.k) < 1e-6, 'the person\'s zoom was thrown away when the window changed: ' + after.k);
   assert.deepEqual(errors, []);
   await opened.context.close();
@@ -1990,8 +2032,9 @@ await check('AI: a chart wider than its stage opens whole on a phone, though it 
 
 // The tiles, the stepping and the moving about (the owner, 2026-10-19: "make the epics more intuitive
 // and navigating that page more fluent"): a bar of each chart's issues by state on its tile, several
-// tiles to a row on a laptop and one sideways row on a phone with the chosen one in view, Previous and
-// Next on each card, the arrow keys on the tiles, a chart dragged with the mouse, Fit, and a fade.
+// tiles to a row on a laptop and one row on a phone, a page of them at a time with the chosen one in
+// view, Previous and Next on each card, the arrow keys on the tiles, a zoomed chart dragged with the
+// mouse, Whole chart, and a fade.
 // A goal over n epics, numbered 100, 200 and on: the first epic has one task, the second two and so
 // on to five, then again, one in each state where there are enough, so the cards' pills differ; the
 // titles run from a word to two lines of a heading. With wide, the second epic has twelve tasks
@@ -2326,7 +2369,7 @@ await check('AN: Whole chart is on every card, quiet while the chart is whole an
   const fromFocus = await stageRead(page), near = await nearRead(page), last = await wholeButton(page);
   console.log('     drawn in a hidden tab:', hiddenWhileDrawn, '| opened:', JSON.stringify([opened.k, opened.box]), '| button at rest:', JSON.stringify(atRest), '| zoomed:', zoomed.k, JSON.stringify(lit), '| back:', back.k, JSON.stringify(quiet), '| in focus:', JSON.stringify(inFocus), '| from the focus:', JSON.stringify([fromFocus.k, near.open, near.whole]), JSON.stringify(last));
   assert.equal(hiddenWhileDrawn, true, 'the wide chart was not drawn in a hidden tab');
-  assert.ok(opened.w > opened.box[0], 'the chart is not wider than its stage, so this says nothing');
+  assert.ok(opened.k < 1, 'the chart fits its stage at its own size, so this says nothing');
   assert.deepEqual([atRest.text, atRest.shown, atRest.idle], ['Whole chart', true, true], 'Whole chart is not there, or is lit on a chart already whole');
   assert.ok(zoomed.k > opened.k * 1.3, 'the zoom\'s + did not zoom in');
   assert.equal(lit.idle, false, 'Whole chart stays quiet on a chart zoomed in');
@@ -2403,7 +2446,7 @@ await check('AQ: an epic\'s sub-issue in another repository, which GitHub\'s sum
   await context.close();
 });
 
-await check('AR: on a laptop the tiles never scroll however many epics there are: with a goal and twelve epics they show a page at a time in one compact row, turned by its arrows, by a swipe across it and by the arrow keys past a page\'s end, so the charts keep most of the deck; and where the page scrolls as a whole the wheel over the tiles scrolls the page and turns nothing', async () => {
+await check('AR: on a laptop the tiles never scroll however many epics there are: with a goal and twelve epics they show a page at a time in one compact row, turned by its arrows, by a swipe across it and by the arrow keys past a page\'s end, so the charts keep most of the deck; and where the console is one long page, in a window 800 px wide, which the tab holds still while it is shown, the wheel over the tiles turns nothing and moves nothing', async () => {
   const { context, page, errors } = await open(manyRoutes(12), { extraRoutes: [stubRoute], viewport: { width: 1280, height: 800 } });
   await signIn(page);
   await waitGraph(page, /^Drawn from 13 reads/, 15000);
@@ -2455,7 +2498,8 @@ await check('AR: on a laptop the tiles never scroll however many epics there are
   assert.deepEqual([last.pressed, last.shown.indexOf('epic-1200') >= 0, last.arrows], ['epic-1200', true, ['on', 'off']], 'End did not turn to the last page');
   assert.deepEqual(errors, []);
   await context.close();
-  // 800 px wide, where the page scrolls as a whole: the wheel over the strip scrolls the page
+  // 800 px wide, where the console is one long page: the tab holds it still, so the wheel over the
+  // strip moves nothing, though the window was placed by the check first
   const narrow = await open(manyRoutes(12), { extraRoutes: [stubRoute], viewport: { width: 800, height: 700 } });
   await signIn(narrow.page);
   await waitGraph(narrow.page, /^Drawn from 13 reads/, 15000);
@@ -2468,10 +2512,11 @@ await check('AR: on a laptop the tiles never scroll however many epics there are
   await narrow.page.mouse.wheel(0, 300);
   await sleep(300);
   const after = await spot();
-  console.log('     where the page scrolls: before the wheel', JSON.stringify(at), '| after', JSON.stringify(after));
+  console.log('     in the one long page: before the wheel', JSON.stringify(at), '| after', JSON.stringify(after));
   assert.equal(at.paged, true, 'the tiles are not in pages at 800 px, so this says nothing');
-  assert.equal(after.shown, at.shown, 'the wheel turned the tiles where the page scrolls as a whole');
-  assert.ok(after.y >= at.y + 100, 'the wheel over the strip did not scroll the page');
+  assert.equal(after.shown, at.shown, 'the wheel turned the tiles where the console is one long page');
+  assert.ok(at.y > 0, 'the window could not be placed, so the page\'s stillness says nothing');
+  assert.equal(after.y, at.y, 'the wheel over the strip moved the page the tab holds');
   assert.deepEqual(narrow.errors, []);
   await narrow.context.close();
 });
@@ -2560,21 +2605,24 @@ const SCREENS = [[1280, 800], [1366, 768], [1440, 900], [1920, 1080], [390, 844,
 const GRAPH_TILE_FULL = 168, GRAPH_TILE_SMALL = 80;
 // every box in and around the Dependencies tab that could scroll, by name, with what it holds past its
 // own size either way where that is more than a pixel: the page, the deck, the console's stage, the
-// tab and its box, the tiles' row, the charts' box, and each card shown with its stage and its list.
-// The page's height is left to a phone, whose console is one long page that scrolls as a whole
-// (control.css); there the tab itself is held to the screen (AV). A list shrunk to its card is read
+// tab and its box, the tiles' row, the key's line, the charts' box, and each card shown with its stage
+// and its list.
+// The page's height is left out only where the tab holds it still, on a phone, whose console is one
+// long page (control.css); there the tab itself is held to the screen (AV, BL). A list shrunk to its card is read
 // by its table as drawn: the box under a transform keeps its own size for its scroll height, though
 // nothing of it lies past the box or can be scrolled to (BH)
 const overflows = (page) => page.evaluate(() => {
   const tab = document.getElementById('tab-dependencies');
   const named = [['the page', document.documentElement], ['the deck', document.getElementById('console')], ['the console\'s stage', tab.closest('.console__stage')], ['the tab', tab],
-    ['the tab\'s box', tab.querySelector('.console__scroll')], ['the tiles', document.getElementById('cp-graph-focus')], ['the charts\' box', document.getElementById('cp-graph')]];
+    ['the tab\'s box', tab.querySelector('.console__scroll')], ['the tiles', document.getElementById('cp-graph-focus')], ['the key', document.getElementById('cp-graph-key')], ['the charts\' box', document.getElementById('cp-graph')]];
   Array.from(document.querySelectorAll('#cp-graph .graph__section')).filter((s) => !s.hidden).forEach((s) => {
     const key = s.getAttribute('data-focus'), list = s.querySelector('.graph__list');
     named.push(['the card ' + key, s], ['the stage of ' + key, s.querySelector('.control__chart')]);
     if (!list.hidden) named.push(['the list of ' + key, list]);
   });
-  const phone = getComputedStyle(document.getElementById('console')).overflow !== 'hidden';
+  // a phone's page is one long page, which the tab holds still while it is shown (graph--held, the
+  // window's overflow hidden): its height is left out there alone, and BL proves no touch moves it
+  const held = document.documentElement.classList.contains('graph--held') && getComputedStyle(document.body).overflowY === 'hidden';
   const past = (e) => {
     if (!e.classList.contains('graph__list')) return [e.scrollWidth - e.clientWidth, e.scrollHeight - e.clientHeight];
     const l = e.getBoundingClientRect(), t = e.querySelector('table').getBoundingClientRect();
@@ -2584,7 +2632,7 @@ const overflows = (page) => page.evaluate(() => {
   for (const [name, e] of named) {
     if (!e) continue;
     const [dx, dy] = past(e);
-    if (dx > 1 || (dy > 1 && !(phone && name === 'the page'))) out.push(name + ' by ' + dx + ' x ' + dy);
+    if (dx > 1 || (dy > 1 && !(held && name === 'the page'))) out.push(name + ' by ' + dx + ' x ' + dy);
   }
   return out;
 });
@@ -2975,7 +3023,7 @@ await check('BA: two fingers pinch a chart on a phone: spread, it zooms in about
   await context.close();
 });
 
-await check('BB: a node pressed opens in focus: the node and the issues one arrow away from it, and only those, drawn whole and larger, the node marked; its card with its number, state, worker, whole title, its arrows in words, a link to it on GitHub that opens a new tab, and Centre its row for the Tasks tab; a node no arrow joins says so; on a laptop and on a phone held either way', async () => {
+await check('BB: a node pressed opens in focus: the node and the issues one arrow away from it, and only those, drawn larger, a quarter larger at the least, whole where that fits and else about the node, the node marked; its card with its number, state, worker, whole title, its arrows in words, a link to it on GitHub that opens a new tab, and Centre its row for the Tasks tab; a node no arrow joins says so; on a laptop and on a phone held either way', async () => {
   const f = fixture();
   for (const [width, height, mobile] of [[1366, 768], [390, 844, true], [844, 390, true]]) {
     const what = width + ' x ' + height;
@@ -2987,7 +3035,7 @@ await check('BB: a node pressed opens in focus: the node and the issues one arro
     const press = async (n) => { const p = await nodeAt(page, n); if (mobile) await page.touchscreen.tap(p.x, p.y); else await page.mouse.click(p.x, p.y); await waitNear(page, n); await sleep(300); };
     // the node's box in the whole chart, then in its focus, where it comes up larger, and on a
     // phone the tiles and the card's heading give way to it
-    const w22 = (await stageRead(page)).nodes.find((g) => g.n === 22);
+    const whole = await stageRead(page), w22 = whole.nodes.find((g) => g.n === 22);
     await press(22);
     const at22 = await nearRead(page), s22 = await stageRead(page), f22 = s22.nodes.find((g) => g.n === 22);
     const roomy = await page.evaluate(() => {
@@ -3009,7 +3057,7 @@ await check('BB: a node pressed opens in focus: the node and the issues one arro
     assert.deepEqual([at22.open, at22.whole, at22.nodes, at22.focal, at22.edges], [true, false, [22, 23, 99], [22], 2], what + ': #22\'s focus does not draw it and its neighbours alone');
     assert.deepEqual([at22.num, at22.state, at22.worker, at22.title, at22.rel], ['#22', 'claimed', 'worker alice', 'Render the section', 'Blocked by #99; blocks #23.'], what + ': #22\'s card does not say what it is');
     assert.deepEqual([at22.link, at22.button], [['Open #22 on GitHub', 'https://github.com/acme/demo/issues/22', '_blank', 'noopener'], 'Centre its row'], what + ': #22\'s card has no link to it or no Centre its row');
-    assertWhole(s22, what + ', #22\'s focus', 2);
+    assertFocus(s22, what + ', #22\'s focus', whole.k);
     assert.ok(s22.near && grew > 1.1, what + ': the node pressed is not drawn larger in its focus than in the whole chart: ' + Math.round(100 * grew) / 100);
     if (mobile) {
       assert.deepEqual([roomy[0], roomy[1] <= 1], ['none', true], what + ': on a phone the tiles or the card\'s heading keep their room from the focus');
@@ -3017,7 +3065,7 @@ await check('BB: a node pressed opens in focus: the node and the issues one arro
       assert.ok(back[0] !== 'none' && (height <= 520 || back[1] > 1), what + ': the tiles or the card\'s heading did not come back with the whole chart');
     } else assert.ok(roomy[0] !== 'none' && roomy[1] > 1, what + ': on a laptop the focus hid the tiles or the card\'s heading');
     assert.deepEqual([at23.nodes, at23.focal, at23.title, at23.titleCut, at23.rel], [[21, 22, 23], [23], 'Write the body | with "quotes" and <tags> #5 and a title long enough to be cut short', false, 'Blocked by #22; blocked by #21, now closed.'], what + ': #23\'s focus or its whole title is not shown');
-    assertWhole(s23, what + ', #23\'s focus', 2);
+    assertFocus(s23, what + ', #23\'s focus', whole.k);
     assert.equal(cardIn, true, what + ': the focus\'s card runs out of the tab');
     assert.deepEqual(errors, [], what);
     await context.close();
@@ -3523,9 +3571,700 @@ await check('BK: the Board tab\'s charts open whole on their stages at most at t
   assert.ok(near1(back.k, whole[1].k, 1e-6), 'Whole chart did not draw the board chart whole again');
   assert.ok(near1(plus.k / whole[1].k, 1.4), 'the board chart\'s + did not zoom in');
   assert.ok(focus.near && JSON.stringify(focus.nodes.map((x) => x.n).sort((a, b) => a - b)) === '[22,23,99]', 'the press did not open #22 in focus with its neighbours');
-  assertWhole(focus, 'the board chart\'s focus', 2);
+  assertFocus(focus, 'the board chart\'s focus', back.k);
   assert.deepEqual(errors, []);
   await context.close();
+});
+
+// The zoom's review (2026-10-19, after BK): what four reviewers found the checks above let through.
+// A phone held either way keeps the page still while the tab is shown (BL); the tab's help never
+// scrolls (BM); a card's list is a stage of its own (BN); a focus's card keeps its state, its link
+// and Centre its row in sight and names each neighbour as a button (BO); the mouse's zoom keeps the
+// point under it and a slow double click is still one (BP); a chart turns to the layout its stage
+// draws larger, and a hub's focus comes up larger (BQ); a finger's gestures (BR); All's pages (BS);
+// a short tab's tiles, a long heading and the folded key on a computer (BT); and the stage's
+// smaller promises (BU).
+
+// a point's place on the screen, the middle of the first element a selector names that is shown
+const midOf = (page, sel) => page.evaluate((sel) => {
+  const e = Array.from(document.querySelectorAll(sel)).find((x) => x.getClientRects().length && getComputedStyle(x).visibility !== 'hidden');
+  if (!e) return null;
+  const b = e.getBoundingClientRect();
+  return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+}, sel);
+const scrollAt = (page) => page.evaluate(() => ({ y: Math.round(window.scrollY), scale: window.visualViewport ? Math.round(window.visualViewport.scale * 1000) / 1000 : 1 }));
+// where the shown card's stage stands on the screen against the foot that sticks to its bottom
+const stageAgainstFoot = (page) => page.evaluate(() => {
+  const sec = Array.from(document.querySelectorAll('#cp-graph .graph__section')).find((s) => !s.hidden), st = sec.querySelector('.control__chart').getBoundingClientRect();
+  const foot = document.querySelector('.console__status').getBoundingClientRect();
+  return { top: Math.round(st.top), bottom: Math.round(st.bottom), height: Math.round(st.height), foot: Math.round(foot.top) };
+});
+
+await check('BL: on a phone held either way the tab holds the page still while it is shown: a finger drawn up or down its head, its tiles, a card\'s tools or the foot, and the wheel, move nothing, and a pinch on its head or its tiles zooms no page; held sideways the site\'s header gives way, so the stage takes two fifths of the screen at the least; a phone turned either way brings the tab back between the header and the foot; and another tab lets the page scroll again', async () => {
+  const { context, page, errors } = await open(fixtureRoutes(fixture()), { viewport: { width: 390, height: 844 }, mobile: true, storage: { symphony_panel_graph_focus: JSON.stringify({ 'acme/demo': 'epic-20' }) } });
+  const cdp = await context.newCDPSession(page);
+  await signIn(page);
+  await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  await sleep(500);
+  const seen = {};
+  const tryAll = async (what) => {
+    const at = await scrollAt(page), moved = [];
+    for (const [name, sel] of [['the head', '#tab-dependencies .console__head'], ['the tiles', '#cp-graph-focus'], ['the card\'s tools', '#cp-graph .graph__section:not([hidden]) .graph__tools'], ['the foot', '.console__status #msg']]) {
+      const p = await midOf(page, sel);
+      assert.ok(p, what + ': ' + name + ' is not shown');
+      const vh = await page.evaluate(() => innerHeight);
+      for (const to of [Math.max(4, p.y - 200), Math.min(vh - 4, p.y + 200)]) {
+        await swipe(cdp, p, { x: p.x, y: to }, 8);
+        const now = await scrollAt(page);
+        if (now.y !== at.y) moved.push(name + ' moved the page from ' + at.y + ' to ' + now.y);
+        if (now.y !== at.y) await page.evaluate((y) => window.scrollTo({ top: y, behavior: 'instant' }), at.y);
+      }
+    }
+    const head = await midOf(page, '#tab-dependencies .console__head');
+    await page.mouse.move(head.x, head.y);
+    await page.mouse.wheel(0, 400);
+    await sleep(300);
+    const wheeled = await scrollAt(page);
+    if (wheeled.y !== at.y) moved.push('the wheel moved the page from ' + at.y + ' to ' + wheeled.y);
+    const zoomed = [];
+    for (const sel of ['#tab-dependencies .console__head', '#cp-graph-focus']) {
+      const p = await midOf(page, sel);
+      await pinch(cdp, { x: p.x, y: p.y }, 40, 160);
+      zoomed.push((await scrollAt(page)).scale);
+    }
+    seen[what] = { at, moved, wheeled: wheeled.y, zoomed };
+    assert.deepEqual(moved, [], what + ': a touch or the wheel moved the page the tab holds');
+    assert.deepEqual(zoomed, [1, 1], what + ': a pinch on the tab\'s head or its tiles zoomed the page');
+  };
+  await tryAll('390 x 844');
+  const upright = await heldOnPhone(page);
+  // turned sideways: the tab comes back between the header, which gives way, and the foot
+  await page.setViewportSize({ width: 844, height: 390 });
+  await sleep(800);
+  const sideways = await heldOnPhone(page), stage = await stageAgainstFoot(page);
+  await tryAll('844 x 390');
+  // and upright again
+  await page.setViewportSize({ width: 390, height: 844 });
+  await sleep(800);
+  const back = await heldOnPhone(page), stageBack = await stageAgainstFoot(page);
+  // another tab: the page is no longer held
+  await toTab(page, 'board');
+  await sleep(300);
+  const free = await page.evaluate(() => ({ held: document.documentElement.classList.contains('graph--held'), overflow: getComputedStyle(document.body).overflowY }));
+  console.log('     ' + JSON.stringify(seen), '| upright:', JSON.stringify(upright), '| turned sideways:', JSON.stringify(sideways), JSON.stringify(stage), '| upright again:', JSON.stringify(back), JSON.stringify(stageBack), '| the Board tab:', JSON.stringify(free));
+  for (const [what, held, st] of [['turned sideways', sideways, stage], ['turned upright again', back, stageBack]]) {
+    assert.ok(held.top >= held.header - 1 && held.bottom <= held.foot + 1, what + ': the tab is not back between the header and the foot: ' + JSON.stringify(held));
+    assert.ok(st.top >= held.header - 1 && st.bottom <= st.foot + 1, what + ': the stage runs under the header or the foot: ' + JSON.stringify(st));
+  }
+  assert.equal(sideways.header, 0, 'held sideways the site\'s header still takes the screen\'s top');
+  assert.ok(stage.height >= 0.4 * 390, 'held sideways the stage takes less than two fifths of the screen: ' + stage.height + ' px');
+  assert.deepEqual([free.held, free.overflow !== 'hidden'], [false, true], 'another tab still holds the page');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// the tab's help as it is laid out open: its box, the paragraphs shown, its pages
+const helpRead = (page) => page.evaluate(() => {
+  const tab = document.getElementById('tab-dependencies'), help = tab.querySelector('.console__help'), box = help.querySelector(':scope > div');
+  const t = tab.getBoundingClientRect(), b = box.getBoundingClientRect();
+  const paras = Array.from(box.querySelectorAll(':scope > p'));
+  const shown = paras.filter((p) => !p.hidden && p.getClientRects().length);
+  const pager = box.querySelector('.graph__helppager');
+  return {
+    open: help.open, box: [Math.round(b.left), Math.round(b.top), Math.round(b.right), Math.round(b.bottom)],
+    inTab: b.left >= t.left - 1 && b.right <= t.right + 1 && b.top >= t.top - 1 && b.bottom <= t.bottom + 1 && b.bottom <= innerHeight + 1,
+    past: [box.scrollWidth - box.clientWidth, box.scrollHeight - box.clientHeight],
+    shown: shown.map((p) => paras.indexOf(p)),
+    outside: shown.filter((p) => { const r = p.getBoundingClientRect(); return r.left < b.left - 1 || r.right > b.right + 1 || r.top < b.top - 1 || r.bottom > b.bottom + 1; }).map((p) => paras.indexOf(p)),
+    paged: !!pager && !pager.hidden, at: pager ? pager.querySelector('.graph__pos').textContent : '', count: paras.length,
+    focus: document.activeElement === help.querySelector('summary'),
+  };
+});
+await check('BM: the tab\'s help opens over the tab under its head and never scrolls: at 1366 x 768 at the usual and the largest text size, at 1920 x 1080 and on a phone held either way, every paragraph shown lies inside its box, which holds no more than it shows and lies inside the tab; where they do not all fit at once its arrows and a swipe across it turn its pages, each paragraph on one; and Escape closes it, the keyboard back on its ?', async () => {
+  const seen = {};
+  for (const [width, height, mobile, up] of [[1366, 768], [1366, 768, false, 5], [1920, 1080], [390, 844, true], [844, 390, true]]) {
+    const { context, page, errors } = await open(fixtureRoutes(fixture()), { extraRoutes: [stubRoute], viewport: { width, height }, mobile });
+    const cdp = mobile ? await context.newCDPSession(page) : null;
+    await signIn(page);
+    await waitGraph(page, /^Drawn from 4 reads/, 15000);
+    if (up) await textTo(page, '#cp-zoom-up', up);
+    const what = width + ' x ' + height + ' at ' + await textSize(page);
+    await page.click('#tab-dependencies .console__help > summary');
+    await sleep(400);
+    const first = await helpRead(page), pages = [first];
+    const all = new Set(first.shown);
+    // the pages turned by the later arrow, and back by a swipe the other way
+    for (let i = 0; first.paged && i < first.count; i++) {
+      const next = '#tab-dependencies .graph__helppager .graph__page[data-step="1"]';
+      if (await page.$eval(next, (b) => b.disabled)) break;
+      await page.click(next);
+      await sleep(200);
+      const r = await helpRead(page);
+      pages.push(r);
+      r.shown.forEach((n) => all.add(n));
+    }
+    let swiped = null;
+    if (first.paged) {
+      const p = await midOf(page, '#tab-dependencies .console__help > div > p:not([hidden])');
+      if (mobile) await swipe(cdp, { x: p.x - 80, y: p.y }, { x: p.x + 80, y: p.y }, 8);
+      else await drag(page, { x: p.x - 80, y: p.y }, { x: p.x + 80, y: p.y });
+      swiped = await helpRead(page);
+    }
+    await page.focus('#tab-dependencies .console__help > summary');
+    await page.click('#tab-dependencies .console__help > div');
+    await page.keyboard.press('Escape');
+    await sleep(200);
+    const closed = await helpRead(page);
+    seen[what] = { pages: pages.map((r) => [r.at, r.shown]), swiped: swiped && swiped.at, closed: [closed.open, closed.focus] };
+    for (const r of pages) {
+      assert.ok(r.open && r.inTab, what + ': the help does not open inside the tab: ' + JSON.stringify(r));
+      assert.ok(r.past[0] <= 1 && r.past[1] <= 1, what + ': the help holds more than its box, by ' + r.past.join(' x '));
+      assert.deepEqual(r.outside, [], what + ': a paragraph of the help runs past its box');
+      assert.ok(r.shown.length >= 1, what + ': a page of the help shows nothing');
+    }
+    assert.equal(all.size, first.count, what + ': a paragraph of the help is on no page: ' + JSON.stringify([...all]));
+    if (first.paged) assert.ok(swiped.at !== pages[pages.length - 1].at, what + ': a swipe across the help did not turn its page');
+    assert.deepEqual([closed.open, closed.focus], [false, true], what + ': Escape did not close the help and give the keyboard back to its ?');
+    assert.deepEqual(errors, [], what);
+    await context.close();
+  }
+  console.log('     ' + JSON.stringify(seen));
+  assert.ok(Object.values(seen).some((s) => s.pages.length > 1) && Object.values(seen).some((s) => s.pages.length === 1), 'the help was paged everywhere or nowhere, so its pages say nothing');
+});
+
+// the list shown as a stage: its table's scale and place, the type it draws, its width beside the list's
+const listRead = (page) => page.evaluate(() => {
+  const sec = Array.from(document.querySelectorAll('#cp-graph .graph__section')).find((s) => !s.hidden), list = sec.querySelector('.graph__list'), t = list.querySelector('table');
+  const m = /translate\(([-0-9.e]+)px, ([-0-9.e]+)px\) scale\(([0-9.e-]+)\)/.exec(t.style.transform) || [];
+  const l = list.getBoundingClientRect(), b = t.getBoundingClientRect(), z = list.offsetWidth ? l.width / list.offsetWidth : 1;
+  const td = t.querySelector('tbody td:nth-child(2)');
+  const zoom = sec.querySelector('.graph__zoom');
+  return { k: Number(m[3]), x: Number(m[1]), y: Number(m[2]), box: [list.clientWidth, list.clientHeight], table: [t.offsetWidth, t.offsetHeight],
+    inside: b.left >= l.left - 1 && b.right <= l.right + 1 && b.top >= l.top - 1 && b.bottom <= l.bottom + 1,
+    px: Math.round(parseFloat(getComputedStyle(td).fontSize) * Number(m[3]) * z * 10) / 10,
+    zoomShown: getComputedStyle(zoom).visibility !== 'hidden' && getComputedStyle(zoom).display !== 'none',
+    // the scale the list's rows would take as a table laid out at the list's own width, as before it
+    // chose a form, fitted whole to the part of the list the card's tools leave, as the stage fits it
+    atOwn: (() => {
+      const was = { w: t.style.width, cols: t.style.getPropertyValue('--gcols'), cards: list.classList.contains('graph__list--cards') };
+      list.classList.remove('graph__list--cards');
+      t.style.setProperty('--gcols', '1');
+      t.style.width = Math.max(1, list.clientWidth - 24) + 'px';
+      const tw = t.offsetWidth, th = t.offsetHeight;
+      list.classList.toggle('graph__list--cards', was.cards);
+      t.style.setProperty('--gcols', was.cols);
+      t.style.width = was.w;
+      const tools = sec.querySelector('.graph__tools'), floating = tools && getComputedStyle(tools).position === 'absolute' ? tools.getBoundingClientRect() : null;
+      const corner = floating && !(floating.right <= l.left || floating.bottom <= l.top || floating.left >= l.right || floating.top >= l.bottom)
+        ? { w: (floating.right - l.left) / z - list.clientLeft + 4, h: (floating.bottom - l.top) / z - list.clientTop + 4 } : null;
+      const W = list.clientWidth, H = list.clientHeight;
+      const fit = (r) => (r.w > 24 && r.h > 24 ? Math.min((r.w - 24) / tw, (r.h - 24) / th, 1) : 0);
+      return corner ? Math.max(fit({ w: W, h: H - corner.h }), fit({ w: W - corner.w, h: H })) : fit({ w: W, h: H });
+    })(),
+    scale: window.visualViewport ? window.visualViewport.scale : 1 };
+});
+await check('BN: a card\'s list is a stage of its own, as its chart is: its table laid out at the width that draws its rows largest and fitted whole, zoomed in by its + and the wheel on a laptop and a pinch on a phone, panned by a drag, and drawn whole again by Whole chart, the page never zooming; for a twelve-row list at 1366 x 768 and on a phone held either way, and where its box is wider than tall, as on a phone held sideways, its words drawn larger than at the list\'s own width where that is too small to read', async () => {
+  const seen = {};
+  for (const [width, height, mobile] of [[1366, 768], [390, 844, true], [844, 390, true]]) {
+    const what = width + ' x ' + height;
+    const { context, page, errors } = await open(wideRoutes(), { viewport: { width, height }, mobile, storage: { symphony_panel_graph_focus: JSON.stringify({ 'acme/demo': 'epic-70' }) } });
+    const cdp = mobile ? await context.newCDPSession(page) : null;
+    await signIn(page);
+    await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+    await waitGraph(page, /^Drawn from 1 read/, 15000);
+    await page.click('#cp-graph .graph__section:not([hidden]) .graph__view[data-view="list"]');
+    await sleep(500);
+    const whole = await listRead(page);
+    const mid = await midOf(page, '#cp-graph .graph__section:not([hidden]) .graph__list');
+    let zoomed;
+    if (mobile) { await pinch(cdp, mid, 60, 180); zoomed = await listRead(page); }
+    else {
+      await page.click(ZOOM_IN);
+      await sleep(400);
+      const plus = await listRead(page);
+      await page.mouse.move(mid.x, mid.y);
+      await page.mouse.wheel(0, -200);
+      await sleep(300);
+      zoomed = await listRead(page);
+      assert.ok(near1(plus.k / whole.k, 1.4), what + ': the list\'s + did not zoom it in: ' + plus.k);
+    }
+    // a drag on the zoomed list from its middle moves it
+    if (mobile) await swipe(cdp, mid, { x: mid.x - 40, y: mid.y - 30 }, 8);
+    else await drag(page, mid, { x: mid.x - 40, y: mid.y - 30 });
+    const panned = await listRead(page);
+    await page.click('#cp-graph .graph__section:not([hidden]) .graph__fit');
+    await sleep(500);
+    const back = await listRead(page);
+    seen[what] = { whole: [whole.k, whole.px, Math.round(whole.atOwn * 1000) / 1000, whole.table, whole.box], zoomed: zoomed.k, panned: [panned.x - zoomed.x, panned.y - zoomed.y], back: back.k, page: zoomed.scale };
+    assert.ok(whole.inside && whole.k <= 1, what + ': the list is not fitted whole: ' + JSON.stringify(whole));
+    assert.ok(whole.k >= whole.atOwn - 1e-3, what + ': the list is drawn smaller than at its own width: ' + JSON.stringify([whole.k, whole.atOwn]));
+    assert.equal(whole.zoomShown, true, what + ': the zoom\'s buttons are not shown with the list');
+    assert.ok(zoomed.k > whole.k * 1.3, what + ': the list was not zoomed in: ' + zoomed.k);
+    assert.equal(zoomed.scale, 1, what + ': the page zoomed, not the list');
+    assert.ok(Math.abs(panned.x - zoomed.x) > 10 || Math.abs(panned.y - zoomed.y) > 10, what + ': a drag did not move the zoomed list');
+    assert.ok(near1(back.k, whole.k, 1e-3) && back.inside, what + ': Whole chart did not draw the list whole again');
+    // a box wider than tall, as a phone's held sideways, lays the rows out wider, each on fewer lines
+    if (whole.box[0] > whole.box[1] && whole.atOwn < 0.6) assert.ok(whole.k > whole.atOwn * 1.2, what + ': the list\'s words are drawn as small as at its own width: ' + JSON.stringify([whole.k, whole.atOwn]));
+    assert.deepEqual(errors, [], what);
+    await context.close();
+  }
+  console.log('     ' + JSON.stringify(seen));
+  assert.ok(Object.values(seen).some((s) => s.whole[2] < 0.6 && s.whole[4][0] > s.whole[4][1]), 'no list wider than tall was too small at its own width, so the width chosen says nothing');
+});
+
+// an epic whose first task has a title of four hundred characters and blocks five others
+const LONG_TITLE = Array.from({ length: 8 }, (_, i) => 'Part ' + (i + 1) + ' of a very long task title that runs on and on').join(', ') + ' and still more words past them';
+function hubRoutes() {
+  const hub = issue(51, LONG_TITLE, ['claimed', 'worker:alice']);
+  const rest = Array.from({ length: 5 }, (_, i) => issue(52 + i, 'Waits on the hub ' + (i + 1), ['todo'], deps(1, 1)));
+  const routes = baseRoutes('acme/demo', [issue(50, 'A hub', ['epic'], subs(0, 6)), hub].concat(rest));
+  routes['GET /repos/acme/demo/issues/50/sub_issues'] = [hub].concat(rest);
+  for (const r of rest) routes['GET /repos/acme/demo/issues/' + r.number + '/dependencies/blocked_by'] = [hub];
+  return routes;
+}
+// the focus's card as drawn: whether its head and its actions lie inside it, its title's place and
+// tooltip, its actions above its title, the floating tools against it, and its neighbours' buttons
+const cardRead = (page) => page.evaluate(() => {
+  const sec = Array.from(document.querySelectorAll('#cp-graph .graph__section')).find((s) => !s.hidden), card = sec.querySelector('.graph__near'), c = card.getBoundingClientRect();
+  const inside = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.left >= c.left - 1 && r.right <= c.right + 1 && r.top >= c.top - 1 && r.bottom <= c.bottom + 1; };
+  const title = card.querySelector('.graph__neartitle'), tools = sec.querySelector('.graph__tools'), t = tools.getBoundingClientRect();
+  const floats = getComputedStyle(tools).position === 'absolute';
+  return {
+    head: inside(card.querySelector('.graph__nearhead')), link: inside(card.querySelector('.graph__nearacts a')), centre: inside(card.querySelector('.graph__nearacts button')),
+    title: inside(title), cut: title.classList.contains('graph__neartitle--cut'), tooltip: title.getAttribute('title') === title.textContent,
+    above: card.querySelector('.graph__nearacts').getBoundingClientRect().bottom <= title.getBoundingClientRect().top + 1,
+    over: floats && !(t.right <= c.left || t.left >= c.right || t.bottom <= c.top || t.top >= c.bottom),
+    floats, to: Array.from(card.querySelectorAll('button.graph__nearto')).map((b) => b.textContent),
+    away: card.querySelector('.graph__nearrel').classList.contains('graph__nearrel--away'),
+    // where the card lies under the stage, as on a phone held upright, the heights the two share
+    under: c.top >= sec.querySelector('.control__chart').getBoundingClientRect().bottom - 1, h: Math.round(c.height), stage: Math.round(sec.querySelector('.control__chart').getBoundingClientRect().height),
+  };
+});
+await check('BO: a focus\'s card never cuts its state, its link or Centre its row: with a title of four hundred characters, beside the stage on a phone held sideways, under it on a phone held upright, where it takes half their room at the most, and at 1366 x 768 at the largest text size, they lie inside the card, the link and Centre its row above the title, which lies inside it too and gives way first, cut only where it must with its whole in its tooltip; in the short form the floating tools never lie over the card; and every neighbour the card names is a button, from the keyboard too, in sight while it has the keyboard, that moves the focus to it', async () => {
+  const seen = {};
+  for (const [width, height, mobile, up] of [[844, 390, true], [390, 844, true], [1366, 768, false, 5], [1366, 768]]) {
+    const { context, page, errors } = await open(hubRoutes(), { viewport: { width, height }, mobile });
+    await signIn(page);
+    await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+    await waitGraph(page, /^Drawn from 6 reads/, 15000);
+    if (up) await textTo(page, '#cp-zoom-up', up);
+    const what = width + ' x ' + height + ' at ' + await textSize(page);
+    await sleep(300);
+    const p = await nodeAt(page, 51);
+    if (mobile) await page.touchscreen.tap(p.x, p.y); else await page.mouse.click(p.x, p.y);
+    await waitNear(page, 51);
+    await sleep(400);
+    const card = await cardRead(page);
+    // the last neighbour's button reached from the keyboard, shown while it has it, and pressed
+    await page.focus('#cp-graph .graph__section:not([hidden]) .graph__near button.graph__nearto:last-of-type');
+    // shown is seen, not laid out: a box clipped out of sight keeps its size, so the point at the
+    // button's middle must be the button's
+    const keyed = await page.evaluate(() => {
+      const b = document.activeElement, r = b.getBoundingClientRect(), c = b.closest('.graph__near').getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { text: b.textContent, shown: r.width > 4 && r.height > 4 && r.top >= c.top - 1 && r.bottom <= c.bottom + 1 && !!hit && (hit === b || b.contains(hit)) };
+    });
+    await page.keyboard.press('Enter');
+    await waitNear(page, 56).catch(() => {});
+    const moved = await nearRead(page);
+    seen[what] = { card, keyed, moved: moved.num };
+    assert.deepEqual([card.head, card.link, card.centre], [true, true, true], what + ': the card cuts its state, its link or Centre its row: ' + JSON.stringify(card));
+    assert.equal(card.title, true, what + ': the title runs past the card');
+    assert.equal(card.above, true, what + ': the link and Centre its row do not stand above the title, where a title of any length leaves them in sight');
+    if (card.cut) assert.equal(card.tooltip, true, what + ': the title is cut with no tooltip that holds it whole');
+    assert.equal(card.over, false, what + ': the card\'s floating tools lie over the focus\'s card');
+    if (card.under) assert.ok(card.h <= card.stage + 12, what + ': the card under the stage takes more than half their room: ' + JSON.stringify([card.h, card.stage]));
+    assert.deepEqual(card.to, ['#52', '#53', '#54', '#55', '#56'], what + ': the card does not name each neighbour as a button');
+    assert.deepEqual([keyed.text, keyed.shown, moved.num], ['#56', true, '#56'], what + ': the keyboard did not reach the last neighbour in sight and move the focus to it');
+    assert.deepEqual(errors, [], what);
+    await context.close();
+  }
+  console.log('     ' + JSON.stringify(seen));
+  assert.ok(Object.values(seen).some((s) => s.card.floats), 'no screen floated the card\'s tools, so their place says nothing');
+  assert.ok(Object.values(seen).some((s) => s.card.cut) && Object.values(seen).some((s) => !s.card.cut), 'the long title was cut everywhere or nowhere, so its fit says nothing');
+  assert.ok(Object.values(seen).some((s) => s.card.away), 'no card put the arrows\' words out of sight, so the keyboard\'s reach into them says nothing');
+  assert.ok(Object.values(seen).some((s) => s.card.under), 'no card lay under its stage, so the room the two share says nothing');
+});
+
+await check('BP: the mouse zooms about its pointer: the wheel keeps the point under the pointer there at every step, while the zoomed chart still fits its stage too; a wheel that counts lines, as Firefox\'s does, zooms as one that counts pixels does; a double click a little slower than the usual, 350 and 450 ms between its clicks, zooms in about its point and opens no focus; a right click on a node opens nothing; and Ctrl with + is the browser\'s, which leaves the chart as it is', async () => {
+  const { context, page, errors } = await open(fixtureRoutes(fixture()), { viewport: { width: 1920, height: 1080 }, storage: { symphony_panel_graph_focus: JSON.stringify({ 'acme/demo': 'epic-20' }) } });
+  await signIn(page);
+  await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  await sleep(400);
+  const whole = await stageRead(page);
+  // the wheel over #22, off the stage's middle, in three steps: #22 stays under the pointer
+  const p = await nodeAt(page, 22);
+  await page.mouse.move(p.x, p.y);
+  const drift = [];
+  for (let i = 0; i < 3; i++) {
+    await page.mouse.wheel(0, -60);
+    await sleep(150);
+    const q = await nodeAt(page, 22);
+    drift.push(Math.round(Math.hypot(q.x - p.x, q.y - p.y) * 10) / 10);
+  }
+  const wheeled = await stageRead(page);
+  // a wheel in lines, three of them, against one in pixels, forty-eight, from the whole chart
+  const byWheel = async (mode, delta) => {
+    await page.click('#cp-graph .graph__section:not([hidden]) .graph__fit');
+    await sleep(400);
+    const m = await stageMid(page);
+    await page.evaluate(({ m, mode, delta }) => {
+      const host = Array.from(document.querySelectorAll('#cp-graph .graph__section')).find((s) => !s.hidden).querySelector('.control__chart');
+      host.dispatchEvent(new WheelEvent('wheel', { deltaY: delta, deltaMode: mode, clientX: m.x, clientY: m.y, bubbles: true, cancelable: true }));
+    }, { m, mode, delta });
+    await sleep(300);
+    return (await stageRead(page)).k;
+  };
+  const lines = await byWheel(1, -3), pixels = await byWheel(0, -48);
+  // slow double clicks on #22: each zooms in about its point and opens no focus
+  const slow = [];
+  for (const gap of [350, 450]) {
+    await page.click('#cp-graph .graph__section:not([hidden]) .graph__fit');
+    await sleep(500);
+    const n = await nodeAt(page, 22);
+    const before = await stageRead(page);
+    await page.mouse.move(n.x, n.y);
+    await page.mouse.down();
+    await page.mouse.up();
+    await sleep(gap);
+    await page.mouse.down({ clickCount: 2 });
+    await page.mouse.up({ clickCount: 2 });
+    await sleep(800);
+    const after = await stageRead(page), at = await nodeAt(page, 22);
+    slow.push({ gap, k: Math.round(after.k / before.k * 1000) / 1000, near: after.near, drift: Math.round(Math.hypot(at.x - n.x, at.y - n.y)) });
+  }
+  // a right click on #22, and Ctrl with + on the stage
+  await page.click('#cp-graph .graph__section:not([hidden]) .graph__fit');
+  await sleep(500);
+  const r = await nodeAt(page, 22);
+  await page.mouse.click(r.x, r.y, { button: 'right' });
+  await sleep(800);
+  const right = await nearRead(page);
+  await page.focus(STAGE_SHOWN);
+  const k0 = (await stageRead(page)).k;
+  // each read alone, since a + and a - the stage took would undo each other
+  await page.keyboard.press('Control+Equal');
+  await sleep(400);
+  const k1 = (await stageRead(page)).k;
+  await page.keyboard.press('Control+Minus');
+  await sleep(400);
+  const k2 = (await stageRead(page)).k;
+  console.log('     whole:', whole.k, '| #22 off the pointer after each step of the wheel:', JSON.stringify(drift), wheeled.k, '| three lines:', lines, 'forty-eight pixels:', pixels, '| slow double clicks:', JSON.stringify(slow), '| a right click:', right.open, '| Ctrl with + and -:', JSON.stringify([k0, k1, k2]));
+  assert.ok(wheeled.k > whole.k * 1.2, 'the wheel did not zoom in');
+  assert.ok(drift.every((d) => d <= 1.5), 'the wheel did not keep #22 under the pointer: ' + JSON.stringify(drift));
+  assert.ok(lines > whole.k * 1.05 && near1(lines, pixels, 1e-3), 'a wheel in lines did not zoom as one in pixels: ' + JSON.stringify([lines, pixels]));
+  for (const s of slow) assert.ok(near1(s.k, 2, 0.02) && !s.near && s.drift <= 2, 'a double click ' + s.gap + ' ms slow did not zoom in about its point, or opened a focus: ' + JSON.stringify(s));
+  assert.equal(right.open, false, 'a right click opened the node in focus');
+  assert.ok(near1(k0, k1, 1e-6) && near1(k0, k2, 1e-6), 'Ctrl with + or - zoomed the chart: ' + JSON.stringify([k0, k1, k2]));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('BQ: a chart is drawn in whichever of its two layouts, top to bottom or left to right, its stage draws larger: the goals over six epics, wide top to bottom on a monitor, stand left to right and larger on a phone held upright; and a node with many neighbours, the goal over its six epics, comes up a quarter larger at the least in its focus than in the whole chart, at 1280 x 800, 1440 x 900 and on a phone', async () => {
+  const seen = {};
+  for (const [width, height, mobile] of [[1920, 1080], [1280, 800], [1440, 900], [390, 844, true]]) {
+    const what = width + ' x ' + height;
+    const { context, page, errors } = await open(manyRoutes(6), { viewport: { width, height }, mobile });
+    await signIn(page);
+    await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+    await waitGraph(page, /^Drawn from 7 reads/, 30000);
+    await pick(page, 'goals');
+    await sleep(500);
+    const whole = await stageRead(page), w1 = whole.nodes.find((g) => g.n === 1);
+    const p = await nodeAt(page, 1);
+    if (mobile) await page.touchscreen.tap(p.x, p.y); else await page.mouse.click(p.x, p.y);
+    await waitNear(page, 1);
+    await sleep(400);
+    const focus = await stageRead(page), f1 = focus.nodes.find((g) => g.n === 1);
+    seen[what] = { face: [whole.w, whole.h], k: whole.k, box: whole.box, grew: Math.round((f1.r - f1.l) / (w1.r - w1.l) * 100) / 100, focus: focus.k };
+    assertWhole(whole, what + ', the goals');
+    assertFocus(focus, what + ', the goal\'s focus', whole.k);
+    assert.ok(seen[what].grew >= NEAR_GROW - 0.02, what + ': the goal is not drawn a quarter larger in its focus: ' + seen[what].grew);
+    assert.deepEqual(errors, [], what);
+    await context.close();
+  }
+  console.log('     ' + JSON.stringify(seen));
+  const wide = seen['1920 x 1080'], phone = seen['390 x 844'];
+  assert.ok(wide.face[0] > wide.face[1], 'on the monitor the goals are not drawn top to bottom, wider than tall');
+  assert.ok(phone.face[1] > phone.face[0], 'on the phone the goals are not turned left to right, taller than wide');
+  const asWide = Math.min((phone.box[0] - 24) / wide.face[0], (phone.box[1] - 24) / wide.face[1], 1);
+  assert.ok(phone.k > asWide * 1.2, 'turned, the goals are not drawn larger on the phone than top to bottom: ' + JSON.stringify([phone.k, asWide]));
+});
+
+await check('BR: on a phone: the finger left after a pinch pans the chart it zoomed; a finger\'s press gives the stage the keyboard with no ring, the first tap on a page opened at its address too, while the keyboard\'s own way to it draws one; two quick taps on two nodes apart are two presses, the second opening its node, and no zoom; a tap on the line of what was drawn shows it whole and another cuts it again; and leaving a focus by Previous brings the tiles back', async () => {
+  const { context, page, errors } = await open(fixtureRoutes(fixture()), { viewport: { width: 390, height: 844 }, mobile: true, storage: { symphony_panel_graph_focus: JSON.stringify({ 'acme/demo': 'epic-20' }) } });
+  const cdp = await context.newCDPSession(page);
+  await signIn(page);
+  await page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  await sleep(400);
+  const whole = await stageRead(page), m = await stageMid(page);
+  // a pinch out, then one finger lifted and the other drawn up and to the left. Chrome's touch
+  // emulation lifts no finger alone (a move or a start that leaves one out keeps it down, and an end
+  // lifts them all), so the first finger's lift is its pointerup, given the stage as the browser
+  // would give it, and the other carries on as Chrome's own touch
+  await page.evaluate(() => {
+    const h = Array.from(document.querySelectorAll('#cp-graph .graph__section')).find((s) => !s.hidden).querySelector('.control__chart');
+    window.__downs = [];
+    h.addEventListener('pointerdown', (e) => window.__downs.push({ id: e.pointerId, x: e.clientX, y: e.clientY }), true);
+  });
+  const at = (d) => [{ x: m.x - d / 2, y: m.y }, { x: m.x + d / 2, y: m.y }];
+  await touchesAt(cdp, 'touchStart', at(60));
+  for (let i = 1; i <= 8; i++) await touchesAt(cdp, 'touchMove', at(60 + 140 * i / 8));
+  const last = at(200)[1], first = at(200)[0];
+  await page.evaluate((p) => {
+    const h = Array.from(document.querySelectorAll('#cp-graph .graph__section')).find((s) => !s.hidden).querySelector('.control__chart'), d = window.__downs[0];
+    h.dispatchEvent(new PointerEvent('pointerup', { pointerId: d.id, pointerType: 'touch', isPrimary: true, clientX: p.x, clientY: p.y, bubbles: true, cancelable: true }));
+  }, first);
+  await sleep(100);
+  const pinched = await stageRead(page);
+  for (let i = 1; i <= 8; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: last.x - 50 * i / 8, y: last.y - 40 * i / 8, id: 1 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await sleep(300);
+  const panned = await stageRead(page);
+  const ringRead = (pg) => pg.evaluate(() => { const h = document.activeElement; return { stage: h.classList.contains('control__chart'), outline: getComputedStyle(h).outlineStyle, keyboards: h.matches(':focus-visible') }; });
+  const ring = await ringRead(page);
+  // the keyboard's way to the stage: Tab on from Whole chart, past the card's tools that can take it
+  await page.click('#cp-graph .graph__section:not([hidden]) .graph__fit');
+  await sleep(400);
+  await page.focus('#cp-graph .graph__section:not([hidden]) .graph__fit');
+  for (let i = 0; i < 5 && !await page.evaluate(() => document.activeElement.classList.contains('control__chart')); i++) await page.keyboard.press('Tab');
+  const keyed = await page.evaluate(() => { const h = document.activeElement; return { stage: h.classList.contains('control__chart'), outline: getComputedStyle(h).outlineStyle }; });
+  // two quick taps on #22 and #23, apart
+  const a = await nodeAt(page, 22), b = await nodeAt(page, 23);
+  await page.touchscreen.tap(a.x, a.y);
+  await sleep(80);
+  await page.touchscreen.tap(b.x, b.y);
+  await waitNear(page, 23).catch(() => {});
+  await sleep(300);
+  const two = await nearRead(page);
+  // the line of what was drawn, tapped twice
+  const line = await midOf(page, '#cp-graph-state');
+  const lineRead = () => page.evaluate(() => { const s = document.getElementById('cp-graph-state'); return { open: s.hasAttribute('data-open'), cut: s.scrollHeight > s.clientHeight + 1 }; });
+  const line0 = await lineRead();
+  await page.touchscreen.tap(line.x, line.y);
+  await sleep(200);
+  const line1 = await lineRead();
+  await page.touchscreen.tap(line.x, line.y);
+  await sleep(200);
+  const line2 = await lineRead();
+  // from the focus, Previous: the goals' chart with the tiles back
+  await page.tap('#cp-graph .graph__section:not([hidden]) .graph__prev');
+  await sleep(600);
+  const left = await page.evaluate(() => ({ shown: Array.from(document.querySelectorAll('#cp-graph .graph__section')).filter((s) => !s.hidden).map((s) => s.getAttribute('data-focus')).join(), tiles: getComputedStyle(document.getElementById('cp-graph-focus')).display, near: document.getElementById('tab-dependencies').classList.contains('graph--near') }));
+  console.log('     a pinch:', whole.k, '->', pinched.k, '| the finger left drawn by -50, -40:', JSON.stringify([panned.x - pinched.x, panned.y - pinched.y]), '| after a finger\'s press:', JSON.stringify(ring), '| by the keyboard:', JSON.stringify(keyed), '| two taps apart:', JSON.stringify([two.open, two.num]), '| the line:', JSON.stringify([line0, line1, line2]), '| Previous from the focus:', JSON.stringify(left));
+  assert.ok(pinched.k > whole.k * 1.5, 'the pinch did not zoom in');
+  assert.ok(Math.abs(panned.x - pinched.x + 50) <= 3 && Math.abs(panned.y - pinched.y + 40) <= 3, 'the finger left after the pinch did not pan the chart');
+  assert.deepEqual([ring.stage, ring.outline], [true, 'none'], 'a finger\'s press did not give the stage the keyboard, or drew a ring round it');
+  // a page opened at its address with its sign-in kept, where nothing was pressed before the finger's
+  // tap: there Chrome counts the focus the tap gives the stage as the keyboard's, the case in which
+  // a ring would be drawn
+  const kept = await open(fixtureRoutes(fixture()), { viewport: { width: 390, height: 844 }, mobile: true, path: '/symphony/control/?repo=acme/demo#dependencies',
+    storage: { symphony_panel_token: 'github_pat_TEST', symphony_panel_repos: JSON.stringify(['acme/demo']), symphony_panel_graph_focus: JSON.stringify({ 'acme/demo': 'epic-20' }) } });
+  await kept.page.waitForSelector('#cp-app:not(.hidden)', { timeout: 8000 });
+  await waitGraph(kept.page, /^Drawn from 4 reads/, 15000);
+  await sleep(400);
+  const spot = await stageMid(kept.page);
+  await kept.page.touchscreen.tap(spot.x, spot.y);
+  await sleep(100);
+  const firstTap = await ringRead(kept.page);
+  assert.deepEqual(kept.errors, []);
+  await kept.context.close();
+  console.log('     the first tap on a page opened at its address:', JSON.stringify(firstTap));
+  assert.equal(firstTap.keyboards, true, 'Chrome did not count the first tap\'s focus as the keyboard\'s, so the ring\'s absence says nothing');
+  assert.deepEqual([firstTap.stage, firstTap.outline], [true, 'none'], 'the first tap on a page opened at its address drew a ring round the stage');
+  assert.deepEqual(keyed.stage && keyed.outline !== 'none', true, 'the keyboard\'s way to the stage draws no ring');
+  assert.deepEqual([two.open, two.num], [true, '#23'], 'two quick taps on two nodes apart did not open the second in focus');
+  assert.deepEqual([line0.open, line0.cut, line1.open, line1.cut, line2.open], [false, true, true, false, false], 'a tap on the line of what was drawn did not show it whole, or another did not cut it again');
+  assert.deepEqual(left, { shown: 'goals', tiles: 'grid', near: false }, 'leaving a focus by Previous did not bring the tiles back');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('BS: All never draws a cell smaller than a chart can be read in: with a goal and twelve epics at 1280 x 800 at 150%, each cell shown is 150 by 110 of the box\'s own pixels at the least, a page of them at a time under arrows that say where they stand, turned by them and by a swipe across a cell, every chart on one page', async () => {
+  const { context, page, errors } = await open(manyRoutes(12), { extraRoutes: [stubRoute], viewport: { width: 1280, height: 800 } });
+  await signIn(page);
+  await waitGraph(page, /^Drawn from 13 reads/, 15000);
+  await textTo(page, '#cp-zoom-up', 4);
+  const size = await textSize(page);
+  await pick(page, 'all');
+  await sleep(500);
+  const cells = () => page.evaluate(() => {
+    const box = document.getElementById('cp-graph'), b = box.getBoundingClientRect(), z = box.offsetWidth ? b.width / box.offsetWidth : 1;
+    const shown = Array.from(box.querySelectorAll('.graph__section')).filter((s) => !s.hidden);
+    const pager = document.getElementById('cp-graph-allpager');
+    return { keys: shown.map((s) => s.getAttribute('data-focus')), least: [Math.min.apply(null, shown.map((s) => s.getBoundingClientRect().width / z)), Math.min.apply(null, shown.map((s) => s.getBoundingClientRect().height / z))].map(Math.round),
+      at: pager && !pager.hidden ? pager.querySelector('.graph__pos').textContent : null, inside: shown.every((s) => { const r = s.getBoundingClientRect(); return r.left >= b.left - 1 && r.right <= b.right + 1 && r.top >= b.top - 1 && r.bottom <= b.bottom + 1; }) };
+  });
+  const pages = [await cells()];
+  for (let i = 0; i < 14; i++) {
+    const next = '#cp-graph-allpager .graph__page[data-step="1"]';
+    if (!(await page.$(next)) || await page.$eval(next, (x) => x.disabled)) break;
+    await page.click(next);
+    await sleep(300);
+    pages.push(await cells());
+  }
+  // a swipe to the right across a cell turns back a page
+  const c = await midOf(page, '#cp-graph .graph__section:not([hidden]) .control__chart');
+  await drag(page, { x: c.x - 60, y: c.y }, { x: c.x + 60, y: c.y });
+  await sleep(400);
+  const swiped = await cells();
+  console.log('     1280 x 800 at ' + size + ':', JSON.stringify(pages), '| a swipe back:', swiped.at);
+  const seenKeys = new Set(pages.flatMap((p) => p.keys));
+  assert.ok(pages.length > 1, 'All drew every cell on one page, so its pages say nothing');
+  for (const p of pages) {
+    assert.ok(p.least[0] >= 149 && p.least[1] >= 109, 'All drew a cell under 150 by 110: ' + JSON.stringify(p.least));
+    assert.ok(p.inside, 'a cell of All runs past the charts\' box');
+    assert.match(p.at || '', /^Page [0-9]+ of [0-9]+$/, 'All\'s arrows do not say where they stand');
+  }
+  assert.equal(seenKeys.size, 13, 'a chart is on no page of All');
+  assert.equal(swiped.at, pages[pages.length - 2].at, 'a swipe across a cell did not turn All back a page');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('BT: where the tab is short an epic\'s tile says its number before its title, so epics whose titles begin alike still differ; a card\'s heading of any length takes two lines at the most, its whole in its tooltip; and on a computer the key stands in its line where it fits and folds behind its Key button where it would be cut or the tab is short, never cut either way', async () => {
+  const { context, page, errors } = await open(manyRoutes(5), { extraRoutes: [stubRoute], viewport: { width: 1440, height: 900 } });
+  await signIn(page);
+  await waitGraph(page, /^Drawn from 6 reads/, 15000);
+  await pick(page, 'epic-300');
+  await sleep(400);
+  const head = () => page.evaluate(() => {
+    const sec = Array.from(document.querySelectorAll('#cp-graph .graph__section')).find((s) => !s.hidden), h = sec.querySelector('.graph__head h3');
+    const line = parseFloat(getComputedStyle(h).lineHeight) || parseFloat(getComputedStyle(h).fontSize) * 1.2;
+    // a short tab hides the heading but for readers, its tile naming the chart, so its lines count
+    // only where it is shown
+    return { shown: h.offsetHeight > 2, lines: Math.round(h.offsetHeight / line * 10) / 10, cut: h.scrollHeight > h.clientHeight + 1, tooltip: h.getAttribute('title') === h.textContent, words: h.textContent.length };
+  });
+  const key = () => page.evaluate(() => {
+    const k = document.getElementById('cp-graph-key'), b = document.getElementById('cp-graph-keybtn');
+    return { fold: document.getElementById('tab-dependencies').classList.contains('graph--keyfold'), key: getComputedStyle(k).display, button: getComputedStyle(b).display, past: k.scrollWidth - k.clientWidth };
+  });
+  const usual = await head(), keyUsual = await key();
+  await textTo(page, '#cp-zoom-up', 5);
+  await sleep(300);
+  const large = await head(), keyLarge = await key(), size = await textSize(page);
+  const short = await page.evaluate(() => document.getElementById('tab-dependencies').classList.contains('graph--short'));
+  const tiles = await page.$$eval('#cp-graph-focus .graph__chip:not([hidden]) .graph__ttitle[data-num]', (ts) => ts.map((t) => [t.getAttribute('data-num'), getComputedStyle(t, '::before').content]));
+  const cutLarge = await overflows(page);
+  // a laptop's 1280 x 800, where the tab is under the height the key's line may take from the stage
+  const small = await open(manyRoutes(5), { extraRoutes: [stubRoute], viewport: { width: 1280, height: 800 } });
+  await signIn(small.page);
+  await waitGraph(small.page, /^Drawn from 6 reads/, 15000);
+  await sleep(300);
+  const keySmall = await small.page.evaluate(() => ({ fold: document.getElementById('tab-dependencies').classList.contains('graph--keyfold'), tab: document.getElementById('tab-dependencies').clientHeight }));
+  const cutSmall = await overflows(small.page);
+  assert.deepEqual(small.errors, []);
+  await small.context.close();
+  console.log('     epic #300\'s heading at 100%:', JSON.stringify(usual), 'at ' + size + ':', JSON.stringify(large), '| the key at 100%:', JSON.stringify(keyUsual), 'at ' + size + ':', JSON.stringify(keyLarge), 'at 1280 x 800:', JSON.stringify(keySmall), '| short:', short, '| the tiles:', JSON.stringify(tiles));
+  assert.deepEqual([cutLarge, cutSmall], [[], []], 'something holds more than its box: ' + JSON.stringify([cutLarge, cutSmall]));
+  assert.equal(keySmall.fold, true, 'at 1280 x 800, a tab ' + keySmall.tab + ' px tall, the key does not fold, so its line takes the stage\'s room');
+  for (const [at, h] of [['100%', usual], [size, large]]) {
+    assert.ok(!h.shown || h.lines <= 2.05, 'at ' + at + ' the heading takes more than two lines: ' + h.lines);
+    assert.equal(h.tooltip, true, 'at ' + at + ' the heading has no tooltip that holds it whole');
+  }
+  assert.ok(usual.shown && usual.cut && usual.lines > 1.5, 'at 100% the heading is not shown on two lines and cut, so its two lines say nothing: ' + JSON.stringify(usual));
+  assert.deepEqual([keyUsual.fold, keyUsual.key, keyUsual.button, keyUsual.past <= 1], [false, 'flex', 'none', true], 'at 100% on 1440 x 900 the key does not stand whole in its line');
+  assert.deepEqual([keyLarge.fold, keyLarge.key, keyLarge.button !== 'none'], [true, 'none', true], 'at ' + size + ' the key does not fold behind its Key button');
+  assert.equal(short, true, 'the tab is not short at ' + size + ', so the tiles\' short form says nothing');
+  assert.ok(tiles.length >= 2 && tiles.every(([num, before]) => before === '"' + num + ' "'), 'a short tab\'s epic tiles do not say their numbers: ' + JSON.stringify(tiles));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// an epic of three tasks, #61 blocking #62 and #63 and #62 blocking #63, so from #61 its two
+// neighbours lie the same way, one nearer than the other
+function tieRoutes() {
+  const a = issue(61, 'First', ['todo']), b = issue(62, 'Second', ['todo'], deps(1, 1)), c = issue(63, 'Third', ['todo'], deps(2, 2));
+  const routes = baseRoutes('acme/demo', [issue(60, 'A tie', ['epic'], subs(0, 3)), a, b, c]);
+  routes['GET /repos/acme/demo/issues/60/sub_issues'] = [a, b, c];
+  routes['GET /repos/acme/demo/issues/62/dependencies/blocked_by'] = [a];
+  routes['GET /repos/acme/demo/issues/63/dependencies/blocked_by'] = [a, b];
+  return routes;
+}
+await check('BU: a zoomed chart keeps inside its edges when its stage changes size; a focus drawn once is kept, so moving back and forth between two neighbours draws nothing again; of two neighbours the same way a swipe goes to the nearer; and a short swipe of the mouse that starts and ends on one tile turns the tiles\' page and presses no tile', async () => {
+  // the clamp: epic #20 zoomed in and dragged to its far corner, then the window made narrower and wider
+  const z = await open(fixtureRoutes(fixture()), { viewport: { width: 1366, height: 768 }, storage: { symphony_panel_graph_focus: JSON.stringify({ 'acme/demo': 'epic-20' }) } });
+  await signIn(z.page);
+  await z.page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+  await waitGraph(z.page, /^Drawn from 4 reads/, 15000);
+  await sleep(300);
+  for (let i = 0; i < 3; i++) await z.page.click(ZOOM_IN);
+  await sleep(400);
+  const spot = await freeSpot(z.page);
+  await drag(z.page, spot, { x: spot.x - 3000, y: spot.y - 3000 }, 12);
+  const gaps = [];
+  for (const width of [1100, 1600]) {
+    await z.page.setViewportSize({ width, height: 768 });
+    await sleep(600);
+    const s = await stageRead(z.page);
+    const pw = (s.pic.r - s.pic.l) / s.z, ph = (s.pic.b - s.pic.t) / s.z;
+    const sides = [s.pic.l - s.inner.l, s.inner.r - s.pic.r, s.pic.t - s.inner.t, s.inner.b - s.pic.b].map((v) => Math.round(v / s.z));
+    gaps.push({ width, sides, larger: [pw > s.box[0] - 24, ph > s.box[1] - 24] });
+  }
+  // the cache: Mermaid's renders counted while the focus moves #22, #23, #22, #23
+  const renders = await z.page.evaluate(() => { const m = window.mermaid; if (!m || !m.render) return false; const r = m.render; window.__renders = 0; m.render = function () { window.__renders++; return r.apply(this, arguments); }; return true; });
+  await z.page.click('#cp-graph .graph__section:not([hidden]) .graph__fit');
+  await sleep(400);
+  const counts = [];
+  for (const n of [22, 23, 22, 23]) {
+    const p = await nodeAt(z.page, n);
+    await z.page.mouse.click(p.x, p.y);
+    await waitNear(z.page, n);
+    await sleep(300);
+    counts.push(await z.page.evaluate(() => window.__renders));
+  }
+  assert.deepEqual(z.errors, []);
+  await z.context.close();
+  // the tie: #61's focus, its two neighbours the same way, and the arrow key that way
+  const t = await open(tieRoutes(), { viewport: { width: 1366, height: 768 } });
+  await signIn(t.page);
+  await t.page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
+  await waitGraph(t.page, /^Drawn from 3 reads/, 15000);
+  await sleep(300);
+  const a = await nodeAt(t.page, 61);
+  await t.page.mouse.click(a.x, a.y);
+  await waitNear(t.page, 61);
+  await sleep(400);
+  const f = await stageRead(t.page), n61 = f.nodes.find((g) => g.n === 61), n62 = f.nodes.find((g) => g.n === 62), n63 = f.nodes.find((g) => g.n === 63);
+  const way = (g) => Math.atan2(g.y - n61.y, g.x - n61.x) * 180 / Math.PI;
+  const dx = n62.x - n61.x, dy = n62.y - n61.y;
+  // a swipe the way halfway between the two, so both lie at one angle to it; the picture follows the
+  // finger, so the swipe is drawn the other way, as a map is
+  const half = (way(n62) + way(n63)) / 2 * Math.PI / 180, mid = await stageMid(t.page);
+  await drag(t.page, mid, { x: mid.x - 220 * Math.cos(half), y: mid.y - 220 * Math.sin(half) }, 10);
+  await waitNear(t.page, 62).catch(() => {});
+  await sleep(300);
+  const tie = await nearRead(t.page);
+  assert.deepEqual(t.errors, []);
+  await t.context.close();
+  // the short swipe on one tile, drawn by the mouse on a laptop's tiles, a goal and twelve epics, where
+  // a press and its release on one tile make a click, which a finger's swipe never does
+  const s = await open(manyRoutes(12), { extraRoutes: [stubRoute], viewport: { width: 1280, height: 800 } });
+  await signIn(s.page);
+  await waitGraph(s.page, /^Drawn from 13 reads/, 15000);
+  await sleep(300);
+  const before = await s.page.evaluate(() => ({ shown: Array.from(document.querySelectorAll('#cp-graph-focus .graph__chip')).filter((b) => !b.hidden).map((b) => b.getAttribute('data-focus')), pressed: document.querySelector('#cp-graph-focus .graph__chip[aria-pressed="true"]').getAttribute('data-focus') }));
+  const tile = await s.page.evaluate(() => { const b = Array.from(document.querySelectorAll('#cp-graph-focus .graph__chip')).filter((c) => !c.hidden).pop(), r = b.getBoundingClientRect(); return { l: r.left, r: r.right, y: r.top + r.height / 2, w: r.width }; });
+  await drag(s.page, { x: tile.r - 6, y: tile.y }, { x: tile.r - 50, y: tile.y }, 6);
+  await sleep(400);
+  const after = await s.page.evaluate(() => ({ shown: Array.from(document.querySelectorAll('#cp-graph-focus .graph__chip')).filter((b) => !b.hidden).map((b) => b.getAttribute('data-focus')), pressed: document.querySelector('#cp-graph-focus .graph__chip[aria-pressed="true"]').getAttribute('data-focus') }));
+  assert.deepEqual(s.errors, []);
+  await s.context.close();
+  console.log('     the zoomed chart\'s sides after the window changed:', JSON.stringify(gaps), '| renders after #22, #23, #22, #23:', renders, JSON.stringify(counts), '| from #61:', JSON.stringify([Math.round(way(n62)), Math.round(way(n63))]), 'a swipe between them to', tie.num, '| a 44 px swipe on one tile ' + Math.round(tile.w) + ' px wide:', JSON.stringify([before, after]));
+  for (const g of gaps) {
+    if (g.larger[0]) assert.ok(g.sides[0] <= 13 && g.sides[1] <= 13, 'at ' + g.width + ' px the zoomed chart hangs off its stage sideways: ' + JSON.stringify(g.sides));
+    if (g.larger[1]) assert.ok(g.sides[2] <= 13 && g.sides[3] <= 13, 'at ' + g.width + ' px the zoomed chart hangs off its stage up or down: ' + JSON.stringify(g.sides));
+  }
+  assert.ok(gaps.some((g) => g.larger[0] || g.larger[1]), 'the chart was not larger than its stage, so the clamp says nothing');
+  assert.equal(renders, true, 'Mermaid\'s render could not be counted');
+  assert.ok(counts[1] > counts[0] && counts[0] > 0, 'the focus was not drawn at all: ' + JSON.stringify(counts));
+  assert.deepEqual([counts[2], counts[3]], [counts[1], counts[1]], 'moving back to a focus drawn before drew it again: ' + JSON.stringify(counts));
+  assert.ok(Math.abs(way(n62) - way(n63)) < 60 && Math.hypot(n63.x - n61.x, n63.y - n61.y) > Math.hypot(dx, dy) * 1.3, 'from #61 its neighbours do not lie one way at two distances, so the tie says nothing');
+  assert.equal(tie.num, '#62', 'a swipe went to the farther of two neighbours the same way');
+  assert.notDeepEqual(after.shown, before.shown, 'a short swipe on one tile did not turn the tiles\' page');
+  assert.equal(after.pressed, before.pressed, 'a short swipe on one tile pressed it');
 });
 
 await browser.close();

@@ -1,0 +1,1 @@
+[["window.addEventListener('resize', function () { graphPhoneFit(!tab.hidden); });", "window.addEventListener('resize', function () { graphPhoneFit(false); });"]]

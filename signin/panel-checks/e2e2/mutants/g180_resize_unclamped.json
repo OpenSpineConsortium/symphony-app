@@ -1,0 +1,1 @@
+[["    else { stageClamp(st, true); stageApply(st, false); }", "    else { stageApply(st, false); }"]]

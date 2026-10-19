@@ -1,0 +1,1 @@
+[["    var drawn = view.nearSvg[n] ? Promise.resolve(view.nearSvg[n]) : loadMermaid()", "    var drawn = false ? Promise.resolve(view.nearSvg[n]) : loadMermaid()"]]

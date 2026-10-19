@@ -1,0 +1,1 @@
+[["(Math.abs(cos - best.cos) <= 0.05 && d < best.d)", "(Math.abs(cos - best.cos) <= 0.05 && d > best.d)"]]

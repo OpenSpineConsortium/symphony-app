@@ -1,0 +1,1 @@
+[["        var b = el('button', 'graph__nearto', '#' + m);", "        var b = el('span', 'graph__nearto', '#' + m);"]]

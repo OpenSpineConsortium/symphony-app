@@ -1,1 +1,1 @@
-[["        if (all()) graphSelect(key, draw.repo);\n        else if (n != null && n !== c.focus) graphNearOpen(c, n);", "        if (all()) return;\n        else if (n != null && n !== c.focus) graphNearOpen(c, n);"]]
+[["    function open() { if (all()) graphSelect(key, draw.repo); }", "    function open() { }"]]

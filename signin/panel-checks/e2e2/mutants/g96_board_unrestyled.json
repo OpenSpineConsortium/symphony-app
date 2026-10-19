@@ -1,1 +1,1 @@
-[["      graphRestyle(chart.host);\n", "      if (!chart.host.closest('#cp-board')) graphRestyle(chart.host);\n"]]
+[["  function graphSvgs(texts, label, near) {", "  function graphSvgs(texts, label, near, plain) {"], ["      graphRestyle(wrap);\n", "      if (!plain) graphRestyle(wrap);\n"], ["      }, false);\n      clear(chart.host);", "      }, false, !chart.turns);\n      clear(chart.host);"]]

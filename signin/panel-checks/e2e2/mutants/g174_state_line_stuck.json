@@ -1,0 +1,1 @@
+[["    $('cp-graph-state').addEventListener('click', function () { this.toggleAttribute('data-open'); });\n", ""]]

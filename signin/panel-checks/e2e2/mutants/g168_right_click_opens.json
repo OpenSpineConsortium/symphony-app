@@ -1,0 +1,1 @@
+[["    if (!st.svg || (e.pointerType === 'mouse' && e.button !== 0)) return;", "    if (!st.svg) return;"]]

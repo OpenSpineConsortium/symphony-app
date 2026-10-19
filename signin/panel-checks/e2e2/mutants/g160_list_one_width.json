@@ -1,0 +1,1 @@
+[["var GRAPH_LIST_WIDTHS = [1, 1.4, 2, 2.8, 4],", "var GRAPH_LIST_WIDTHS = [1],"], ["    var best = cards && cards.k > table.k * GRAPH_LIST_CARDS ? cards : table;", "    var best = table;"]]

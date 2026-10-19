@@ -1,1 +1,1 @@
-[["    inn.addEventListener('click', function () { stageStep(view.host, 1.4); });", "    inn.addEventListener('click', function () {});"]]
+[["    inn.addEventListener('click', function () { stageStep(shown(), 1.4); });", "    inn.addEventListener('click', function () {});"]]

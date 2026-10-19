@@ -1,1 +1,1 @@
-[["    st.x = stageClampWay(st.x, st.w * st.k, r.w, f.x, f.w);\n    st.y = stageClampWay(st.y, st.h * st.k, r.h, f.y, f.h);\n", ""]]
+[["    st.x = stageClampWay(st.x, st.w * st.k, r.w, f.x, f.w, centre);\n    st.y = stageClampWay(st.y, st.h * st.k, r.h, f.y, f.h, centre);\n", ""]]

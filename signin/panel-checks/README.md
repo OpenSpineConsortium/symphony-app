@@ -49,7 +49,7 @@ ghu_TEST or github_pat_X.
   answer, the issue read again before each question and replaced when closed, one press at a time,
   a sign-in changed under the page, a watch read on after a sign-in, and Stop watching; its cadence
   constants are shortened in the served script, and a check may serve its own.
-- `e2e2/graph.test.mjs`: 75 checks of the panel's Dependencies tab (site branch
+- `e2e2/graph.test.mjs`: 85 checks of the panel's Dependencies tab (site branch
   claude/graph-section, 2026-10-18; a section of the long page until the console): the chart text
   the page hands the drawing, byte for byte the two blocks symphony-protocol's board writes for its
   fixture board-epics.json (board-epics-STATE.md, copied into the check from symphony-protocol
@@ -180,7 +180,43 @@ ghu_TEST or github_pat_X.
   place, the list fitted whole as the chart is and never scrolling (BH); the key folded behind its
   Key button on a phone (BI); no glide and no fade where less motion is asked (BJ); and the Board
   tab's charts whole on their stages, zoomed by + and the trackpad's pinch, holding the finger once
-  zoomed and leaving the plain wheel to the board (BK). Seventeen checks were rewritten for the zoom,
+  zoomed and leaving the plain wheel to the board (BK). From the zoom's review (BL to BU, the same
+  day, after four reviewers' thirty-five findings): on a phone held either way the page held still
+  while the tab is shown, a finger drawn up or down the tab's head, its tiles, a card's tools or the
+  foot and the wheel moving nothing, a pinch off the stage zooming the chart and never the page, the
+  tab brought back whole when the phone turns, and held sideways the site's header given up and the
+  stage at least two fifths of the screen (BL); the tab's help never scrolling, in pages of
+  paragraphs under arrows where it does not fit, at 1366 x 768 at 100% and 170%, 1920 x 1080 and
+  on a phone held either way, and closed by Escape from inside it (BM); a card's list a stage of
+  its own, laid out as a table at the width that draws its rows largest, or as cards in columns
+  where that draws them a good deal larger, never smaller than as a table at the list's own width,
+  zoomed by its + and the wheel and by a pinch, panned by a drag and drawn whole by Whole chart, the
+  page never zooming (BN); a focus's card with a title of four hundred characters keeping its
+  state, its link and Centre its row inside it and above the title, the title giving way, the
+  floating tools never over the card, and every neighbour a button the keyboard reaches (BO); the
+  mouse's zoom about its pointer at every step, a wheel in lines as one in pixels, double clicks at
+  350 and 450 ms still one, a right click opening nothing and Ctrl with + or - the browser's (BP);
+  a chart drawn top to bottom or left to right, whichever its stage draws larger, and a hub's focus
+  a quarter larger at the least (BQ); on a phone the finger left after a pinch panning, a finger's
+  press drawing no ring while the keyboard's way to the stage draws one, two quick taps on two
+  nodes apart two presses, the state line opened and cut by a tap, and the tiles back when a focus
+  is left by Previous (BR); All in pages whose cells are 150 by 110 at the least, turned by its
+  arrows and a swipe (BS); a short tab's tiles saying their numbers, a heading of any length on two
+  lines at the most with its whole in its tooltip, and the key folding where it would be cut or the
+  tab is short, at 1280 x 800 too (BT); and a zoomed chart kept inside its edges when its stage
+  changes size, a focus drawn once kept, a swipe between two neighbours the same way going to the
+  nearer, and a short swipe on one tile turning the tiles' page and pressing nothing (BU). Two
+  helpers and six checks were rewritten for that review: assertWhole, which every check of a whole
+  picture goes through, now
+  asks the fit and the centring of the part of the stage the floating tools leave (it let a
+  sideways phone's charts shrink by two fifths unseen), and a focus is held to its growth by
+  assertFocus in BB and BK; the overflow every check reads leaves the page's height out only where
+  the tab holds the page (it left it out on every phone) and reads the key's line too; AI, whose
+  chart now turns, asks a chart far larger than its stage, grows the window and shrinks it again,
+  and zooms by a finger's double tap; AN asks a chart larger than its stage in its layout; AR, on
+  the narrow window that is now one long page the tab holds, asks that the wheel moves nothing; L
+  names the list under each chart for the List in its place; and the suite's header says what the
+  tab now does. Seventeen checks were rewritten for the zoom,
   each to say what the page now promises in place of what it took away: D (a node pressed opens its
   focus in this tab, whose Centre its row opens the Tasks tab, as a row of the list does), E and Q
   (the list shown in the chart's place with its Chart switch off where the chart cannot be drawn, in
@@ -413,7 +449,7 @@ ghu_TEST or github_pat_X.
   (signin/README.md, step 9). GitHub's 5xx and 429 while the person types the code are the
   service's to answer, as github_unreachable, which K5 holds the page asks again at the same
   pace; test_worker.mjs holds the service's side.
-- `e2e2/mutants/`: 460 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/mutants/`: 486 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
@@ -509,8 +545,33 @@ ghu_TEST or github_pat_X.
   layout now holds by itself: g30 (the charts' box scrolled back to its top, a box that no longer
   scrolls, V) and g99 (a hold through Refresh rounded to a whole pixel, where the tab on a phone is
   given the screen's height in whole pixels, so the rounded hold is the same height, P12); p17 and
-  p19, below, went for the same reason. The stylesheet's part of the zoom, which no mutant of the
-  script reaches, is proved by the ten changed copies of assets/css/control.css under
+  p19, below, went for the same reason. From the zoom's review, against site branch
+  claude/dependencies-zoom on 2026-10-19, twenty-seven more, g156 to g182, each caught: the page
+  never held on a phone (BL, AV) and a phone's turn leaving the window where it was (BL); Escape
+  deaf inside the help, and the help never paged (BM); the list at its own width alone with no
+  cards, and the list no stage, never zoomed nor joined by a finger on its card (BN); the focus's
+  card never fitted, its title before its link, the floating tools' room ignored, and its
+  neighbours named as words (BO); the mouse's double click as quick as a finger's, a wheel's lines
+  counted as pixels, a right click opening a focus, and Ctrl with + zooming the chart (BP); one
+  layout only, and a focus never grown (BQ, BB); no pan after a pinch, two taps apart taken for a
+  double tap, the state line deaf to a tap, a tile pressed from a focus keeping it, and a finger's
+  mark kept once the stage lets the keyboard go (BR); All's cells of any size (BS); a focus drawn
+  again each time, the farther of two neighbours the same way, the tiles' swipe pressing the tile
+  it ends on, and a resize leaving a zoomed chart off its edges (BU); and the stage's hold of the
+  pointer put off to its first move again (AM). Seventeen were rewritten for the review, their
+  text having moved: g56 and g96 (the restyle, now made once for every chart, so g96 leaves the
+  Board's charts unrestyled by the layout they never turn to), g113 (the clamp, which now centres
+  too), g124 (the focus's bound, beside its floor), g126 (the swipe's step), g128 (Whole chart,
+  now the list's too), g129 (All's grid, now of the page shown), g130 (a press under All), g133
+  (the list's fit, now the stage's), g136 (a chart's bound), g141 (a finger's double tap, now
+  AI's, since the mouse's double click is the browser's own), g143 and g144 (the resize, now
+  against the fit its floor sets; g144 is caught by AI's window made smaller again), g148 (the
+  card's +), g152 (the tiles' swipe, a turn now shared with the help) and g155 (a lone node's
+  words). One was retired: g146 (All's cell heading guessed at 34 px), since All's cells now have a
+  least size and come in pages, so the heading's height chose another grid at none of 56 screens
+  and text sizes tried (1280 x 800, 1366 x 768, 1440 x 900 and 1920 x 1080, 100% to 170%, six and
+  twelve epics), where no check can see it. The stylesheet's part of the zoom, which no mutant of the
+  script reaches, is proved by the twenty-two changed copies of assets/css/control.css under
   `e2e2/styles/`, each a `.json` of pairs that `CSSEDIT` applies, with its `.only` and `.suite`, run
   by the same runner and each seen failing its check: the tiles (s01) or the card's heading (s02)
   keeping their room from a focus on a phone (BB), the focus's title cut at two lines on a short
@@ -519,7 +580,14 @@ ghu_TEST or github_pat_X.
   BA), the tab's box no longer held to the deck (s06, AV), one button size on every screen (s07, AW),
   the key never folded (s08, BI), the card's heading kept on a short tab (s09, AV) and the focus's
   fade where less motion is asked (s10, BJ; the script itself sets no glide then, so the fade is
-  the stylesheet's own part). m7 (E5's 404 unsaid) was already STALE before the zoom, its text gone
+  the stylesheet's own part); and from the zoom's review, s11 to s22: the body left to scroll on a
+  phone (BL, AV), the tab's touch left to the browser (BL), the site's header kept on a phone held
+  sideways (BL), a finger's ring drawn round the stage (BR), a card's heading unclamped (BT), the
+  short tiles' number unsaid (BT), the help's head left sticky over it (BM), the list's zoom hidden
+  (BN), a short tab's full tiles on one row (BL), the focus's card unbounded under the stage (BO),
+  the cards in one column (BN) and the arrows' words kept out of sight from the keyboard (BO); s03
+  was rewritten as the short form's focus title cut to one line whatever its room (BB), since the
+  rule it changed is gone. m7 (E5's 404 unsaid) was already STALE before the zoom, its text gone
   from the script, and is left as it was. The 63 of the Folders tab (`f*`, each with a `.json.suite` naming
   folders.test.mjs) were caught against site branch claude/folders-explorer on 2026-10-18, the first
   48 also against the site's script at commit 044b8b3, f06 rewritten for the explorer's name cell;
