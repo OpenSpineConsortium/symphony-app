@@ -39,7 +39,7 @@ ghu_TEST or github_pat_X.
   a word, and the last repository taken off deleting the list.
 - `e2e2/panel.test.mjs`: the panel's walkthrough on both pages.
 - `e2e2/hostile.test.mjs`: 13 hostile-input checks.
-- `e2e2/assistant.test.mjs`: 21 checks of the panel's assistant (site branch claude/assistant-panel,
+- `e2e2/assistant.test.mjs`: 26 checks of the panel's assistant (site branch claude/assistant-panel,
   2026-10-18): who may ask (write access, and the repository's workflow carrying
   .github/symphony/assistant.md), the label and the issue made once and only on a press, the
   question's state block and its size, the conditional polling (If-None-Match and a 304) and where
@@ -149,7 +149,7 @@ ghu_TEST or github_pat_X.
   page.evaluate,
   which opens nothing, so the page and not console-tabs.mjs is seen opening the tab. A check that
   wants the drawing recorded instead of made serves a stand-in for the library on its route.
-- `e2e2/folders.test.mjs`: 58 checks of the console's Folders tab, /symphony/control/#folders
+- `e2e2/folders.test.mjs`: 63 checks of the console's Folders tab, /symphony/control/#folders
   (site branch claude/folders-page, 2026-10-18; the tab took the place of the page folders.html
   before that page shipped), against a mocked Microsoft consent page, a mocked Microsoft Graph,
   the mocked service's three `/drive` routes and a mocked GitHub that keeps what Track writes as
