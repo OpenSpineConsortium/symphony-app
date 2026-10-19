@@ -22,7 +22,12 @@
 // ground, a board whose title opens an HTML comment shown whole, the charts on a ground their edges
 // show on, a press on a task the tables do not hold staying in this tab, a draw that reads nothing
 // once the open issues' answer says the token is under the reserve, the last repository taken off
-// the list and an open list cut short. Each check states what the page promises; a FAIL is a
+// the list and an open list cut short, and (AA to AE) the focus strip that, where there are two
+// charts or more, shows one epic's chart at a time, a zoomed-out goals chart, or All: its chips and
+// ARIA, the first chart shown by default and the rest hidden, a chip showing its chart and hiding
+// the others with aria-pressed following, the choice kept per repository in this browser and
+// restored on load and on Refresh, no strip for a single chart, and a kept choice that is gone
+// falling back to the first. Each check states what the page promises; a FAIL is a
 // defect. Every token is a stand-in.
 //
 // The console shows one tab at a time, so each check opens the Dependencies tab by its rail button
@@ -416,6 +421,8 @@ await check('C: the vendored Mermaid, loaded once from the site, draws both char
   await waitGraph(page, /^Drawn from 4 reads/, 15000);
   const drawnHidden = await page.evaluate(() => document.getElementById('tab-dependencies').hidden);
   await toTab(page, 'dependencies');
+  // the focus strip shows one chart at a time; show every chart so this check sees both whole
+  await page.click('#cp-graph-focus button[data-focus="all"]');
   const svgs = await page.$$eval('#cp-graph .control__chart svg', (list) => list.map((svg) => ({
     nodes: Array.from(svg.querySelectorAll('g.node')).map((g) => {
       const label = g.querySelector('foreignObject, text');
@@ -461,6 +468,9 @@ await check('D: a node pressed opens the Tasks tab with the task\'s row centred 
   const before = await where(page);
   assert.deepEqual([before.hash, before.shown, before.y], ['#dependencies', ['dependencies'], 0]);
   assert.ok(before.scrollable, 'the page fits the window, so the window staying at 0 proves nothing');
+  // the focus strip shows the first chart (Goals); #22 is in the epic chart, so show every chart first
+  await page.click('#cp-graph-focus button[data-focus="all"]');
+  await page.waitForSelector('#cp-graph g.node[id*="-flowchart-i22-"]', { state: 'visible', timeout: 8000 });
   await page.click('#cp-graph g.node[id*="-flowchart-i22-"]');
   // read at once, before any call that would open a tab itself
   const after = await where(page);
@@ -1339,6 +1349,9 @@ await check('W: a node pressed for a task the tables do not hold stays in this t
   await signIn(page);
   await page.waitForSelector('#cp-graph svg', { timeout: 15000 });
   await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  // #21 and #22 are in the epic chart; the focus strip shows the first chart, so show every chart
+  await page.click('#cp-graph-focus button[data-focus="all"]');
+  await page.waitForSelector('#cp-graph g.node[id*="-flowchart-i22-"]', { state: 'visible', timeout: 8000 });
   // an earlier press, which opened the Tasks tab and said its focus on the message line
   await page.click('#cp-graph g.node[id*="-flowchart-i22-"]');
   await page.waitForFunction(() => /Focused #22/.test(document.getElementById('msg').textContent), null, { timeout: 8000 });
@@ -1360,6 +1373,124 @@ await check('W: a node pressed for a task the tables do not hold stays in this t
   assert.equal(msg, words);
   assert.equal(await page.$$eval('#cp-app tr.control__focus', (rows) => rows.length), 0);
   assert.deepEqual(opened.map((p) => p.url()), []);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// The focus strip: with two charts or more, chips show one epic's chart at a time, a zoomed-out
+// goals chart, or All, the next step of the owner's 2026-10-17 ask (focus one epic, or a zoomed-out
+// view of epics to goals; docs/research/control-board-graph.md).
+await check('AA: the focus strip lists All, Goals and each epic, shows the first chart by default and hides the rest, with its ARIA', async () => {
+  const { context, page, errors } = await open(fixtureRoutes(fixture()), { extraRoutes: [stubRoute] });
+  await signIn(page);
+  await page.waitForSelector('#cp-graph .graph__section', { timeout: 15000 });
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  const strip = await page.evaluate(() => {
+    const s = document.getElementById('cp-graph-focus');
+    return {
+      hidden: s.hidden, role: s.getAttribute('role'), label: s.getAttribute('aria-label'),
+      chips: Array.from(s.querySelectorAll('.graph__chip')).map((b) => [b.getAttribute('data-focus'), b.textContent, b.getAttribute('aria-pressed')]),
+      sections: Array.from(document.querySelectorAll('#cp-graph .graph__section')).map((sec) => [sec.getAttribute('data-focus'), sec.hidden]),
+    };
+  });
+  console.log('     strip:', JSON.stringify(strip));
+  assert.equal(strip.hidden, false, 'the strip is hidden although there are two charts');
+  assert.equal(strip.role, 'group');
+  assert.ok(strip.label, 'the strip has no accessible name');
+  assert.deepEqual(strip.chips.map((c) => c[0]), ['all', 'goals', 'epic-20']);
+  assert.deepEqual([strip.chips[0][1], strip.chips[1][1]], ['All', 'Goals']);
+  assert.match(strip.chips[2][1], /^#20 Draw the board 1\/3$/);
+  assert.deepEqual(strip.chips.map((c) => c[2]), ['false', 'true', 'false'], 'the first chart, Goals, is not the one pressed');
+  assert.deepEqual(strip.sections, [['goals', false], ['epic-20', true]], 'the first chart is not shown alone');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('AB: a chip shows its chart and hides the rest, All shows every chart, and aria-pressed follows', async () => {
+  const { context, page, errors } = await open(fixtureRoutes(fixture()), { extraRoutes: [stubRoute] });
+  await signIn(page);
+  await page.waitForSelector('#cp-graph .graph__section', { timeout: 15000 });
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  const read = () => page.evaluate(() => ({
+    pressed: Array.from(document.querySelectorAll('#cp-graph-focus .graph__chip')).filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.getAttribute('data-focus')),
+    shown: Array.from(document.querySelectorAll('#cp-graph .graph__section')).filter((s) => !s.hidden).map((s) => s.getAttribute('data-focus')),
+  }));
+  await page.click('#cp-graph-focus button[data-focus="epic-20"]');
+  const epic = await read();
+  await page.click('#cp-graph-focus button[data-focus="all"]');
+  const all = await read();
+  await page.click('#cp-graph-focus button[data-focus="goals"]');
+  const goals = await read();
+  console.log('     epic:', JSON.stringify(epic), '| all:', JSON.stringify(all), '| goals:', JSON.stringify(goals));
+  assert.deepEqual(epic, { pressed: ['epic-20'], shown: ['epic-20'] });
+  assert.deepEqual(all, { pressed: ['all'], shown: ['goals', 'epic-20'] });
+  assert.deepEqual(goals, { pressed: ['goals'], shown: ['goals'] });
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('AC: the chosen chip is kept per repository in this browser, restored on load and on Refresh, and written on a press', async () => {
+  const { context, page, errors } = await open(fixtureRoutes(fixture()), {
+    extraRoutes: [stubRoute],
+    storage: { symphony_panel_graph_focus: JSON.stringify({ 'acme/demo': 'epic-20', 'acme/other': 'all' }) },
+  });
+  await signIn(page);
+  // the restored choice hides the first section, so wait for the sections to be there, not shown
+  await page.waitForSelector('#cp-graph .graph__section', { state: 'attached', timeout: 15000 });
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  const shown = () => page.evaluate(() => Array.from(document.querySelectorAll('#cp-graph .graph__section')).filter((s) => !s.hidden).map((s) => s.getAttribute('data-focus')));
+  const restored = await shown();
+  await page.click('#cp-graph-focus button[data-focus="goals"]');
+  const saved = await page.evaluate(() => localStorage.getItem('symphony_panel_graph_focus'));
+  await page.click('#cp-refresh');
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  const afterRefresh = await shown();
+  console.log('     restored:', JSON.stringify(restored), '| saved after a press:', saved, '| after Refresh:', JSON.stringify(afterRefresh));
+  assert.deepEqual(restored, ['epic-20'], 'the saved choice for this repository was not restored');
+  assert.deepEqual(JSON.parse(saved), { 'acme/demo': 'goals', 'acme/other': 'all' }, 'the press did not write the choice for this repository alone');
+  assert.deepEqual(afterRefresh, ['goals'], 'Refresh did not restore the kept choice');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('AD: a repository with one chart shows no strip and the one chart whole', async () => {
+  const one = {
+    open: [issue(40, 'Lone epic', ['epic'], subs(0, 1)), issue(41, 'Only task', ['todo'])],
+    subIssues: { 40: [issue(41, 'Only task', ['todo'])] },
+    blockedBy: {},
+  };
+  const { context, page, errors } = await open(fixtureRoutes(one), { extraRoutes: [stubRoute] });
+  await signIn(page);
+  await page.waitForSelector('#cp-graph .graph__section', { timeout: 15000 });
+  await waitGraph(page, /^Drawn from/, 15000);
+  const seen = await page.evaluate(() => ({
+    stripHidden: document.getElementById('cp-graph-focus').hidden,
+    chips: document.querySelectorAll('#cp-graph-focus .graph__chip').length,
+    sections: Array.from(document.querySelectorAll('#cp-graph .graph__section')).map((s) => [s.getAttribute('data-focus'), s.hidden]),
+  }));
+  console.log('     one chart:', JSON.stringify(seen));
+  assert.equal(seen.stripHidden, true, 'the strip shows for a single chart');
+  assert.equal(seen.chips, 0, 'the strip has chips for a single chart');
+  assert.deepEqual(seen.sections, [['epic-40', false]], 'the one chart is not shown');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('AE: a kept choice that names a chart no longer there falls back to the first', async () => {
+  const { context, page, errors } = await open(fixtureRoutes(fixture()), {
+    extraRoutes: [stubRoute],
+    storage: { symphony_panel_graph_focus: JSON.stringify({ 'acme/demo': 'epic-999' }) },
+  });
+  await signIn(page);
+  await page.waitForSelector('#cp-graph .graph__section', { timeout: 15000 });
+  await waitGraph(page, /^Drawn from 4 reads/, 15000);
+  const seen = await page.evaluate(() => ({
+    pressed: Array.from(document.querySelectorAll('#cp-graph-focus .graph__chip')).filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.getAttribute('data-focus')),
+    shown: Array.from(document.querySelectorAll('#cp-graph .graph__section')).filter((s) => !s.hidden).map((s) => s.getAttribute('data-focus')),
+  }));
+  console.log('     gone choice:', JSON.stringify(seen));
+  assert.deepEqual(seen.pressed, ['goals'], 'a gone choice did not fall back to the first chart');
+  assert.deepEqual(seen.shown, ['goals']);
   assert.deepEqual(errors, []);
   await context.close();
 });
