@@ -1,0 +1,1 @@
+[[", where its rulesets and branch protection also stop being enforced.'\n        + ' Its code scanning stops unless its owner has GitHub Code Security, and its secret scanning and push protection unless its owner has GitHub Secret Protection'", "'"]]
