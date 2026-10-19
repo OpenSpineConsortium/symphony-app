@@ -1,0 +1,1 @@
+[["    say('Queueing the task...');\n    // the dialog closes at once; what the request says comes to the deck's foot, and the fields keep\n    // their words for another try\n    closeDialog('dlg-task');", "    say('Queueing the task...');"]]

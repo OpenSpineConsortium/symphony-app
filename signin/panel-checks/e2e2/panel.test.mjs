@@ -190,7 +190,7 @@ assert.equal(posts.length, 0);
 
 // run the workers
 await page.click('#cp-run-workers');
-await page.waitForFunction(() => /the workers is queued on main/.test(document.getElementById('msg').textContent));
+await page.waitForFunction(() => /Queued on main/.test(document.getElementById('msg').textContent));
 assert.ok(posts.find((p) => p.key === 'POST /repos/acme/demo/actions/workflows/workers.yml/dispatches' && p.body.ref === 'main'));
 
 // merge: two presses, the first arms the button and offers Cancel
