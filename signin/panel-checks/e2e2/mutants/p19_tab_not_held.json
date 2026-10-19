@@ -1,1 +1,0 @@
-[["var heldTab = pageScrolls() ? holdHeight(tab, th) : function () {};", "var heldTab = function () {};"]]

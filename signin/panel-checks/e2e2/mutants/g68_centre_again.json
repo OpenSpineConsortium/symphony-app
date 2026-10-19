@@ -1,1 +1,0 @@
-[["if (!host.isConnected || centre()) watch.disconnect();", "if (!host.isConnected) watch.disconnect(); else centre();"]]

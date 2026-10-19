@@ -1,1 +1,0 @@
-[["    return isFinite(h) ? h : node.offsetHeight;\n", "    return node.offsetHeight;\n"]]

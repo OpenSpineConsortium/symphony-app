@@ -1,0 +1,1 @@
+[["var factor = Math.exp(-d * (e.ctrlKey ? 0.01 : 0.002));", "var factor = Math.exp(-d * 0.002);"]]

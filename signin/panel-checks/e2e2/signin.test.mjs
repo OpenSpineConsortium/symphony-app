@@ -2559,7 +2559,7 @@ async function restingY(page) {
   return last;
 }
 
-await check('P12: on a phone, Refresh on the Dependencies tab keeps the chart\'s box at its height until the chart is drawn again, and a read that fails lets the box go', async () => {
+await check('P12: on a phone, Refresh on the Dependencies tab keeps the tab at the height of the screen it was given and the chart\'s box held until the chart is drawn again, the page never moving, and a read that fails lets the box go', async () => {
   const { routes, phase } = graphRoutes();
   const { context, page, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo#dependencies', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
   await loaded(page);
@@ -2568,14 +2568,14 @@ await check('P12: on a phone, Refresh on the Dependencies tab keeps the chart\'s
   const before = await restingY(page);
   // the sub-issues take a while, so the box stands empty long enough to be seen held or not
   phase.subDelay = 700;
-  // the box's own height, to the fraction of a pixel: a hold rounded to a whole one moves the page
-  // under it by a pixel where the rounding goes up, and by less than the window shows where it goes
-  // down, so the hold itself is compared with it
-  const exact = await page.evaluate(() => getComputedStyle(document.getElementById('cp-graph')).height);
+  // the box's own height and the tab's, which on a phone is the screen's height left under the
+  // header and above the foot (since the owner's "I literally never in any case want to scroll" of
+  // 2026-10-19 nothing in the tab scrolls, so the tab is given its height and the chart fills it)
+  const at = await page.evaluate(() => ({ box: parseFloat(getComputedStyle(document.getElementById('cp-graph')).height), tab: document.getElementById('tab-dependencies').style.height }));
   await page.evaluate(() => {
-    const box = document.getElementById('cp-graph');
+    const box = document.getElementById('cp-graph'), tab = document.getElementById('tab-dependencies');
     window.__seen = [];
-    window.__watch = setInterval(() => window.__seen.push({ min: box.style.minHeight, kids: box.children.length, state: document.getElementById('cp-graph-state').textContent.slice(0, 30), y: Math.round(window.scrollY) }), 15);
+    window.__watch = setInterval(() => window.__seen.push({ min: box.style.minHeight, kids: box.children.length, tab: tab.style.height, tabH: Math.round(tab.getBoundingClientRect().height), state: document.getElementById('cp-graph-state').textContent.slice(0, 30), y: Math.round(window.scrollY) }), 15);
     document.getElementById('cp-refresh').click();
   });
   await loaded(page);
@@ -2585,12 +2585,15 @@ await check('P12: on a phone, Refresh on the Dependencies tab keeps the chart\'s
   const unheld = seen.filter((s) => s.kids === 0 && !s.min);
   const moved = seen.filter((s) => s.y !== before);
   const heldAt = [...new Set(seen.filter((s) => s.kids === 0 && s.min).map((s) => s.min))];
-  console.log('      before', before, '| the box', exact, 'held at', JSON.stringify(heldAt), '| samples', seen.length, '| empty and unheld:', JSON.stringify(unheld.slice(0, 3)), '| moved:', JSON.stringify(moved.slice(0, 3)));
+  const tabs = [...new Set(seen.map((s) => s.tab + ' ' + s.tabH))];
+  console.log('      before', before, '| the box', at.box, 'held at', JSON.stringify(heldAt), '| the tab', at.tab, 'through Refresh', JSON.stringify(tabs), '| samples', seen.length, '| empty and unheld:', JSON.stringify(unheld.slice(0, 3)), '| moved:', JSON.stringify(moved.slice(0, 3)));
   assert.ok(before > 300, 'the page did not scroll into the tab');
   assert.ok(seen.some((s) => s.kids === 0), 'the box was never emptied, so nothing was measured');
   assert.deepEqual(unheld, [], 'the empty box lost its hold before the chart was drawn');
-  assert.ok(parseFloat(exact) % 1 !== 0, 'the box\'s height is a whole pixel, so a hold rounded to one says nothing');
-  assert.deepEqual(heldAt, [exact], 'the empty box was not held at its own height to the fraction of a pixel');
+  assert.ok(heldAt.length > 0 && heldAt.every((h) => parseFloat(h) >= at.box - 0.5), 'the empty box was held lower than it stood: ' + JSON.stringify([at.box, heldAt]));
+  assert.match(at.tab, /^[0-9]+px$/, 'the tab was not given its height on a phone');
+  assert.equal(tabs.length, 1, 'the tab\'s height changed through Refresh');
+  assert.equal(tabs[0].split(' ')[0], at.tab);
   assert.deepEqual(moved, [], 'the page moved through Refresh');
   // the sub-issues cannot be read: the box stands empty under one line, at no height of its own
   phase.subDelay = 0;

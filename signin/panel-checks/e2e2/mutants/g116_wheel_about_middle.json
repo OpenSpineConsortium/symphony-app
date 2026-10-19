@@ -1,0 +1,1 @@
+[["    var p = stagePoint(st, e);\n    stageZoom(st, factor, p.x, p.y, false);", "    var p = stagePoint(st, e);\n    stageZoom(st, factor, st.host.clientWidth / 2, st.host.clientHeight / 2, false);"]]

@@ -1,0 +1,1 @@
+[["    box.style.gridTemplateColumns = 'repeat(' + best + ', minmax(0, 1fr))';\n    box.style.gridTemplateRows = 'repeat(' + Math.ceil(n / best) + ', minmax(0, 1fr))';\n", ""]]

@@ -1,1 +1,0 @@
-[["function update() { b.hidden = !(chart.host.classList.contains('control__chart--fit') || chart.host.scrollWidth > chart.host.clientWidth + 1); }", "function update() { b.hidden = true; }"]]

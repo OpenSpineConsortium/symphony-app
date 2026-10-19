@@ -1,0 +1,1 @@
+[["    var k = Math.max(st.fit, Math.min(stageMax(st), st.k * factor));", "    var k = Math.max(st.fit, st.k * factor);"]]

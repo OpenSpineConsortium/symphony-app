@@ -1,0 +1,1 @@
+[["      var cos = (vx * dx + vy * dy) / (d * len);", "      var cos = -(vx * dx + vy * dy) / (d * len);"]]

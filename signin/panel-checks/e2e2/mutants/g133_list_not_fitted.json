@@ -1,0 +1,1 @@
+[["    t.style.transform = k < 1 ? 'scale(' + k + ')' : '';", "    t.style.transform = '';"]]

@@ -1,0 +1,1 @@
+[["    if (!parts.length) return 'No arrow joins it to another issue in this chart.';\n", "    if (!parts.length) return '';\n"]]

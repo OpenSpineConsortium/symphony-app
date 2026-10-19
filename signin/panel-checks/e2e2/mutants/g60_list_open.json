@@ -1,1 +1,1 @@
-[["var list = el('details', 'graph__list');", "var list = el('details', 'graph__list'); list.open = true;"]]
+[["    list.hidden = true;\n    c.list = list;\n", "    list.hidden = false;\n    c.list = list;\n"]]

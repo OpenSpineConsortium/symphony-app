@@ -1,0 +1,1 @@
+[["    if (st.whole || st.k < k) stageWhole(st, false);", "    if (st.k < k) stageWhole(st, false);"]]

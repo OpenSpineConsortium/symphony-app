@@ -1,0 +1,1 @@
+[["    st.pinch = { d: q.d, k: st.k, cx: (q.x - st.x) / st.k, cy: (q.y - st.y) / st.k };", "    st.pinch = { d: q.d, k: st.k, cx: (st.host.clientWidth / 2 - st.x) / st.k, cy: (st.host.clientHeight / 2 - st.y) / st.k };"]]

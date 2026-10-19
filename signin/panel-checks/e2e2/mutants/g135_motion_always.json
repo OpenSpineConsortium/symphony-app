@@ -1,0 +1,1 @@
+[["    st.svg.classList.toggle('stage__glide', !!animate && !reducedMotion());", "    st.svg.classList.toggle('stage__glide', !!animate);"]]

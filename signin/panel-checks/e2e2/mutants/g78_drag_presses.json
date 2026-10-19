@@ -1,1 +1,1 @@
-[["      e.stopPropagation();\n      e.preventDefault();\n    }, true);", "    }, true);"]]
+[["    if (!d.moved) { if (!cancelled) stageTap(st, d); return; }\n", "    if (!d.moved || Math.abs(d.dx) + Math.abs(d.dy) < STAGE_SLOP) { if (!cancelled) stageTap(st, d); return; }\n"]]

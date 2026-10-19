@@ -1,1 +1,1 @@
-[["      if (!(e.buttons & 1)) { pan.host.classList.remove('control__chart--panning'); pan = null; return; }\n", ""]]
+[["    if (e.pointerType === 'mouse' && !(e.buttons & 1)) { stageUp(st, e, true); return; }\n", ""]]

@@ -1,1 +1,0 @@
-[["    if (strip) markEdges(strip, !strip.hidden);", "    if (strip) markEdges(strip, false);"]]

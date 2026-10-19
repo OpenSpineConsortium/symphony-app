@@ -1,0 +1,1 @@
+[["      return graphChart(draw, chart.nodes.filter(function (it) { return near[it.number]; }), chart.edges.filter(function (e) {", "      return graphChart(draw, chart.nodes, chart.edges.filter(function (e) {"]]

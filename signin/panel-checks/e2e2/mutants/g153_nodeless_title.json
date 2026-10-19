@@ -1,0 +1,1 @@
+[["el('p', 'graph__neartitle', it.title || 'This issue\\'s title is not known here.')", "el('p', 'graph__neartitle', String(it.title || 'This issue\\'s title is not known here.').slice(0, 60))"]]

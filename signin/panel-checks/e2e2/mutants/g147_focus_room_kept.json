@@ -1,0 +1,1 @@
+[["    if (view.section) $('tab-dependencies').classList.remove('graph--near');\n", ""]]
