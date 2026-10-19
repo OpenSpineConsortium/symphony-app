@@ -1,0 +1,1 @@
+[["      var on = host.classList.toggle('control__chart--fit');", "      var on = b.getAttribute('aria-pressed') !== 'true';"]]

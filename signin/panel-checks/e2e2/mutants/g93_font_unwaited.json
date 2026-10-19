@@ -1,0 +1,1 @@
+[["      return graphFontReady().then(function () { return m; });", "      return m;"]]

@@ -1,0 +1,1 @@
+[["bar.setAttribute('aria-valuenow', String(done));", "bar.setAttribute('aria-valuenow', String(progress[1]));"]]

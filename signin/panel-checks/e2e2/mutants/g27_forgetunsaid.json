@@ -1,1 +1,1 @@
-[["$('cp-summary').textContent = 'No repository listed. Add one on the Repositories tab.'; graphReset(GRAPH_NO_REPOSITORY); }", "$('cp-summary').textContent = 'No repository listed. Add one on the Repositories tab.'; }"]]
+[["$('cp-summary').textContent = 'No repository listed. Press + Add repository in the side column to pick one.'; graphReset(GRAPH_NO_REPOSITORY); }", "$('cp-summary').textContent = 'No repository listed. Press + Add repository in the side column to pick one.'; }"]]

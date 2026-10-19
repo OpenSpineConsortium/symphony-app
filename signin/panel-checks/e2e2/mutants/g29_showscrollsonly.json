@@ -1,1 +1,1 @@
-[["      revealTab(heading);\n      scrollInDeck(heading, { block: 'start' });\n", "      heading.scrollIntoView({ block: 'start' });\n"]]
+[["      revealTab(heading);\n      graphShowFirst();\n      scrollInDeck(heading, { block: 'start' });\n", "      graphShowFirst();\n      heading.scrollIntoView({ block: 'start' });\n"]]
