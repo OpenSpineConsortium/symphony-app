@@ -1,1 +1,1 @@
-[["    if (text) m.insertBefore(el('p', 'msg__note', text), m.firstChild);", "    if (text) add(m, el('p', 'msg__note', text));"]]
+[["    if (text) m.insertBefore(rich(el('p', 'msg__note'), text), m.firstChild);", "    if (text) add(m, rich(el('p', 'msg__note'), text));"]]

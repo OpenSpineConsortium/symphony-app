@@ -398,6 +398,9 @@ ghu_TEST or github_pat_X.
   which Make private's nb.admin had left stale, was brought up to nbForget as it stands and caught
   again (N12), and n31, whose text Make private's own refusal had come to match first, was aimed at
   the write's refusal again and caught again (N21); all 59 of the Notebooks tab are caught there.
+  With site pull requests #90 and #91 merged into that branch at b9c9674 the same day, m51 and m63
+  (H10, I10) were aimed at the https:// address the classic tokens' page is now written with, and
+  p11 (P4) at the note now drawn with its addresses as links, and all three were caught again.
   The two of the Home Screen app (`h*`, each naming app.test.mjs, for H8: the button offered where
   the browser has no full screen call, and only the standard call looked for, which would hide it
   from Safari before 16.4) were caught against site branch claude/home-screen-app at 79d4b83 on
