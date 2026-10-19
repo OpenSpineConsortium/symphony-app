@@ -1,0 +1,1 @@
+[["var data = Object.assign({}, nb.data, { notebooks: books });", "var data = { notebooks: books };"]]

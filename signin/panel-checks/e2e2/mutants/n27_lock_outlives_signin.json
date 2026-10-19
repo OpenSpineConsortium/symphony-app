@@ -1,0 +1,1 @@
+[["  function nbBusy() { if (nbWriting && nbWritingEnds !== ends) nbWriting = ''; return nbWriting; }", "  function nbBusy() { return nbWriting; }"]]

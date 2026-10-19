@@ -1,0 +1,1 @@
+[["e.status === 403 && !nbRateLimited(e)", "e.status === 403"]]

@@ -1,0 +1,1 @@
+[["var v = nbVisibility(r.data); return v === 'private' ? 'yes' : v;", "var v = nbVisibility(r.data); return v === 'public' ? v : 'yes';"]]

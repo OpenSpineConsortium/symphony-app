@@ -1,0 +1,1 @@
+[["var web = exHttps(it.web), size = nbSize(it);", "var web = typeof it.web === 'string' ? it.web : '', size = nbSize(it);"]]
