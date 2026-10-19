@@ -13,7 +13,7 @@ ghu_TEST or github_pat_X.
 
 ## What is here
 
-- `e2e2/signin.test.mjs`: 134 checks of the sign-in and the console's foot, run against a mocked
+- `e2e2/signin.test.mjs`: 135 checks of the sign-in and the console's foot, run against a mocked
   api.github.com, a mocked GitHub authorize page and a mocked sign-in service at
   https://signin.example.test. Some checks run both ways in, Sign in with GitHub and a pasted
   token. P1 to P22 (site pull request #78, 2026-10-19) hold the work a button starts, spoken at
@@ -26,7 +26,11 @@ ghu_TEST or github_pat_X.
   Token run's marks; a lend into an organization's pool by someone who is not its owner, said as
   lent or saved with its slot (P20), the Token workflow run in the organization's repository that
   has it when the chosen one has none (P21), and a token side panel width kept from a wide window
-  leaving the tiles their room on a narrow one, a phone held sideways and a wide one (P22).
+  leaving the tiles their room on a narrow one, a phone held sideways and a wide one (P22). P24
+  (site branch claude/lend-list-hidden, 2026-10-19) holds the organization variable SYMPHONY_LEND_TO
+  readable by no repository's workflows: written for selected repositories with none selected, and
+  a list an older page left readable by the private repositories closed, its value kept, when an
+  owner opens the Tokens tab.
 - `e2e2/panel.test.mjs`: the panel's walkthrough on both pages.
 - `e2e2/hostile.test.mjs`: 13 hostile-input checks.
 - `e2e2/assistant.test.mjs`: 21 checks of the panel's assistant (site branch claude/assistant-panel,
@@ -187,7 +191,7 @@ ghu_TEST or github_pat_X.
   read before the write asks for no write access, and a write that lands after a sign-out and a
   sign-in again frees no lock a later write holds; N19 and N20 grew there too (the lock a write after
   a sign-in again holds, and the x on an internal repository's notebook).
-- `e2e2/mutants/`: 299 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/mutants/`: 303 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
@@ -220,7 +224,10 @@ ghu_TEST or github_pat_X.
   against site branch claude/explore-tab on 2026-10-18, after its adversarial review. The 33 of
   the foot and the phone (`p*`, for P1 to P21; P22 is a stylesheet's, which no mutant of the
   script reaches, and was seen to fail with the old rule) were caught against site branch
-  claude/panel-feedback at f025b08 on 2026-10-19, where every other suite passes too. The 39 of
+  claude/panel-feedback at f025b08 on 2026-10-19, where every other suite passes too; p34 to p37,
+  for P24 (the list written readable by the private repositories, an open list left open, the
+  close rewriting the value, and a closed list closed again), against site branch
+  claude/lend-list-hidden on 2026-10-19. The 39 of
   the Notebooks tab (`n*`, each naming notebooks.test.mjs) were caught against site branch
   claude/notebooks at 1656fbb on 2026-10-19 after its third review, n35 to n39 for its findings, where
   every other suite passes too; N6 to N9 and N18 have no mutant of their own (N9 and N18 hold the stylesheet, which no mutant of the script reaches).
