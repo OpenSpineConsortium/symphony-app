@@ -13,7 +13,7 @@ ghu_TEST or github_pat_X.
 
 ## What is here
 
-- `e2e2/signin.test.mjs`: 135 checks of the sign-in and the console's foot, run against a mocked
+- `e2e2/signin.test.mjs`: 136 checks of the sign-in and the console's foot, run against a mocked
   api.github.com, a mocked GitHub authorize page and a mocked sign-in service at
   https://signin.example.test. Some checks run both ways in, Sign in with GitHub and a pasted
   token. P1 to P22 (site pull request #78, 2026-10-19) hold the work a button starts, spoken at
@@ -30,9 +30,13 @@ ghu_TEST or github_pat_X.
   (site branch claude/dependencies-look, 2026-10-19, after the owner's "the buttons for tokens ect,
   should scale to the screen size so multiple fit on the page") holds the Tokens tiles to the
   window: at 1280, 1920 and 2560 px a full row reaches the box's end, each tile is 104 to 377 px
-  wide and never a tall square, the columns grow with the window, and the nine tiles fill one row
-  at 1280 and 1920; P6 holds the Command tab's readouts and buttons three and two to a row on a
-  phone.
+  wide and never a tall square, the columns grow with the window, and the nine tiles fill one row at
+  1280 and 1920; P6 holds the Command tab's readouts and buttons three and two to a row on a phone.
+  P24 (site branch claude/lend-list-hidden, 2026-10-19) holds the organization variable
+  SYMPHONY_LEND_TO readable by no repository's workflows: written for selected repositories with
+  none selected, and a list an older page left readable by the private repositories, or by all,
+  closed, its value kept, when an owner opens the Tokens tab, a close GitHub refuses let go without
+  a word, and the last repository taken off deleting the list.
 - `e2e2/panel.test.mjs`: the panel's walkthrough on both pages.
 - `e2e2/hostile.test.mjs`: 13 hostile-input checks.
 - `e2e2/assistant.test.mjs`: 21 checks of the panel's assistant (site branch claude/assistant-panel,
@@ -223,7 +227,7 @@ ghu_TEST or github_pat_X.
   read before the write asks for no write access, and a write that lands after a sign-out and a
   sign-in again frees no lock a later write holds; N19 and N20 grew there too (the lock a write after
   a sign-in again holds, and the x on an internal repository's notebook).
-- `e2e2/mutants/`: 342 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/mutants/`: 349 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
@@ -272,21 +276,24 @@ ghu_TEST or github_pat_X.
   only the fill:none Mermaid also gives them in its own stylesheet, so nothing it changed could be
   seen, and AH's look at the arrows guards the console's stylesheet instead. g99 (a box held through
   Refresh at its height rounded to a whole pixel, so the page under it moves one) names P12 in
-  signin.test.mjs. The 63 of the Folders tab
-  (`f*`, each with a `.json.suite` naming folders.test.mjs) were caught against site branch
-  claude/folders-explorer on 2026-10-18, the first 48 also against the site's script at commit
-  044b8b3, f06 rewritten for the explorer's name cell; f56 to f63, the saved catalog's, against site
-  branch claude/folders-catalog the same day, f60 to f63 for CAT7 to CAT9 (CAT5 and CAT6 are held by
-  the checks alone, since a connect reloads the page and a name is kept as text by the shared
-  drawing, so no single line of the catalog carries them). The 24 of the Explore tab (`x*`, each
-  naming explore.test.mjs) were caught against site branch claude/explore-tab on 2026-10-18, after
-  its adversarial review. The 33 of the foot and the phone (`p*`, for P1 to P21; P22 and P23 are the
-  stylesheet's, which no mutant of the script reaches, and were seen to fail with the old rules)
-  were caught against site branch claude/panel-feedback at f025b08 on 2026-10-19, where every other
-  suite passes too. The 39 of the Notebooks tab (`n*`, each naming notebooks.test.mjs) were caught
-  against site branch claude/notebooks at 1656fbb on 2026-10-19 after its third review, n35 to n39
-  for its findings, where every other suite passes too; N6 to N9 and N18 have no mutant of their own
-  (N9 and N18 hold the stylesheet, which no mutant of the script reaches).
+  signin.test.mjs. The 63 of the Folders tab (`f*`, each with a `.json.suite` naming
+  folders.test.mjs) were caught against site branch claude/folders-explorer on 2026-10-18, the first
+  48 also against the site's script at commit 044b8b3, f06 rewritten for the explorer's name cell;
+  f56 to f63, the saved catalog's, against site branch claude/folders-catalog the same day, f60 to
+  f63 for CAT7 to CAT9 (CAT5 and CAT6 are held by the checks alone, since a connect reloads the page
+  and a name is kept as text by the shared drawing, so no single line of the catalog carries them).
+  The 24 of the Explore tab (`x*`, each naming explore.test.mjs) were caught against site branch
+  claude/explore-tab on 2026-10-18, after its adversarial review. The 33 of the foot and the phone
+  (`p*`, for P1 to P21; P22 and P23 are the stylesheet's, which no mutant of the script reaches, and
+  were seen to fail with the old rules) were caught against site branch claude/panel-feedback at
+  f025b08 on 2026-10-19, where every other suite passes too; p34 to p40, for P24 (the list written
+  readable by the private repositories, an open list left open, the close rewriting the value, a
+  closed list closed again, a list open to all left open, a refused close thrown, and the emptied
+  list kept), against site branch claude/lend-list-hidden on 2026-10-19. The 39 of the Notebooks tab
+  (`n*`, each naming notebooks.test.mjs) were caught against site branch claude/notebooks at 1656fbb
+  on 2026-10-19 after its third review, n35 to n39 for its findings, where every other suite passes
+  too; N6 to N9 and N18 have no mutant of their own (N9 and N18 hold the stylesheet, which no mutant
+  of the script reaches).
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
   and every page action, visibility read and locator action on a selector first opens the tab that

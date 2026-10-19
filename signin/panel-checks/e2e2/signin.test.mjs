@@ -2958,6 +2958,90 @@ await check('P23: the token tiles fill each full row on every window, more of th
   assert.ok(seen[0][1].columns < seen[1][1].columns && seen[1][1].columns < seen[2][1].columns, 'a wider window does not hold more tiles to a row');
 });
 
+// the organization variable SYMPHONY_LEND_TO, where an owner lists the repositories a token lent
+// with no say runs on, is read by the Token run with the App's token, so no repository's workflows
+// need it: every write makes it visible to selected repositories with none selected, and a list an
+// older page wrote readable by the private repositories is closed when an owner opens the tab,
+// its value left as it is; refuseClose answers that close as GitHub answers someone who may read
+// the list and not write it
+function lendToRoutes(have, writes, refuseClose) {
+  const path = '/orgs/acme/actions/variables/SYMPHONY_LEND_TO';
+  return signInRoutes([], {
+    'GET /repos/acme/demo': { full_name: 'acme/demo', default_branch: 'main', private: false, topics: ['symphony'], id: 123, owner: { id: 77, login: 'acme', type: 'Organization' }, permissions: { admin: true, push: true, pull: true } },
+    'GET /orgs/acme/memberships/tester': { role: 'admin', state: 'active' },
+    'GET /orgs/acme/actions/secrets': { total_count: 1, secrets: [{ name: 'SYMPHONY_CLAUDE_1' }] },
+    'GET /orgs/acme/actions/variables': { total_count: 0, variables: [] },
+    ['GET ' + path]: have || undefined,
+    ['PATCH ' + path]: (req) => {
+      const body = req.postDataJSON();
+      writes.push({ how: 'PATCH', body });
+      return refuseClose && !('value' in body) ? { status: 403, body: { message: 'Resource not accessible by integration' } } : null;
+    },
+    ['DELETE ' + path]: () => { writes.push({ how: 'DELETE' }); return null; },
+    'POST /orgs/acme/actions/variables': (req) => { writes.push({ how: 'POST', body: req.postDataJSON() }); return { status: 201, body: {} }; },
+    'GET /repositories/11': { id: 11, full_name: 'acme/lent' },
+    'GET /repositories/456': { id: 456, full_name: 'acme/home' },
+    'GET /repos/acme/home': { full_name: 'acme/home', id: 456, owner: { id: 77, login: 'acme', type: 'Organization' } },
+  });
+}
+async function lendToShown(page) {
+  await page.waitForFunction(() => {
+    const field = document.querySelector('[aria-label="Repository to add"]');
+    const lead = field && field.closest('.toks__note').querySelector('.admin__lead');
+    return lead && !/^(Reading|Saving)/.test(lead.textContent);
+  }, null, { timeout: 10000 });
+}
+async function lendToAdd(page, full) {
+  await page.evaluate((full) => {
+    const field = document.querySelector('[aria-label="Repository to add"]');
+    field.value = full;
+    field.parentElement.querySelector('button').click();
+  }, full);
+}
+async function lendToTakeOff(page, full) {
+  await page.waitForFunction((full) => Array.from(document.querySelectorAll('.toks__note .admin__bar span')).some((s) => s.textContent === full), full, { timeout: 10000 });
+  await page.evaluate((full) => {
+    const name = Array.from(document.querySelectorAll('.toks__note .admin__bar span')).find((s) => s.textContent === full);
+    name.parentElement.querySelector('button').click();
+  }, full);
+}
+await check('P24: the list of repositories a token lent with no say runs on is written readable by no repository, and a list an older page left readable by the private repositories, or by all of them, is closed when an owner opens the tab', async () => {
+  const closed = { visibility: 'selected', selected_repository_ids: [] };
+  const saved = (value) => ({ how: 'PATCH', body: { name: 'SYMPHONY_LEND_TO', value, visibility: 'selected', selected_repository_ids: [] } });
+  const cases = [
+    { name: 'left open', have: { name: 'SYMPHONY_LEND_TO', value: '11', visibility: 'private' }, want: [{ how: 'PATCH', body: closed }, saved('11,456')] },
+    { name: 'open to all', have: { name: 'SYMPHONY_LEND_TO', value: '11', visibility: 'all' }, want: [{ how: 'PATCH', body: closed }, saved('11,456')] },
+    // a close GitHub refuses is let go without a word, and the owner's own save still goes out
+    { name: 'close refused', have: { name: 'SYMPHONY_LEND_TO', value: '11', visibility: 'private' }, refuseClose: true, want: [{ how: 'PATCH', body: closed }, saved('11,456')] },
+    { name: 'closed', have: { name: 'SYMPHONY_LEND_TO', value: '11', visibility: 'selected' }, want: [saved('11,456')] },
+    { name: 'none yet', have: null, want: [{ how: 'POST', body: { name: 'SYMPHONY_LEND_TO', value: '456', visibility: 'selected', selected_repository_ids: [] } }] },
+    // the last repository taken off deletes the variable, so no list is left to read at all
+    { name: 'emptied', have: { name: 'SYMPHONY_LEND_TO', value: '11', visibility: 'selected' }, takeOff: 'acme/lent', want: [{ how: 'DELETE' }] },
+  ];
+  for (const c of cases) {
+    const writes = [];
+    const { context, page, errors } = await open({ script: real, routes: lendToRoutes(c.have, writes, c.refuseClose), path: '/symphony/control/?repo=acme/demo#tokens', storage: asTester });
+    await loaded(page);
+    await lendToShown(page);
+    // the close, where there is one, goes out with the read and is not waited on
+    await sleep(500);
+    const opened = writes.slice();
+    if (c.takeOff) await lendToTakeOff(page, c.takeOff);
+    else await lendToAdd(page, 'acme/home');
+    for (let i = 0; i < 40 && writes.length < c.want.length; i++) await sleep(100);
+    await sleep(300);
+    await lendToShown(page);
+    const rows = await page.evaluate(() => Array.from(document.querySelector('[aria-label="Repository to add"]').closest('.toks__note').querySelectorAll('.admin__bar span')).map((s) => s.textContent));
+    console.log('      ' + c.name + ': on opening', JSON.stringify(opened), '| written', JSON.stringify(writes), '| listed', JSON.stringify(rows));
+    assert.deepEqual(writes, c.want, c.name + ': the list was not written as asked');
+    assert.deepEqual(opened, c.want.length > 1 ? [c.want[0]] : [], c.name + ': opening the tab wrote what it should not');
+    if (c.takeOff) assert.ok(!rows.includes(c.takeOff), c.name + ': the repository taken off is still listed');
+    else assert.ok(rows.includes('acme/home'), c.name + ': the repository added is not listed');
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+});
+
 await browser.close();
 console.log('\n' + results.join('\n'));
 if (results.some((r) => r.startsWith('FAIL'))) process.exit(1);
