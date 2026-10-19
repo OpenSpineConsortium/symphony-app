@@ -1,0 +1,1 @@
+[["    try { if (window.navigator.standalone === true) return true; } catch (e) { /* not iOS */ }\n", ""]]

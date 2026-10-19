@@ -1,0 +1,1 @@
+[["exchange('/device/token', { device_code: device })", "exchange('/device/token', { device_code: device, client_id: CLIENT_ID })"]]

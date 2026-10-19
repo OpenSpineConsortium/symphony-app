@@ -192,7 +192,22 @@ ghu_TEST or github_pat_X.
   read before the write asks for no write access, and a write that lands after a sign-out and a
   sign-in again frees no lock a later write holds; N19 and N20 grew there too (the lock a write after
   a sign-in again holds, and the x on an internal repository's notebook).
-- `e2e2/mutants/`: 306 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/code.test.mjs`: 16 checks of sign-in by code (site branch claude/sign-in-by-code,
+  2026-10-19), the Home Screen app's way in: GitHub's device flow through the sign-in service's
+  routes /device and /device/token, against a mocked service that answers as signin/worker.js
+  does. The app is played by navigator.standalone, as iOS gives an installed page, and the page
+  asks no faster than the interval named, so the checks wait in real time (about four minutes).
+  K1: in a browser, a second button after Sign in with GitHub, none on an unconfigured page, the
+  same on the cost page. K2 and K3: in the app the one button shows the code, asks at the pace
+  named and signs in for the tab, or kept on the browser. K4 and K5: slow_down's longer interval,
+  the service's own limit asked again more slowly, and a moment out of reach asked again. K6 to
+  K9: GitHub's expired_token and access_denied, an App with Device Flow unticked, a service with
+  no device routes yet, and an answer with no code, each ending with words and the token box.
+  K10 to K13: Cancel with an answer on its way, a token that arrives after Cancel, a new code
+  after Cancel, and the browser's two ways. K14: the link that copies the code and opens GitHub's
+  page. K15: the cost page. K16: a code that runs out at the time named though GitHub never says
+  so.
+- `e2e2/mutants/`: 336 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
@@ -261,7 +276,7 @@ ghu_TEST or github_pat_X.
      names, and reports each mutant as KILLED, SURVIVED, STALE or ERROR; name mutants to run only
      those, by their paths from e2e2/ (`bash run-mutants.sh mutants/g*.json` there runs the
      Dependencies tab's, `mutants/f*.json` the Folders tab's, `mutants/n*.json` the Notebooks
-     tab's).
+     tab's, `mutants/k*.json` sign-in by code's).
 
 The site sets the two constants to the live service and SymphonyBoard's Client ID (site pull
 request #24). The checks set them for themselves, whatever the shipped script holds: the

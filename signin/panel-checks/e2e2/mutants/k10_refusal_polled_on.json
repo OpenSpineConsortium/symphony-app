@@ -1,0 +1,1 @@
+[["          if (e.code === 'authorization_pending') { later(); return; }", "          if (e.code) { later(); return; }"]]

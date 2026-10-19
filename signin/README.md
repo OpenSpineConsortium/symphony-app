@@ -57,6 +57,37 @@ below has the clicks); until it does, the panel says which press waits on
 it. A fine-grained token pasted into the page needs the same permissions
 of its own.
 
+## The device routes, for the Home Screen app
+
+The control panel installs as a Home Screen app (site pull request #86,
+the first of the three ways in symphony-template's
+docs/research/native-ios-app.md). A sign-in that leaves the app for
+GitHub's page may come back to the browser rather than into the app, so
+the installed app signs in by a code instead, through GitHub's device
+flow, which a GitHub App may turn on and which needs no client secret
+(https://raw.githubusercontent.com/github/docs/main/content/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app.md,
+"Using the device flow"). `POST /device` asks GitHub's
+`https://github.com/login/device/code` for a code with the App's client
+id alone and hands back the short code the person types at
+https://github.com/login/device (always that page, whatever address
+GitHub's answer names), the device code the page keeps, and how long
+and how often to ask. `POST /device/token` sends GitHub the device code,
+with the client id and the device flow's grant type and no secret, and
+hands back the same five fields as `/exchange` once the person has typed
+the code and allowed SymphonyBoard; until then GitHub's own word comes
+back with 400 (`authorization_pending`, or `slow_down` with a longer
+interval), and so do its refusals (`expired_token`, `access_denied`,
+`device_flow_disabled`). The token is the same eight-hour token with the
+same six-month refresh token, renewed through `/refresh` as any other.
+The service adds nothing but the one thing a page cannot do itself:
+GitHub's login endpoints answer no browser's cross-origin request. The
+routes answer the site's origin alone and spend the rate limit like the
+others; the device code is a bearer credential for the fifteen minutes
+it lives, held in the open page's memory and nowhere else. Until the
+App's "Enable Device Flow" is ticked (step 9 below), `/device` answers
+502 `device_flow_disabled` and the panel says so and offers the other
+ways in.
+
 ## The drive routes, for the Folders tab
 
 The control panel's Folders tab, https://openspineconsortium.com/symphony/control/#folders,
@@ -294,8 +325,21 @@ named, and nobody else needs to.
    nothing; a fine-grained token pasted into the page needs the same
    repository permission.
 
+9. Sign-in by code, for the Home Screen app. Open
+   https://github.com/organizations/OpenSpineConsortium/settings/apps/symphonyboard
+   ("General" tab), tick "Enable Device Flow" (under "Identifying and
+   authorizing users") and press "Save changes". Then give the Worker the
+   code that has the device routes, as step 6 does: open
+   https://github.com/OpenSpineConsortium/symphony-app/blob/main/signin/worker.js
+   once the pull request that brings them has merged, press "Copy raw
+   file", and in Cloudflare, on the Worker `symphony-signin`'s page, press
+   "Edit code", replace everything in the editor with what you copied and
+   press "Deploy". Neither step touches a secret. Until both are done the
+   installed app says that sign-in by code is not turned on yet and
+   offers "Sign in with GitHub" and the token box as before.
+
 To check it: `curl https://symphony-signin.<account>.workers.dev/` answers
-`{"service":"symphony-signin","routes":["/exchange","/refresh","/revoke","/drive/config","/drive/connect","/drive/token"],"keeps":"nothing"}`,
+`{"service":"symphony-signin","routes":["/exchange","/refresh","/revoke","/device","/device/token","/drive/config","/drive/connect","/drive/token"],"keeps":"nothing"}`,
 and the panel's "Sign in with GitHub" lands back on the panel signed in.
 
 Later, if the address is abused: the Workers free plan allows 100,000
@@ -315,8 +359,12 @@ is 429. Without it the service runs the same, with no limit of its own.
 `handle()` with a fake GitHub and a fake Microsoft: the origin check, the
 body limits in bytes, the exchange with its verifier, the refresh, the
 revoke, the rate limit when a binding is there, GitHub refusing or
-unreachable, that nothing but the five fields reaches the page, and the
-drive routes: the config's one provider, the connect's form and its four
+unreachable, that nothing but the five fields reaches the page, the
+device routes (the code asked with the client id and no secret, GitHub's
+page the only one named, the times bounded, GitHub's waiting words and
+refusals passed through with 400 and anything else 502, a malformed
+device code refused before GitHub is asked, and the origin and the rate
+limit as for the others), and the drive routes: the config's one provider, the connect's form and its four
 fields, the token's two, the run's call with no origin, the control
 panel's own address as the one redirect (its old Folders page and the
 address without its trailing slash refused), a provider the table lacks,

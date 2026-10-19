@@ -1,0 +1,1 @@
+[["          if (turn !== codeTurn) { resolve(null); return; }\n          if (e.code === 'authorization_pending')", "          if (e.code === 'authorization_pending')"]]
