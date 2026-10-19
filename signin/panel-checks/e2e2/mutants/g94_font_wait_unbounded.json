@@ -1,0 +1,1 @@
+[["return Promise.race([document.fonts.load('14px \"IBM Plex Sans\"'), waited])", "return document.fonts.load('14px \"IBM Plex Sans\"')"]]

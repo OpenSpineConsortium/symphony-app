@@ -1,0 +1,1 @@
+[["bar.setAttribute('aria-label', heading + ': tasks closed');", "bar.setAttribute('aria-label', 'Tasks closed');"]]

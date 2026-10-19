@@ -2363,13 +2363,19 @@ await check('P6: on a phone every tab fits the window, the saved text size and i
   await page.click('.console__rail [data-tab="tokens"]');
   await sleep(300);
   const tiles = await page.evaluate(() => ({ columns: getComputedStyle(document.getElementById('tk-tiles')).gridTemplateColumns.split(' ').length, width: document.getElementById('tk-tiles').clientWidth, me: getComputedStyle(document.querySelector('.console__me')).justifyContent }));
-  console.log('      wider than the window:', wide.length ? wide.join(' ') : 'no tab', '| deck:', JSON.stringify(deck), '| status:', JSON.stringify(status), '| run card:', JSON.stringify(card), '| tiles:', JSON.stringify(tiles));
+  // the Command tab's readouts and buttons several to a row, as the token tiles are (the owner,
+  // 2026-10-19: "should scale to the screen size so multiple fit on the page")
+  await page.click('.console__rail [data-tab="command"]');
+  await sleep(300);
+  const command = await page.evaluate(() => ({ readouts: getComputedStyle(document.querySelector('.deck__readouts')).gridTemplateColumns.split(' ').length, launch: getComputedStyle(document.querySelector('.deck__launch')).gridTemplateColumns.split(' ').length }));
+  console.log('      wider than the window:', wide.length ? wide.join(' ') : 'no tab', '| deck:', JSON.stringify(deck), '| status:', JSON.stringify(status), '| run card:', JSON.stringify(card), '| tiles:', JSON.stringify(tiles), '| command:', JSON.stringify(command));
   assert.deepEqual(wide, []);
   assert.equal(card.grow, '1', 'the run name takes its line');
   assert.equal(card.max, 'none');
   assert.equal(card.whenTop, card.nameTop, 'the time sits on the name\'s line');
   assert.ok(card.eventTop > card.nameTop + 10, 'the event sits under the name');
-  assert.equal(tiles.columns, 2, 'the token tiles stand two to a row');
+  assert.equal(tiles.columns, 3, 'the token tiles do not stand three to a row');
+  assert.deepEqual(command, { readouts: 3, launch: 2 }, 'the Command tab\'s readouts and buttons do not stand three and two to a row');
   assert.ok(tiles.width > 300, 'the tiles fill the row');
   assert.equal(tiles.me, 'space-between');
   assert.equal(deck.clip, 'clip');
@@ -2916,6 +2922,40 @@ await check('P22: a token side panel width kept from a wide window leaves the ti
     assert.deepEqual(errors, []);
     await context.close();
   }
+});
+
+// the token tiles take the window's width as it comes: more of them to a row on a larger window, and
+// each row filled to its end, so no window leaves a wide empty margin beside them (the owner,
+// 2026-10-19: "should scale to the screen size so multiple fit on the page")
+await check('P23: the token tiles fill each full row on every window, more of them to a row the wider it is, and never stand as tall squares', async () => {
+  const extra = { 'GET /repos/acme/demo/actions/secrets': { total_count: 8, secrets: ['CLAUDE_CODE_OAUTH_TOKEN'].concat([1, 2, 3, 4, 5, 6, 7].map((n) => 'SYMPHONY_CLAUDE_' + n)).map((name) => ({ name })) } };
+  const seen = [];
+  for (const viewport of [{ width: 1280, height: 900 }, { width: 1920, height: 1080 }, { width: 2560, height: 1440 }]) {
+    const { context, page, errors } = await open({ script: real, routes: signInRoutes([], extra), path: '/symphony/control/?repo=acme/demo#tokens', storage: asTester, viewport });
+    await loaded(page);
+    await page.waitForSelector('#tk-tile-7', { timeout: 10000 });
+    const m = await page.evaluate(() => {
+      const box = document.getElementById('tk-tiles'), cs = getComputedStyle(box);
+      const cols = cs.gridTemplateColumns.split(' ').map(parseFloat);
+      const tiles = Array.from(box.querySelectorAll('.tok')).map((t) => t.getBoundingClientRect());
+      // a full row reaches the end of the box; where there are fewer tiles than a row holds, the row's
+      // free places are left free, so a single token is never stretched across a whole wide window
+      const first = tiles.filter((r) => Math.abs(r.top - tiles[0].top) < 2);
+      const right = Math.max.apply(null, first.map((r) => r.right)), inner = box.getBoundingClientRect().right;
+      return { columns: cols.length, tiles: tiles.length, width: Math.round(cols[0]), gap: tiles.length >= cols.length ? Math.round(inner - right) : null, square: tiles.some((r) => Math.abs(r.width - r.height) < 2 && r.height > 150) };
+    });
+    seen.push([viewport.width, m]);
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  console.log('      tiles by window:', JSON.stringify(seen));
+  for (const [w, m] of seen) {
+    if (m.gap !== null) assert.ok(m.gap <= 2, w + ': a full row of tiles leaves the end of its row empty: ' + JSON.stringify(m));
+    assert.ok(m.width >= 104 && m.width < 2 * 184 + 10, w + ': a tile is ' + m.width + ' px wide');
+    assert.equal(m.square, false, w + ': a tile is still a tall square');
+  }
+  assert.ok(seen[0][1].gap !== null && seen[1][1].gap !== null, 'the nine tiles did not fill a row on a laptop and a large screen');
+  assert.ok(seen[0][1].columns < seen[1][1].columns && seen[1][1].columns < seen[2][1].columns, 'a wider window does not hold more tiles to a row');
 });
 
 await browser.close();

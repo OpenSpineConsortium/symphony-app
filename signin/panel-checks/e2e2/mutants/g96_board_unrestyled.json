@@ -1,0 +1,1 @@
+[["      graphRestyle(chart.host);\n", "      if (!chart.host.closest('#cp-board')) graphRestyle(chart.host);\n"]]

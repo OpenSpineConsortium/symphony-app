@@ -13,7 +13,7 @@ ghu_TEST or github_pat_X.
 
 ## What is here
 
-- `e2e2/signin.test.mjs`: 134 checks of the sign-in and the console's foot, run against a mocked
+- `e2e2/signin.test.mjs`: 135 checks of the sign-in and the console's foot, run against a mocked
   api.github.com, a mocked GitHub authorize page and a mocked sign-in service at
   https://signin.example.test. Some checks run both ways in, Sign in with GitHub and a pasted
   token. P1 to P22 (site pull request #78, 2026-10-19) hold the work a button starts, spoken at
@@ -26,7 +26,13 @@ ghu_TEST or github_pat_X.
   Token run's marks; a lend into an organization's pool by someone who is not its owner, said as
   lent or saved with its slot (P20), the Token workflow run in the organization's repository that
   has it when the chosen one has none (P21), and a token side panel width kept from a wide window
-  leaving the tiles their room on a narrow one, a phone held sideways and a wide one (P22).
+  leaving the tiles their room on a narrow one, a phone held sideways and a wide one (P22). P23
+  (site branch claude/dependencies-look, 2026-10-19, after the owner's "the buttons for tokens ect,
+  should scale to the screen size so multiple fit on the page") holds the Tokens tiles to the
+  window: at 1280, 1920 and 2560 px a full row reaches the box's end, each tile is 104 to 377 px
+  wide and never a tall square, the columns grow with the window, and the nine tiles fill one row
+  at 1280 and 1920; P6 holds the Command tab's readouts and buttons three and two to a row on a
+  phone.
 - `e2e2/panel.test.mjs`: the panel's walkthrough on both pages.
 - `e2e2/hostile.test.mjs`: 13 hostile-input checks.
 - `e2e2/assistant.test.mjs`: 21 checks of the panel's assistant (site branch claude/assistant-panel,
@@ -39,7 +45,7 @@ ghu_TEST or github_pat_X.
   answer, the issue read again before each question and replaced when closed, one press at a time,
   a sign-in changed under the page, a watch read on after a sign-in, and Stop watching; its cadence
   constants are shortened in the served script, and a check may serve its own.
-- `e2e2/graph.test.mjs`: 42 checks of the panel's Dependencies tab (site branch
+- `e2e2/graph.test.mjs`: 54 checks of the panel's Dependencies tab (site branch
   claude/graph-section, 2026-10-18; a section of the long page until the console): the chart text
   the page hands the drawing, byte for byte the two blocks symphony-protocol's board writes for its
   fixture board-epics.json (board-epics-STATE.md, copied into the check from symphony-protocol
@@ -68,13 +74,12 @@ ghu_TEST or github_pat_X.
   form from elsewhere, fields under the page's own ids, a directive, a link) making an element or a
   request (X), a title opening an HTML comment hiding nothing after it and a heading's escaped
   pipe read as a pipe (Y), the charts' edges, arrowheads and words showing on their ground inside
-  the dark console (C and R, by contrast ratio; `NOCSS=1` serves the stylesheet without the rule
-  that gives the ground, and C and R fail then), a press on a task the tables do not hold staying
+  the dark console (C and R, by contrast ratio), a press on a task the tables do not hold staying
   in this tab with its words here and on the message line (W), the assistant's "show
   dependencies", asked from the Ask Claude bar on another tab, opening this tab at its first chart
   and the next question naming the section (V), the window left at 0 in each of those presses at
-  1366 x 657, where the page could scroll (asserted), the tables alone when the drawing
-  script cannot load, a hostile title inert and a title holding a Mermaid directive drawn whole, a
+  1366 x 657, where the page could scroll (asserted), the lists opened by themselves when the
+  drawing script cannot load, a hostile title inert and a title holding a Mermaid directive drawn whole, a
   403, a 429, the cap and the rate limit's reserve each said in words with nothing half drawn (the
   cap lowered in the served script), no read at all once the open issues' answer says the token is
   under the reserve, a Refresh included (G5), nothing drawn without an epic, Refresh redrawing the new
@@ -86,8 +91,39 @@ ghu_TEST or github_pat_X.
   first chart shown by default and the rest hidden, a chip showing its chart and hiding the others
   with aria-pressed following, the choice kept per repository in this browser and restored on load
   and on Refresh, no strip for a single chart, and a kept choice that is gone falling back to the
-  first. Each check opens the Dependencies tab by its rail button before
-  it reads or presses inside it, and a press that crosses tabs is read at once with page.evaluate,
+  first, and the console's look (AF to AI, with A, D, E and Q, after the owner's "dependencies still
+  doesnt look very good, i want it to look more modern" of 2026-10-19): Mermaid told to draw in its
+  neo look in the deck's colours, its labels wrapped at 190 px, with its list of settings no
+  directive may change pinned (A; the neo look turns arrows at rounded corners whatever curve is
+  asked, so none is), each chart a card with its heading, an epic's bar of closed tasks named for
+  its card with its ARIA, a pill per state of the card's own issues (an epic's sub-issues, so the
+  pills add up to the bar) and one for the blockers from outside the epic, its list folded under it
+  and named for its card, and the key, a swatch per state drawn with the edge its nodes have and the
+  three arrows, in two sets, shown with the charts (AF), the key hidden while there is nothing to
+  draw, while a Refresh reads again and after a Refresh that finds nothing (AG), hidden where the
+  drawing script cannot load (E) or no chart could be drawn (Q), every node of the six states drawn
+  by the real Mermaid keeping none of the board's light colours on its own elements, shaded and
+  edged by its state (blocked thick on a lighter tint, claimed dotted, closed dashed and struck
+  through, so no two differ by hue alone), its box rounded, no label wider or taller than its box
+  though the site's face, served 160% wide, comes 1.5 s after the drawing script, and the arrows
+  left unfilled (AH), the wait for that face bounded, the charts drawn 2.5 s after the script where
+  the face never comes (AP), the same look on the Board tab's charts, every state (R5), a block
+  shown as text there giving up the chart's class (X), the list folded before it is opened and open
+  after, as a person opens it before Centre its row (D), and a chart wider than its box opening at
+  its middle on a phone, though it was drawn in a hidden tab, then left where the person scrolls it
+  (AI). The tiles and the moves between charts (AJ to AO, after the owner's "make the epics more
+  intuitive and navigating that page more fluent" of 2026-10-19): a bar on each tile of its chart's
+  own issues by state, All every epic's tasks, the tiles sharing a row on a laptop and on a phone
+  one row that scrolls sideways with the chosen tile brought into view (AJ), Previous and Next on
+  each card stepping to the chart beside it with the keyboard kept on the card shown (AK), the arrow
+  keys, Home and End moving from tile to tile (AL), a chart dragged with the mouse like a map, a
+  drag pressing no node (AM), Fit shown only on a chart wider than its card and drawing it whole
+  (AN), and a chosen chart fading in, none on load and none where less motion is asked (AO).
+  `NOCSS=1` serves the stylesheet without its rules for a chart's nodes, the half of the look no
+  mutant of the script reaches, and AH and R5 fail then (until the console's look it took the
+  chart's light ground away and C and R failed). Each check opens the Dependencies tab by its rail
+  button before it reads or presses inside it, and a press that crosses tabs is read at once with
+  page.evaluate,
   which opens nothing, so the page and not console-tabs.mjs is seen opening the tab. A check that
   wants the drawing recorded instead of made serves a stand-in for the library on its route.
 - `e2e2/folders.test.mjs`: 58 checks of the console's Folders tab, /symphony/control/#folders
@@ -187,13 +223,13 @@ ghu_TEST or github_pat_X.
   read before the write asks for no write access, and a write that lands after a sign-out and a
   sign-in again frees no lock a later write holds; N19 and N20 grew there too (the lock a write after
   a sign-in again holds, and the x on an internal repository's notebook).
-- `e2e2/mutants/`: 299 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/mutants/`: 342 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
   (`a*`, check O of assistant.test.mjs: the question dropped, the same tab, the state dropped, no
   cut, the encoded form unbounded, the referrer sent, a cut by code unit) were caught against the site branch claude/ask-in-claude. The 79 of the sign-in (`m*`) were caught against master
-  009109c; the 54 of the Dependencies tab (`g*`, five of them for the tab: show dependencies
+  009109c; the 97 of the Dependencies tab (`g*`, five of them for the tab: show dependencies
   opening no tab and leaving the charts' box where it was, the message line unsaid, the focus
   opening no tab, and the window not put back; eleven from the tab's second review: the message
   line said only when the press leaves the tab, a press always opening the Tasks tab, the board's
@@ -210,20 +246,47 @@ ghu_TEST or github_pat_X.
   again; and five from the focus strip (g51 to g55: the default chart not the first (AA), the other
   charts not hidden (AB), the choice not kept across a press and a Refresh (AC), the strip shown for
   a single chart (AD), and a gone choice not falling back to the first (AE)) against site branch
-  claude/dependencies-focus on 2026-10-19. The 63 of the Folders tab (`f*`, each with a `.json.suite` naming
-  folders.test.mjs) were caught against site branch claude/folders-explorer on 2026-10-18, the
-  first 48 also against the site's script at commit 044b8b3, f06 rewritten for the explorer's
-  name cell; f56 to f63, the saved catalog's, against site branch claude/folders-catalog the
-  same day, f60 to f63 for CAT7 to CAT9 (CAT5 and CAT6 are held by the checks alone, since a
-  connect reloads the page and a name is kept as text by the shared drawing, so no single line of
-  the catalog carries them). The 24 of the Explore tab (`x*`, each naming explore.test.mjs) were caught
-  against site branch claude/explore-tab on 2026-10-18, after its adversarial review. The 33 of
-  the foot and the phone (`p*`, for P1 to P21; P22 is a stylesheet's, which no mutant of the
-  script reaches, and was seen to fail with the old rule) were caught against site branch
-  claude/panel-feedback at f025b08 on 2026-10-19, where every other suite passes too. The 39 of
-  the Notebooks tab (`n*`, each naming notebooks.test.mjs) were caught against site branch
-  claude/notebooks at 1656fbb on 2026-10-19 after its third review, n35 to n39 for its findings, where
-  every other suite passes too; N6 to N9 and N18 have no mutant of their own (N9 and N18 hold the stylesheet, which no mutant of the script reaches).
+  claude/dependencies-focus on 2026-10-19; thirteen from the console's look (g56 to g68: the nodes
+  not restyled, restyled on the node alone and not its parts, not rounded (AH), the classic look
+  (A), the list open from the start (AF), not opened for a chart not drawn (Q) or for the drawing
+  script not loaded (E), the key never shown (AF) or kept through a Refresh's read (AG), the bar's
+  aria-valuenow given the total (AF), the closed pill dropped (AF), a wide chart not opened at its
+  middle, and opened at its middle again after the person scrolled it (AI)); sixteen from the tiles
+  and the moves (g69 to g84: the tile bar's segments even (AJ), All counting the goals (AJ), the
+  pressed tile left out of view on a phone (AJ), a step that selects nothing or loses the keyboard,
+  All's class unset (AK), the arrow keys dead or Home and End stepping one (AL), no drag, a drag
+  that presses a node or one with no threshold (AM), Fit never shown, never fitting or never watched
+  for a resize (AN), no fade or a fade on load (AO)); and thirteen from the look's review (g85 to
+  g98 but g95: the secure list short of themeVariables (A), the key kept after the drawing script
+  failed (E) or with no chart drawn (Q), the pills counting the blockers from outside the epic (AF),
+  no pill for them (AF), the bar named for no card (AF) or read as a percentage (AF), the list's
+  toggle named for no card (AF), the site's face not waited for (AH), waited for with no bound (AP),
+  the Board tab's charts not restyled (R5), the strip's clearing keeping the key (AG), and the
+  tiles' bars counting the blockers from outside (AJ)) against site branch claude/dependencies-look
+  on 2026-10-19, where every other suite passes too. Four were rewritten for that branch, since
+  their text had moved: g22 (one chart's failure failing the rest, now that the failure opens the
+  chart's list), g27 (the words for no repository listed), g29 (show dependencies scrolling only)
+  and g52 (the strip not hiding the other charts); and g45 (a block shown as text keeping the
+  chart's class), which the dark chart ground let survive, is caught again by X, which now asks that
+  such a block keep no chart's class. No mutant has graphRestyle reach the arrows: it would take off
+  only the fill:none Mermaid also gives them in its own stylesheet, so nothing it changed could be
+  seen, and AH's look at the arrows guards the console's stylesheet instead. g99 (a box held through
+  Refresh at its height rounded to a whole pixel, so the page under it moves one) names P12 in
+  signin.test.mjs. The 63 of the Folders tab
+  (`f*`, each with a `.json.suite` naming folders.test.mjs) were caught against site branch
+  claude/folders-explorer on 2026-10-18, the first 48 also against the site's script at commit
+  044b8b3, f06 rewritten for the explorer's name cell; f56 to f63, the saved catalog's, against site
+  branch claude/folders-catalog the same day, f60 to f63 for CAT7 to CAT9 (CAT5 and CAT6 are held by
+  the checks alone, since a connect reloads the page and a name is kept as text by the shared
+  drawing, so no single line of the catalog carries them). The 24 of the Explore tab (`x*`, each
+  naming explore.test.mjs) were caught against site branch claude/explore-tab on 2026-10-18, after
+  its adversarial review. The 33 of the foot and the phone (`p*`, for P1 to P21; P22 and P23 are the
+  stylesheet's, which no mutant of the script reaches, and were seen to fail with the old rules)
+  were caught against site branch claude/panel-feedback at f025b08 on 2026-10-19, where every other
+  suite passes too. The 39 of the Notebooks tab (`n*`, each naming notebooks.test.mjs) were caught
+  against site branch claude/notebooks at 1656fbb on 2026-10-19 after its third review, n35 to n39
+  for its findings, where every other suite passes too; N6 to N9 and N18 have no mutant of their own
+  (N9 and N18 hold the stylesheet, which no mutant of the script reaches).
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
   and every page action, visibility read and locator action on a selector first opens the tab that
