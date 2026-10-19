@@ -1,0 +1,1 @@
+[["    add(card, head, acts, el('p', 'graph__neartitle', it.title || 'This issue\\'s title is not known here.'), graphNearWords(view, n));", "    add(card, head, el('p', 'graph__neartitle', it.title || 'This issue\\'s title is not known here.'), acts, graphNearWords(view, n));"]]

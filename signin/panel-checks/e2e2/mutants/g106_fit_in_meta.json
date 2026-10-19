@@ -1,1 +1,1 @@
-[["    add(head, add(el('div', 'graph__tools'), fit));", "    add(head.querySelector('.graph__meta'), fit);\n    add(head, el('div', 'graph__tools'));"]]
+[["    add(head, add(el('div', 'graph__tools'), graphViewSwitch(c), graphZoomTools(c)));", "    add(head.querySelector('.graph__meta'), graphViewSwitch(c), graphZoomTools(c));\n    add(head, el('div', 'graph__tools'));"]]

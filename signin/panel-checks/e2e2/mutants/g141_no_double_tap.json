@@ -1,0 +1,1 @@
+[["    if (d.type !== 'mouse' && last && now - last.t < STAGE_TAP_MS", "    if (false && d.type !== 'mouse' && last && now - last.t < STAGE_TAP_MS"]]

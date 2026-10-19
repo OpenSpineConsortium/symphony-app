@@ -1,0 +1,1 @@
+[["    add(acts, link(it.url, 'Open #' + n + ' on GitHub'), btn('Centre its row', true, function () { graphFocus(n); }));", "    var a = link(it.url, 'Open #' + n + ' on GitHub');\n    a.removeAttribute('target');\n    add(acts, a, btn('Centre its row', true, function () { graphFocus(n); }));"]]

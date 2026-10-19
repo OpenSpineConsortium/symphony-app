@@ -1,1 +1,1 @@
-[["      if (e.key !== 'Escape' || !barShown()) return;\n", "      return;\n"]]
+[["      if (e.key !== 'Escape' || !barShown() || !inBar(e.target)) return;\n", "      return;\n"], ["      if (e.key !== 'Escape' || !barShown() || e.defaultPrevented) return;\n", "      return;\n"]]

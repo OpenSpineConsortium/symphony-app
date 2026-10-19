@@ -1,0 +1,1 @@
+[[".console .graph__list--cards tbody { column-count: var(--gcols, 1);", ".console .graph__list--cards tbody { column-count: 1;"]]

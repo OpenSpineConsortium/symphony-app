@@ -1,0 +1,1 @@
+[["    tiles.forEach(function (t, i) { t.hidden = pages > 1 && Math.floor(i / per) !== graphStripPage; });", "    tiles.forEach(function (t) { t.hidden = false; });"]]

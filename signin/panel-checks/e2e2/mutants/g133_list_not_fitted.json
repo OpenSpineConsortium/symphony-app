@@ -1,0 +1,1 @@
+[["    scale(best.cards, best.m, best.cols);\n    stageShow(box, [{ svg: t, w: t.offsetWidth, h: t.offsetHeight }], 1);\n", "    scale(best.cards, best.m, best.cols);\n"]]

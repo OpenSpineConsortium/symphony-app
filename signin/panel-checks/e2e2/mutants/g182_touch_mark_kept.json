@@ -1,0 +1,1 @@
+[["    host.addEventListener('blur', function () { host.classList.remove('stage--touched'); });\n", ""]]

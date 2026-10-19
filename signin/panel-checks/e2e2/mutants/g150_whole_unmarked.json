@@ -1,0 +1,1 @@
+[["    hooks.moved = function (st) { if (view.fit) view.fit.classList.toggle('graph__fit--idle', view.focus == null && st.whole); };", "    hooks.moved = function (st) { if (view.fit) view.fit.classList.toggle('graph__fit--idle', st.whole); };"]]

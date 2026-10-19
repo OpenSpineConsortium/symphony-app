@@ -1,1 +1,1 @@
-[["    if (!strip.clientWidth) {\n      if (typeof ResizeObserver !== 'function') return;\n", "    if (!strip.clientWidth) {\n      return;\n"]]
+[["    graphKeyFold();\n    graphStripLayout(true);\n    graphAllLayout();\n", "    graphKeyFold();\n    graphStripLayout(false);\n    graphAllLayout();\n"]]

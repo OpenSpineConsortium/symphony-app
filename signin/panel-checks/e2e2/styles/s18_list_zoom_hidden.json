@@ -1,0 +1,1 @@
+[[".graph__views, .graph__zoom, .graph__step { display: inline-flex; align-items: center; gap: 4px; }", ".graph__views, .graph__zoom, .graph__step { display: inline-flex; align-items: center; gap: 4px; }\n.graph__section[data-view=\"list\"] .graph__zoom { visibility: hidden; }"]]

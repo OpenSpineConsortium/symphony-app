@@ -1,0 +1,1 @@
+[["    paras.forEach(function (p, i) { p.hidden = Math.floor(i / per) !== graphHelpPage; });", "    paras.forEach(function (p) { p.hidden = false; });"]]

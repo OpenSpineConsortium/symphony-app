@@ -1,0 +1,1 @@
+[["    if (!d.moved) { if (!cancelled) stageTap(st, d); return; }\n", "    var under = stageNodeAt(document.elementFromPoint(e.clientX, e.clientY));\n    if (under != null && !cancelled) { d.node = under; stageTap(st, d); return; }\n    if (!d.moved) { if (!cancelled) stageTap(st, d); return; }\n"]]

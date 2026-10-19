@@ -1,0 +1,1 @@
+[["    if (tab && tab.clientHeight) tab.classList.toggle('graph--short', tab.clientHeight < GRAPH_SHORT);", "    if (tab && tab.clientHeight) tab.classList.toggle('graph--short', false);"]]

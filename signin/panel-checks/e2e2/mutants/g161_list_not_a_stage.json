@@ -1,0 +1,1 @@
+[["      zooms: function () { return !all(); },\n      wheel: function () { return true; },\n      area: sec,\n", "      zooms: function () { return false; },\n      wheel: function () { return true; },\n"]]

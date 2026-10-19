@@ -1,0 +1,1 @@
+[["now - last.t < STAGE_TAP_MS && Math.abs(d.x0 - last.x) + Math.abs(d.y0 - last.y) < 30) {", "now - last.t < STAGE_TAP_MS) {"]]

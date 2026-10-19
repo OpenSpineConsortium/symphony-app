@@ -1,0 +1,1 @@
+[["#tab-dependencies.graph--short #cp-graph-focus .graph__ttitle[data-num]::before { content: attr(data-num) \" \";", "#tab-dependencies.graph--short #cp-graph-focus .graph__ttitle[data-num]::before { content: none;"]]

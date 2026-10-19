@@ -1,1 +1,0 @@
-[["    if (e.ctrlKey || pageScrolls() || strip.scrollWidth", "    if (true || e.ctrlKey || pageScrolls() || strip.scrollWidth"]]

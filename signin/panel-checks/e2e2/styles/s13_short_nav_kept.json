@@ -1,0 +1,1 @@
+[["body.console-bar-auto:not(.console-bar-shown) #nav { transform: translateY(calc(-100% - 32px)); }\n", ""]]

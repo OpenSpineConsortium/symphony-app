@@ -1,1 +1,1 @@
-[["      graphPan($(id));\n", ""]]
+[["    st.x = d.sx + d.dx;\n    st.y = d.sy + (d.pan || st.hooks.near ? d.dy : 0);\n", ""]]

@@ -1,0 +1,1 @@
+[["    graphSwipes(strip, graphStripTurn);", "    graphSwipes(strip, function () { return false; });"]]

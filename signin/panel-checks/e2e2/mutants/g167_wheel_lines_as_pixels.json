@@ -1,0 +1,1 @@
+[["    var d = e.deltaY * (e.deltaMode === 1 ? 16 : (e.deltaMode === 2 ? st.host.clientHeight : 1));", "    var d = e.deltaY;"]]

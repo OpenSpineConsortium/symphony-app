@@ -1,0 +1,1 @@
+[["    var k = Math.max(st.fit, Math.min(stageMax(st), st.k * factor));", "    var k = Math.min(stageMax(st), st.k * factor);"], ["    st.whole = k <= st.fit * 1.001;\n    if (st.whole) stageWhole(st, animate);", "    st.whole = Math.abs(k - st.fit) < st.fit * 0.001;\n    if (st.whole) stageWhole(st, animate);"]]

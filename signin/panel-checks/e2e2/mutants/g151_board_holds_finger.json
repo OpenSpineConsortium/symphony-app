@@ -1,0 +1,1 @@
+[["view.stage.hooks.moved = function (st) { moved(st); host.style.touchAction = st.whole && view.focus == null ? 'pan-y' : 'none'; };", "view.stage.hooks.moved = function (st) { moved(st); host.style.touchAction = 'none'; };"]]

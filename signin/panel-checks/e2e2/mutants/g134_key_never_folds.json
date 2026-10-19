@@ -1,0 +1,1 @@
+[["    tab.classList.toggle('graph--keyfold', fold);", "    tab.classList.toggle('graph--keyfold', false);"]]

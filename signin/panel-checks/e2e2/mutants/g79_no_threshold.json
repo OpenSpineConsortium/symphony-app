@@ -1,1 +1,1 @@
-[["        if (Math.abs(dx) + Math.abs(dy) < 6) return;\n", ""]]
+[["    if (!d.moved && Math.abs(d.dx) + Math.abs(d.dy) < STAGE_SLOP) return;\n", ""]]

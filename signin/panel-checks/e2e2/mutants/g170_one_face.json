@@ -1,0 +1,1 @@
+[["    return graphRenderFaces(m, chart.text, !!chart.turns).then(", "    return graphRenderFaces(m, chart.text, false).then("]]

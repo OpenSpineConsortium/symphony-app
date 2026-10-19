@@ -1,0 +1,1 @@
+[["#tab-dependencies, #cp-board { --gbtn: clamp(28px, 1.6vmin + 20px, 38px); }\n@media (pointer: coarse) { #tab-dependencies, #cp-board { --gbtn: clamp(32px, 1.6vmin + 24px, 42px); } }", "#tab-dependencies, #cp-board { --gbtn: 30px; }"]]

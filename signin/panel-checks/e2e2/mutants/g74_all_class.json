@@ -1,1 +1,1 @@
-[["    $('cp-graph').classList.toggle('graph--all', key === 'all');\n", ""]]
+[["    box.classList.toggle('graph--all', all);\n", ""]]

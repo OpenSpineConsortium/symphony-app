@@ -1,0 +1,1 @@
+[["    var ids = Object.keys(st.pointers);\n    if (ids.length !== 1) return;\n", "    var ids = Object.keys(st.pointers);\n    if (true) return;\n"]]

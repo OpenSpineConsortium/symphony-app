@@ -1,0 +1,1 @@
+[["      else if (view.focus != null) graphNearClose(view);\n      else { var st = stageOf(view.host); if (st) stageWhole(st, true); }", "      else { var st = stageOf(view.host); if (st) stageWhole(st, true); }"]]

@@ -1,0 +1,1 @@
+[["    var least = Math.max(STAGE_MIN, graphNeed());", "    var least = STAGE_MIN;"]]

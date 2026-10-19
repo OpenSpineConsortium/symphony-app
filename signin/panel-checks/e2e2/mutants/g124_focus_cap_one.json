@@ -1,0 +1,1 @@
+[["    stageShow(view.host, svgs, STAGE_NEAR_MAX, { floor: view.wholeFit * GRAPH_NEAR_GROW, focal: graphFocal });", "    stageShow(view.host, svgs, 1, { floor: view.wholeFit * GRAPH_NEAR_GROW, focal: graphFocal });"]]

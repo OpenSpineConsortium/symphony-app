@@ -1,0 +1,1 @@
+[["    window.addEventListener('keydown', function (e) {\n      if (e.key !== 'Escape' || !barShown() || e.defaultPrevented) return;", "    document.addEventListener('keydown', function (e) {\n      if (e.key !== 'Escape' || !barShown() || e.defaultPrevented) return;"]]

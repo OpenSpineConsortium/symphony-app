@@ -1,0 +1,1 @@
+[["    if (!st.svg || !st.hooks.zooms() || !(e.ctrlKey || st.hooks.wheel())) return;\n    e.preventDefault();\n", "    if (!st.svg || !st.hooks.zooms() || !(e.ctrlKey || st.hooks.wheel())) return;\n"]]

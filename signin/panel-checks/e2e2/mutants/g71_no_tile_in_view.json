@@ -1,1 +1,1 @@
-[["    if (pressed) graphTileInView(strip, pressed);\n", ""]]
+[["    if (follow && pressed >= 0) graphStripPage = Math.floor(pressed / per);\n", ""]]

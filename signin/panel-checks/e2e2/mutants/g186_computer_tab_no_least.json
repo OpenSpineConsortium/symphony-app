@@ -1,0 +1,1 @@
+[["    if (pageScrolls()) return Math.ceil(graphHeldAround(tab)) + GRAPH_LEAST;\n", "    if (pageScrolls()) return Math.ceil(graphHeldAround(tab)) + GRAPH_LEAST;\n    return 0;\n"]]
