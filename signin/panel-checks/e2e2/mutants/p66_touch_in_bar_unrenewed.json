@@ -1,0 +1,1 @@
+[["      part.addEventListener('pointerdown', function (e) { if (e.pointerType === 'touch' && barShown()) hideBarSoon(BAR_TOUCH_MS); });\n", "\n"]]

@@ -1,0 +1,1 @@
+[["    function showForTouch() { showBar(); hideBarSoon(BAR_TOUCH_MS); }\n", "    function showForTouch() { showBar(); }\n"]]

@@ -13,7 +13,7 @@ ghu_TEST or github_pat_X.
 
 ## What is here
 
-- `e2e2/signin.test.mjs`: 136 checks of the sign-in and the console's foot, run against a mocked
+- `e2e2/signin.test.mjs`: 150 checks of the sign-in and the console's foot, run against a mocked
   api.github.com, a mocked GitHub authorize page and a mocked sign-in service at
   https://signin.example.test. Some checks run both ways in, Sign in with GitHub and a pasted
   token. P1 to P22 (site pull request #78, 2026-10-19) hold the work a button starts, spoken at
@@ -37,6 +37,44 @@ ghu_TEST or github_pat_X.
   none selected, and a list an older page left readable by the private repositories, or by all,
   closed, its value kept, when an owner opens the Tokens tab, a close GitHub refuses let go without
   a word, and the last repository taken off deleting the list.
+  P25 to P38 (site branch claude/panel-resize-autohide, 2026-10-19, after the owner's "i should be
+  able to resize all 3, when im in the control panel the top nav panel should hide and reappear when
+  the mouse is over it, like windows does with its taskbar") hold the message foot as the third part
+  a person sizes, and the site's bar hiding itself on the control page. The foot's grip lies along
+  its top, a separator with a quiet bar, over none of the message's words, that a mouse drags, up to
+  grow the foot and down to shrink it, the stage giving up or taking back exactly what the foot
+  takes (P25); a finger drags it on a phone either way up without scrolling the page, the grip a
+  thumb's and over none of the message's words or the foot's buttons (P26); the arrow keys step it
+  by 16 px and a double-click puts it back as tall as its message (P27); its size is kept across a
+  reload, read back only as a number in the part's bounds with the rest of the record kept, held to
+  what the window leaves, and a window made shorter takes the foot down and gives it back (P28); it
+  is held between one line of message with Clear and its buttons, whole and pressable, and what
+  leaves the stage 180 px, at 1280 x 800, 1440 x 900 and 1920 x 1080, at the smallest and the
+  largest text, on a phone upright and sideways, and while the Ask Claude bar grows, a grip dragged
+  past the window's top calling no bar (P29); the grip follows the pointer under every text size,
+  and a finger on a phone whatever text size a computer saved (P30); and a long task box, a failed
+  run of fourteen steps with its log, keeps a small foot its size, its first line showing, Clear
+  pressable and the rest scrolled inside the message box, fills a foot sized tall past the box's
+  usual cap, and grows a foot nobody sized to that cap as before (P31). On a computer every one of
+  them finds the deck filling the window with no page scroll either way; a phone's page scrolls
+  under its sticky foot by design (P6), so there the page is held to the window's width, the foot to
+  the window's bottom and the drags to scroll nothing. The bar is hidden from the start, wholly
+  above the window, the deck starting at the window's top or the Home Screen app's top inset, with
+  neither the hot strip nor the phone's handle over a control of the deck or the words of its title
+  (P32); the pointer at the top edge brings it back over the deck, which does not move, and it stays
+  while the pointer is over it, though the focus passes through it and out, or over a section strip
+  it dropped, goes a moment after the pointer leaves and not at once, comes for a pointer leaving
+  the window across the top and not for one passing just under the edge, and is opaque over the deck
+  (P33); Tab from the page's start brings it, it goes after its wait when the focus leaves and stays
+  while the focus moves in it, and Escape sends it away at once with the focus (P34); on a phone the
+  handle, a tab in the site's colours at the top centre, shows it for a tap or a swipe down, a tap
+  outside sends it at once and four seconds do too, a touch in the bar starts the wait again, and
+  the menu opened from it holds it past that wait and closes with it (P35); full screen hides the
+  bar, the strip and the handle, and leaving it gives them back (P36); where less motion is asked
+  the bar shows with no slide, on a computer and on a phone, and slides otherwise (P37); and the
+  rest of the site, /symphony/, the cost page and the home page, keeps its bar at the top with no
+  strip and no handle (P38). `CSS_MUTANT` names a list of pairs for control.css, served in its
+  place, as `MUTANT` names one for the script.
 - `e2e2/panel.test.mjs`: the panel's walkthrough on both pages.
 - `e2e2/hostile.test.mjs`: 13 hostile-input checks.
 - `e2e2/assistant.test.mjs`: 26 checks of the panel's assistant (site branch claude/assistant-panel,
@@ -304,9 +342,13 @@ ghu_TEST or github_pat_X.
   button once the script marks it hidden (H8). Two changes no check sees: a fallback given to env(), which Chromium and Safari never
   use since both define every inset, and the deck's foot padded by the home bar in the phone layout
   too, which only widens the dark band under the status line, since H4 holds the status line's
-  place alone. Run it with `SITE=<the site's checkout> BASE=<the site's address> node
-  app.test.mjs`.
-- `e2e2/mutants/`: 383 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+  place alone. Since the site's bar hides itself on the control page (site branch
+  claude/panel-resize-autohide, 2026-10-19), H5 and H6 open the header's drawer as a person then
+  does, by tapping the handle at the top, which slides the bar back, and pressing the menu button
+  once the bar is whole in the window; they failed on that branch only because the button stood
+  above the window, where the hidden bar keeps it. Run it with `SITE=<the site's checkout>
+  BASE=<the site's address> node app.test.mjs`.
+- `e2e2/mutants/`: 414 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
@@ -407,6 +449,32 @@ ghu_TEST or github_pat_X.
   2026-10-19, after its adversarial review, where app.test.mjs, signin.test.mjs, panel.test.mjs and
   hostile.test.mjs pass whole; H1 to H7 hold the build's head and the stylesheet, which no mutant of
   the script reaches.
+  The 31 of the foot and the bar (p41 to p71, for P25 to P38) were caught against site branch
+  claude/panel-resize-autohide at 2d22660 on 2026-10-19, that branch's work with master merged in,
+  where every other suite passes too: the foot's grip never drawn or dragged the wrong way (P25);
+  the foot's bounds unheld, the stage's 180 px unkept, a phone's least foot without its buttons, and
+  the Ask Claude bar's growth unwatched (P29); a window made shorter not taking the foot down, and a
+  kept size read whatever its value (P28); a sized foot never marked as sized (P31); the drag's scale
+  taken from the saved text size, which a phone does not use (P30); the bar never set to hide, its
+  hot strip never drawn, and a strip that takes the pointer a browser makes up as the page loads
+  (P32); the bar never shown, gone at once, gone under the pointer or from a section strip, and deaf
+  to a pointer leaving across the top (P33); the focus ignored, Escape ignored, and Escape leaving the
+  focus in the hidden bar (P34); and the handle never drawn, its tap or its swipe dead, a tap outside
+  ignored, a touch's bar kept for good, the open menu not holding the bar or left open after it, a
+  touch in the bar not starting the wait again, its aria-expanded unsaid, and every pointer taken for
+  one that hovers (P35).
+- `e2e2/css-mutants/`: 17 lists of pairs for the stylesheet control.css, each with its `.json.only`,
+  for the part of the foot and the bar that is the stylesheet's, which no mutant of the script
+  reaches; `run-mutants.sh` serves a path under css-mutants/ in place of control.css through
+  `CSS_MUTANT`. Each was caught by its check against the same branch the same day: the page keeping
+  the bar's padding over the deck, the bar never hidden, the phone's section strip standing in the
+  page or never hidden, the handle under the Home Screen app's top inset (P32); the bar see-through
+  over the deck and the hot strip never shown (P33); the handle never shown (P35); full screen
+  leaving the strip and the handle (P36); the bar sliding where less motion is asked (P37); a sized
+  foot not held to its size and its message box held to the usual cap (P31); a phone's sized foot
+  not laid out as message over buttons (P29); and the phone's grip too thin for a thumb, no room
+  kept for it at the foot's top, so that it lies over the message's words, the grips scrolling the
+  page under a finger, and the grip's quiet bar not drawn (P26 and P25).
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
   and every page action, visibility read and locator action on a selector first opens the tab that
@@ -430,12 +498,15 @@ ghu_TEST or github_pat_X.
    PASS or FAIL.
    - `ONLY=I11b,G7` runs only the checks whose names start with those prefixes, each followed by
      a colon.
-   - `MUTANT=mutants/m33_noended.json` runs the checks against that mutant.
+   - `MUTANT=mutants/m33_noended.json` runs the checks against that mutant, and
+     `CSS_MUTANT=css-mutants/c02_bar_never_hidden.json` the checks of signin.test.mjs against that
+     stylesheet.
    - `e2e2/run-mutants.sh` expects a server already on port 8077, or on the address `BASE`
      names, and reports each mutant as KILLED, SURVIVED, STALE or ERROR; name mutants to run only
      those, by their paths from e2e2/ (`bash run-mutants.sh mutants/g*.json` there runs the
      Dependencies tab's, `mutants/f*.json` the Folders tab's, `mutants/n*.json` the Notebooks
-     tab's, `mutants/h*.json` the Home Screen app's, with `SITE` set as for the checks).
+     tab's, `mutants/h*.json` the Home Screen app's, `css-mutants/*.json` the stylesheet's, with
+     `SITE` set as for the checks).
 
 The site sets the two constants to the live service and SymphonyBoard's Client ID (site pull
 request #24). The checks set them for themselves, whatever the shipped script holds: the

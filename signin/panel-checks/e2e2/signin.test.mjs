@@ -31,6 +31,13 @@ assert.ok(SERVICE_LINE.test(real) && CLIENT_LINE.test(real), 'the two constants 
 const configured = real.replace(SERVICE_LINE, "var SIGNIN_SERVICE = '" + SERVICE + "';").replace(CLIENT_LINE, "var CLIENT_ID = 'Iv1.testclient';");
 real = real.replace(SERVICE_LINE, "var SIGNIN_SERVICE = '';").replace(CLIENT_LINE, "var CLIENT_ID = '';");
 assert.notEqual(configured, real, 'the two constants were not set apart');
+// a stylesheet mutant, for proving a check holds a rule of control.css that no mutant of the script
+// reaches (css-mutants/): the same pairs, applied to the stylesheet every page of the check is served
+let controlCss = null;
+if (process.env.CSS_MUTANT) {
+  controlCss = fs.readFileSync(SITE + '/assets/css/control.css', 'utf8');
+  for (const [a, b] of JSON.parse(fs.readFileSync(process.env.CSS_MUTANT, 'utf8'))) { assert.ok(controlCss.includes(a), 'mutant text not found: ' + a.slice(0, 60)); controlCss = controlCss.replace(a, b); }
+}
 
 function repoRoutes(repo) {
   return {
@@ -72,6 +79,7 @@ async function open(opts) {
     return route.fulfill({ status: 200, contentType: 'application/json', headers, body: JSON.stringify(r) });
   });
   await context.route('**/assets/js/symphony-panel.js*', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: opts.script || real }));
+  if (controlCss !== null) await context.route('**/assets/css/control.css*', (route) => route.fulfill({ status: 200, contentType: 'text/css', body: controlCss }));
   await context.route('https://github.com/login/oauth/**', (route) => {
     const u = new URL(route.request().url());
     authorize.push(u);
@@ -3046,6 +3054,770 @@ await check('P24: the list of repositories a token lent with no say runs on is w
     else assert.ok(rows.includes('acme/home'), c.name + ': the repository added is not listed');
     assert.deepEqual(errors, []);
     await context.close();
+  }
+});
+
+/* ---------- P25 to P38: the foot sized as the parts beside it, and the site's bar hiding itself ---------- */
+// The owner, 2026-10-19: "i cant resize the message board panel, just the control panel and window
+// which shows the tab, i should be able to resize all 3, when im in the control panel the top nav
+// panel should hide and reappear when the mouse is over it, like windows does with its taskbar" (site
+// branch claude/panel-resize-autohide). His rule of that morning holds with it: on a computer nothing
+// in the panel scrolls the page. A phone's page scrolls under a foot that sticks to the window's
+// bottom, as P6 holds, so there the foot is held to the window and the page to its width.
+
+// In the page: the foot, its grip, the stage and the deck on screen, the size the layout keeps, and
+// how far the page could scroll either way
+function footFacts() {
+  const c = document.getElementById('console'), st = c.querySelector('.console__status'), grip = c.querySelector('[data-split="foot"]');
+  const box = (n) => { const r = n.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, height: r.height, left: r.left, right: r.right }; };
+  let kept = null;
+  try { kept = (JSON.parse(localStorage.getItem('symphony_panel_layout') || '{}') || {}).foot; } catch (e) { kept = 'unreadable'; }
+  const se = document.scrollingElement;
+  return { foot: box(st), stage: box(c.querySelector('.console__stage')), deck: box(c), grip: grip ? box(grip) : null, sized: c.classList.contains('console--foot'), prop: c.style.getPropertyValue('--foot-h'), kept: kept === undefined ? null : kept,
+    bar: document.body.classList.contains('console-bar-shown'), ih: innerHeight, iw: innerWidth, sh: se.scrollHeight, sw: se.scrollWidth, sy: Math.round(scrollY), sx: Math.round(scrollX) };
+}
+const footOf = (p) => p.evaluate(footFacts);
+const near = (a, b, tol) => Math.abs(a - b) <= (tol === undefined ? 1 : tol);
+// the page cannot scroll either way, and the deck runs from the window's top to its bottom
+function assertFits(f, where) {
+  assert.ok(f.sh <= f.ih && f.sw <= f.iw && f.sy === 0 && f.sx === 0, where + ': the page scrolls (' + f.sw + ' x ' + f.sh + ' in ' + f.iw + ' x ' + f.ih + ', at ' + f.sx + ',' + f.sy + ')');
+  assert.ok(near(f.deck.top, 0, 0.5) && near(f.deck.bottom, f.ih, 0.5), where + ': the deck runs from ' + f.deck.top + ' to ' + f.deck.bottom + ' in a window ' + f.ih + ' tall');
+}
+// a phone's page is no wider than the window, and the foot stands at the window's bottom
+function assertPhoneFits(f, where) {
+  assert.ok(f.sw <= f.iw && f.sx === 0, where + ': the page is ' + f.sw + ' px wide in ' + f.iw);
+  assert.ok(near(f.foot.bottom, f.ih, 1), where + ': the foot ends at ' + f.foot.bottom + ', not at the window\'s bottom ' + f.ih);
+}
+// the foot's grip dragged from its middle, dy window pixels down (up where negative), by the mouse
+async function mouseDragFoot(page, dy) {
+  const g = await page.evaluate(() => { const r = document.querySelector('[data-split="foot"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  await page.mouse.move(g.x, g.y);
+  await page.mouse.down();
+  await page.mouse.move(g.x, g.y + dy, { steps: 8 });
+  await page.mouse.up();
+  await sleep(150);
+  return g;
+}
+// the same drag by a finger, through Chromium's touch events, as a phone's screen sends them
+async function fingerDrag(page, x, y, dy) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+  for (let i = 1; i <= 10; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y + dy * i / 10 }] }); await sleep(16); }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+  await sleep(150);
+}
+async function fingerDragFoot(page, dy) {
+  const g = await page.evaluate(() => { const r = document.querySelector('[data-split="foot"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  await fingerDrag(page, g.x, g.y, dy);
+  return g;
+}
+// a short message at the foot, so Clear shows beside it
+const sayOneLine = (p) => p.evaluate(() => { document.getElementById('msg').textContent = 'Saved.'; });
+// In the page: the first line of the message, Clear and the foot's other buttons that show, each
+// whole inside the foot and the first thing under its own middle
+function footLineFacts() {
+  const st = document.querySelector('.console__status'), msg = document.getElementById('msg');
+  const s = st.getBoundingClientRect(), m = msg.getBoundingClientRect();
+  const range = document.createRange();
+  range.selectNodeContents(msg);
+  const line = range.getClientRects()[0];
+  const parts = [['the message\'s line', line]].concat(Array.from(st.querySelectorAll('button')).filter((b) => b.getClientRects().length && getComputedStyle(b).visibility !== 'hidden').map((b) => [b.id || b.textContent.trim(), b.getBoundingClientRect(), b]));
+  const out = parts.map(([name, r, node]) => {
+    const inside = !!r && r.top >= s.top - 0.5 && r.bottom <= s.bottom + 0.5 && (node ? true : r.top >= m.top - 0.5 && r.bottom <= m.bottom + 0.5);
+    const at = r && document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { name, inside, hit: !!(at && (node ? node.contains(at) || at === node : msg.contains(at))) };
+  });
+  return { parts: out, clear: !!out.find((x) => x.name === 'cp-msg-close'), foot: s.height };
+}
+
+// In the page: what of the foot the grip lies over: how far into the message's first line of words
+// it reaches (none where 0 or less), and which of the foot's buttons that show it meets
+function gripOver() {
+  const g = document.querySelector('[data-split="foot"]').getBoundingClientRect(), msg = document.getElementById('msg');
+  const range = document.createRange();
+  range.selectNodeContents(msg);
+  const line = range.getClientRects()[0];
+  const buttons = Array.from(document.querySelectorAll('.console__status button')).filter((b) => b.getClientRects().length && getComputedStyle(b).visibility !== 'hidden')
+    .filter((b) => { const r = b.getBoundingClientRect(); return r.left < g.right && r.right > g.left && r.top < g.bottom && r.bottom > g.top; }).map((b) => b.id || b.textContent.trim());
+  return { words: line ? g.bottom - line.top : null, buttons };
+}
+
+await check('P25: the message foot has a grip of its own along its top, a separator over none of the message\'s words that the mouse drags: up grows the foot, down shrinks it, the stage gives up or takes back exactly what the foot takes, the size is kept, and the deck still fits the window', async () => {
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 800 } });
+  await loaded(page);
+  await sleep(300);
+  const grip = await page.evaluate(() => {
+    const g = document.querySelector('#console .console__status > [data-split="foot"]');
+    if (!g) return null;
+    const a = getComputedStyle(g, '::after'), r = g.getBoundingClientRect();
+    const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { first: g === g.parentElement.firstElementChild, role: g.getAttribute('role'), orientation: g.getAttribute('aria-orientation'), label: g.getAttribute('aria-label'), tab: g.tabIndex,
+      cursor: getComputedStyle(g).cursor, touch: getComputedStyle(g).touchAction, shown: g.checkVisibility(), hit: at === g, height: r.height, barW: parseFloat(a.width), barH: parseFloat(a.height), bar: a.backgroundColor };
+  });
+  console.log('      grip:', JSON.stringify(grip));
+  assert.ok(grip, 'the foot has no grip');
+  assert.deepEqual([grip.first, grip.role, grip.orientation, grip.tab, grip.cursor, grip.touch, grip.shown, grip.hit], [true, 'separator', 'horizontal', 0, 'row-resize', 'none', true, true]);
+  assert.match(grip.label, /^Drag to size the messages; double-click to reset$/);
+  assert.ok(grip.height >= 12, 'the grip is too thin to take with a mouse: ' + grip.height);
+  // visible but quiet: a short bar of the deck's light ink, see-through, where the other grips show none until hovered
+  const alpha = /rgba\(\d+, \d+, \d+, ([\d.]+)\)/.exec(grip.bar);
+  assert.ok(grip.barW >= 40 && grip.barH >= 3 && alpha && Number(alpha[1]) >= 0.15 && Number(alpha[1]) <= 0.6, 'the grip shows no quiet bar to take: ' + grip.barW + ' x ' + grip.barH + ' ' + grip.bar);
+  await sayOneLine(page);
+  const over = await page.evaluate(gripOver);
+  await page.evaluate(() => { document.getElementById('msg').textContent = ''; });
+  console.log('      the grip over the foot:', JSON.stringify(over));
+  assert.ok(over.words !== null && over.words <= 0.5, 'the grip lies over the message\'s words by ' + over.words + ' px');
+  const rest = await footOf(page);
+  assert.deepEqual([rest.sized, rest.prop, rest.kept], [false, '', null], 'the foot was sized before anyone sized it');
+  assertFits(rest, 'at rest');
+  await mouseDragFoot(page, -200);
+  const up = await footOf(page);
+  await mouseDragFoot(page, 120);
+  const down = await footOf(page);
+  console.log('      at rest:', rest.foot.height, '+', rest.stage.height, '| up 200:', up.foot.height, '+', up.stage.height, '| down 120:', down.foot.height, '+', down.stage.height, '| kept', down.kept);
+  assert.ok(near(up.foot.height, rest.foot.height + 200), 'dragging the grip up 200 px made the foot ' + up.foot.height + ' tall from ' + rest.foot.height);
+  assert.ok(near(down.foot.height, up.foot.height - 120), 'dragging the grip down 120 px made the foot ' + down.foot.height + ' tall from ' + up.foot.height);
+  for (const [name, f] of [['up', up], ['down', down]]) {
+    assert.ok(near(f.stage.height + f.foot.height, rest.stage.height + rest.foot.height), name + ': the stage did not give up exactly what the foot took');
+    assert.ok(near(f.grip.top + f.grip.height / 2, f.foot.top, 3), name + ': the grip no longer lies along the foot\'s top');
+    assert.equal(f.sized, true);
+    assertFits(f, name);
+  }
+  assert.ok(near(down.kept, down.foot.height), 'the layout keeps ' + down.kept + ' for a foot ' + down.foot.height + ' tall');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P26: a finger drags the foot\'s grip on a phone, upright and sideways, sizing the foot and never scrolling the page, the grip a thumb\'s to take with its bar in view and over none of the message\'s words or the foot\'s buttons', async () => {
+  for (const [viewport, dy] of [[{ width: 390, height: 844 }, -150], [{ width: 844, height: 390 }, -60]]) {
+    const where = viewport.width + ' x ' + viewport.height;
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport, mobile: true });
+    await loaded(page);
+    await sleep(400);
+    const grip = await page.evaluate(() => {
+      const g = document.querySelector('[data-split="foot"]'), a = getComputedStyle(g, '::after'), r = g.getBoundingClientRect();
+      const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { shown: g.checkVisibility(), height: r.height, width: r.width, touch: getComputedStyle(g).touchAction, hit: at === g, barW: parseFloat(a.width), barH: parseFloat(a.height), bar: a.backgroundColor, barTop: parseFloat(a.top) };
+    });
+    await sayOneLine(page);
+    const over = await page.evaluate(gripOver);
+    const rest = await footOf(page);
+    await fingerDragFoot(page, dy);
+    const up = await footOf(page);
+    await fingerDragFoot(page, -dy / 2);
+    const down = await footOf(page);
+    console.log('      ' + where + ': grip', JSON.stringify(grip), JSON.stringify(over), '| foot', rest.foot.height, '->', up.foot.height, '->', down.foot.height, '| scrolled', rest.sy, up.sy, down.sy, '| kept', down.kept);
+    assert.ok(grip.shown && grip.hit, where + ': the grip is not there to touch');
+    // a thumb's grip, and still over none of the message's words nor the foot's buttons
+    assert.ok(over.words !== null && over.words <= 0.5, where + ': the grip lies over the message\'s words by ' + over.words + ' px');
+    assert.deepEqual(over.buttons, [], where + ': the grip lies over the foot\'s buttons');
+    assert.equal(grip.touch, 'none', where + ': a finger on the grip would scroll the page');
+    assert.ok(grip.height >= 24 && grip.width >= 300, where + ': the grip is smaller than a thumb: ' + grip.width + ' x ' + grip.height);
+    assert.ok(grip.barW >= 48 && grip.barH >= 4 && grip.bar !== 'rgba(0, 0, 0, 0)', where + ': the grip\'s bar does not show');
+    assert.ok(near(up.foot.height, rest.foot.height - dy), where + ': a finger dragging up ' + (-dy) + ' px made the foot ' + up.foot.height + ' tall from ' + rest.foot.height);
+    assert.ok(near(down.foot.height, up.foot.height + dy / 2), where + ': a finger dragging down made the foot ' + down.foot.height + ' tall from ' + up.foot.height);
+    assert.deepEqual([rest.sy, up.sy, down.sy], [0, 0, 0], where + ': the finger\'s drag scrolled the page');
+    assert.ok(near(down.kept, down.foot.height), where + ': the layout keeps ' + down.kept);
+    for (const f of [up, down]) assertPhoneFits(f, where);
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+});
+
+await check('P27: the arrow keys size the foot from its focused grip, up to grow and down to shrink, and a double-click puts it back as tall as its message', async () => {
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 800 } });
+  await loaded(page);
+  await sleep(300);
+  const rest = await footOf(page);
+  await page.focus('[data-split="foot"]');
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowUp');
+  const two = await footOf(page);
+  await page.keyboard.press('ArrowDown');
+  const one = await footOf(page);
+  console.log('      foot:', rest.foot.height, '| up twice', two.foot.height, 'kept', two.kept, '| down once', one.foot.height, 'kept', one.kept);
+  assert.ok(near(two.foot.height, rest.foot.height + 32), 'two presses of ArrowUp made the foot ' + two.foot.height + ' from ' + rest.foot.height);
+  assert.ok(near(one.foot.height, rest.foot.height + 16), 'ArrowDown made the foot ' + one.foot.height);
+  assert.ok(near(one.stage.height + one.foot.height, rest.stage.height + rest.foot.height), 'the stage did not give up exactly what the foot took');
+  assert.ok(near(one.kept, one.foot.height), 'the keys\' size was not kept');
+  assertFits(one, 'by the keys');
+  await page.dblclick('[data-split="foot"]');
+  await sleep(150);
+  const reset = await footOf(page);
+  console.log('      after a double-click:', reset.foot.height, '| sized', reset.sized, '| kept', reset.kept);
+  assert.deepEqual([reset.sized, reset.prop, reset.kept], [false, '', null], 'the double-click did not put the foot back');
+  assert.ok(near(reset.foot.height, rest.foot.height) && near(reset.stage.height, rest.stage.height), 'the foot is ' + reset.foot.height + ' tall after the reset, not ' + rest.foot.height);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P28: the foot\'s size is kept across a reload and read back only when it is a number in its bounds, a kept size the window cannot hold is held to it, and a window made shorter takes the foot down with it and back', async () => {
+  const facts = async (layout, viewport) => {
+    const storage = { local: Object.assign({}, asTester.local, layout === undefined ? {} : { symphony_panel_layout: typeof layout === 'string' ? layout : JSON.stringify(layout) }) };
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage, viewport: viewport || { width: 1280, height: 800 } });
+    await loaded(page);
+    await sleep(300);
+    const f = await footOf(page);
+    f.zoom = await page.evaluate(() => getComputedStyle(document.querySelector('#console .console__status')).zoom);
+    return { context, page, errors, f };
+  };
+  // sized by the keys, then the page loaded again
+  let { context, page, errors, f } = await facts();
+  const rest = f;
+  await page.focus('[data-split="foot"]');
+  for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowUp');
+  const sized = await footOf(page);
+  await page.reload();
+  await loaded(page);
+  await sleep(300);
+  const again = await footOf(page);
+  console.log('      sized', sized.foot.height, 'kept', sized.kept, '| after a reload', again.foot.height, again.sized);
+  assert.ok(near(again.foot.height, sized.foot.height) && again.sized, 'the size did not last a reload');
+  assert.ok(near(again.foot.height, rest.foot.height + 96));
+  assert.deepEqual(errors, []);
+  await context.close();
+  // kept sizes that are not a number in the part's bounds are left out, and the rest of the record kept
+  for (const bad of ['"300"', '10', '-40', '5000', 'null', 'true', '[300]', '{"px": 300}']) {
+    ({ context, page, errors, f } = await facts('{"foot": ' + bad + ', "zoom": 1.2}'));
+    console.log('      kept foot ' + bad + ':', f.foot.height, f.sized, JSON.stringify(f.prop), 'zoom', f.zoom);
+    assert.deepEqual([f.sized, f.prop], [false, ''], 'a kept foot of ' + bad + ' was read');
+    assert.equal(f.zoom, '1.2', 'the record\'s text size was dropped with the bad foot');
+    assert.ok(near(f.foot.height / 1.2, rest.foot.height, 1.5), 'with a kept foot of ' + bad + ' the foot is ' + f.foot.height + ' tall');
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  // a size in the part's bounds but taller than this window leaves: held to what leaves the stage its least
+  ({ context, page, errors, f } = await facts({ foot: 1500 }));
+  console.log('      kept 1500 at 1280 x 800:', f.foot.height, '| stage', f.stage.height);
+  assert.ok(f.sized && f.stage.height >= 179.5 && f.stage.height <= 182, 'a kept foot of 1500 left the stage ' + f.stage.height + ' px');
+  assertFits(f, 'kept 1500');
+  assert.deepEqual(errors, []);
+  await context.close();
+  // a window made shorter takes the foot down so the stage keeps its least; made taller, the foot is the size kept
+  ({ context, page, errors, f } = await facts({ foot: 500 }, { width: 1280, height: 900 }));
+  const tall = f;
+  await page.setViewportSize({ width: 1280, height: 600 });
+  await sleep(400);
+  const short = await footOf(page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await sleep(400);
+  const back = await footOf(page);
+  console.log('      kept 500: at 900 tall', tall.foot.height, '| at 600', short.foot.height, 'stage', short.stage.height, '| at 900 again', back.foot.height);
+  assert.ok(near(tall.foot.height, 500), 'a kept foot of 500 is ' + tall.foot.height + ' tall');
+  assert.ok(short.stage.height >= 179.5 && short.stage.height <= 182, 'the shorter window left the stage ' + short.stage.height + ' px');
+  assertFits(short, 'the window made shorter');
+  assert.ok(near(back.foot.height, 500), 'the window made taller again left the foot ' + back.foot.height + ' tall, not the 500 kept');
+  assert.equal(back.kept, 500, 'the shorter window rewrote the size kept');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P29: the foot is held between one line of message with its buttons and what leaves the stage its least, on a computer at three sizes and at the smallest and largest text, and on a phone either way up, the deck always fitting', async () => {
+  const desks = [[{ width: 1280, height: 800 }, 0], [{ width: 1440, height: 900 }, 0], [{ width: 1920, height: 1080 }, 0], [{ width: 1280, height: 800 }, -3], [{ width: 1280, height: 800 }, 5]];
+  for (const [viewport, steps] of desks) {
+    const where = viewport.width + ' x ' + viewport.height + (steps ? ' at ' + (steps < 0 ? 'A-' : 'A+') + ' x' + Math.abs(steps) : '');
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport });
+    await loaded(page);
+    for (let i = 0; i < Math.abs(steps); i++) await page.click(steps < 0 ? '#cp-zoom-down' : '#cp-zoom-up');
+    await sayOneLine(page);
+    await sleep(300);
+    const zoom = await page.evaluate(() => document.getElementById('cp-zoom-reset').textContent);
+    const rest = await footOf(page);
+    await mouseDragFoot(page, -3000);
+    const top = await footOf(page);
+    await mouseDragFoot(page, 3000);
+    const low = await footOf(page);
+    const line = await page.evaluate(footLineFacts);
+    console.log('      ' + where + ' (' + zoom + '): foot', rest.foot.height, '| up', top.foot.height, 'stage', top.stage.height, 'bar', top.bar, '| down', low.foot.height, JSON.stringify(line.parts));
+    assert.equal(zoom, steps < 0 ? '70%' : steps > 0 ? '170%' : '100%', where + ': the text size is not at its end');
+    assert.ok(top.stage.height >= 179.5 && top.stage.height <= 182, where + ': dragged up, the foot left the stage ' + top.stage.height + ' px');
+    assert.equal(top.bar, false, where + ': a grip dragged past the window\'s top called the site\'s bar');
+    assert.ok(line.clear, where + ': Clear does not show beside the message');
+    for (const part of line.parts) assert.ok(part.inside && part.hit, where + ': dragged down, ' + part.name + ' is cut off or covered (' + JSON.stringify(part) + ')');
+    assert.ok(low.foot.height < rest.foot.height + 1, where + ': dragged down, the foot is ' + low.foot.height + ', taller than at rest');
+    for (const [name, f] of [['up', top], ['down', low]]) {
+      assert.ok(near(f.stage.height + f.foot.height, rest.stage.height + rest.foot.height), where + ', ' + name + ': the stage did not give up exactly what the foot took');
+      assertFits(f, where + ', ' + name);
+    }
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  // the Ask Claude bar grown while the foot is at its tallest, as it does while an answer is waited
+  // for: the foot gives way so the stage keeps its least, and takes its size back once the bar shrinks
+  {
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 800 } });
+    await loaded(page);
+    await mouseDragFoot(page, -3000);
+    const top = await footOf(page);
+    await page.evaluate(() => { const d = document.createElement('div'); d.id = 'p29-tall'; d.style.height = '120px'; document.getElementById('cp-askbar').appendChild(d); });
+    await sleep(300);
+    const grown = await footOf(page);
+    await page.evaluate(() => document.getElementById('p29-tall').remove());
+    await sleep(300);
+    const back = await footOf(page);
+    console.log('      the Ask Claude bar 120 px taller: foot', top.foot.height, '->', grown.foot.height, 'stage', grown.stage.height, '| shrunk again: foot', back.foot.height);
+    assert.ok(grown.stage.height >= 179.5 && grown.stage.height <= 182, 'the grown Ask Claude bar left the stage ' + grown.stage.height + ' px');
+    assertFits(grown, 'the Ask Claude bar grown');
+    assert.ok(near(back.foot.height, top.foot.height), 'the foot did not take its size back');
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
+    const where = 'a phone at ' + viewport.width + ' x ' + viewport.height;
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport, mobile: true });
+    await loaded(page);
+    await sayOneLine(page);
+    await sleep(400);
+    await fingerDragFoot(page, -3000);
+    const top = await footOf(page);
+    await fingerDragFoot(page, 3000);
+    const low = await footOf(page);
+    const line = await page.evaluate(footLineFacts);
+    console.log('      ' + where + ': up', top.foot.top, 'to', top.foot.bottom, '| down', low.foot.height, JSON.stringify(line.parts));
+    assert.ok(near(top.foot.top, 180, 1.5), where + ': dragged up, the foot leaves ' + top.foot.top + ' px of the window above it, not 180');
+    assert.ok(line.clear, where + ': Clear does not show beside the message');
+    for (const part of line.parts) assert.ok(part.inside && part.hit, where + ': dragged down, ' + part.name + ' is cut off or covered (' + JSON.stringify(part) + ')');
+    for (const [name, f] of [['up', top], ['down', low]]) {
+      assertPhoneFits(f, where + ', ' + name);
+      assert.equal(f.sy, 0, where + ', ' + name + ': the drag scrolled the page');
+    }
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+});
+
+await check('P30: the foot\'s grip follows the pointer under every text size, and a finger on a phone whatever text size a computer saved', async () => {
+  const cases = [[{ width: 1280, height: 800 }, 0.7, false], [{ width: 1280, height: 800 }, 1, false], [{ width: 1280, height: 800 }, 1.5, false], [{ width: 390, height: 844 }, 1.5, true]];
+  for (const [viewport, zoom, mobile] of cases) {
+    const where = (mobile ? 'a phone with ' : '') + 'text at ' + zoom;
+    const storage = { local: Object.assign({}, asTester.local, zoom === 1 ? {} : { symphony_panel_layout: JSON.stringify({ zoom }) }) };
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage, viewport, mobile });
+    await loaded(page);
+    await sleep(400);
+    const before = await footOf(page);
+    const g = mobile ? await fingerDragFoot(page, -100) : await mouseDragFoot(page, -100);
+    const after = await footOf(page);
+    const moved = (after.grip.top + after.grip.height / 2) - g.y;
+    console.log('      ' + where + ': the pointer moved -100, the grip ' + moved.toFixed(1) + ', the foot ' + before.foot.height.toFixed(1) + ' -> ' + after.foot.height.toFixed(1));
+    assert.ok(near(moved, -100, 2), where + ': the grip moved ' + moved.toFixed(1) + ' px under a pointer that moved 100');
+    assert.ok(near(after.foot.height - before.foot.height, 100, 2), where + ': the foot grew ' + (after.foot.height - before.foot.height).toFixed(1) + ' px');
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+});
+
+// a run of the Workers workflow with many steps, failed, so its task box shows every step and the
+// last lines of its log
+function longRunRoutes() {
+  const routes = runRoutes('failure', 1);
+  const names = ['Set up job', 'Check out', 'Set up Python', 'Read the board', 'Pick the workers', 'Install Claude Code', 'Run the workers', 'Collect the usage', 'Upload the usage', 'Write the summary', 'Post the summary', 'Tidy the claims', 'Post Check out', 'Complete job'];
+  routes['GET /repos/acme/demo/actions/runs/11/jobs'] = { total_count: 1, jobs: [{ id: 501, name: 'workers', status: 'completed', conclusion: 'failure', started_at: now, completed_at: new Date(Date.parse(now) + 95000).toISOString(),
+    steps: names.map((name, i) => ({ name, status: 'completed', conclusion: i === 6 ? 'failure' : (i > 6 && i < 12 ? 'skipped' : 'success') })) }] };
+  return routes;
+}
+// In the page: the foot, the message box and its task box: how much of the box shows and whether the
+// box scrolls inside itself, with Clear's middle pressable
+function taskBoxFacts() {
+  const st = document.querySelector('.console__status'), msg = document.getElementById('msg'), task = msg.querySelector('.msgtask');
+  const s = st.getBoundingClientRect(), m = msg.getBoundingClientRect(), head = task.querySelector('.msgtask__head').getBoundingClientRect();
+  const clear = document.getElementById('cp-msg-close').getBoundingClientRect();
+  const at = document.elementFromPoint(clear.left + clear.width / 2, clear.top + clear.height / 2);
+  msg.scrollTop = msg.scrollHeight;
+  const last = Array.from(task.querySelectorAll('.msgtask__steps li, .msgtask__log')).pop().getBoundingClientRect();
+  const end = { top: last.top, bottom: last.bottom };
+  msg.scrollTop = 0;
+  return { foot: s.height, msg: { top: m.top, bottom: m.bottom, height: m.height }, scrolls: msg.scrollHeight > msg.clientHeight + 1, overflow: getComputedStyle(msg).overflowY, headShown: head.top >= m.top - 0.5 && head.top < m.bottom,
+    inFoot: m.top >= s.top - 0.5 && m.bottom <= s.bottom + 0.5, endReached: end.bottom <= m.bottom + 1 && end.bottom > m.top, clearHit: !!(at && at.closest('#cp-msg-close')), steps: task.querySelectorAll('.msgtask__steps li').length, log: !task.querySelector('.msgtask__log').hidden };
+}
+
+await check('P31: a long task box in a foot sized small keeps the foot its size, shows its first line and scrolls inside the message box, never the page; a foot sized tall is filled by the box past its usual cap; a foot nobody sized grows with the box to its cap as before', async () => {
+  const cases = [[{ width: 1280, height: 800 }, false, { foot: 24 }], [{ width: 390, height: 844 }, true, { foot: 24 }], [{ width: 1280, height: 800 }, false, { foot: 400 }], [{ width: 1280, height: 800 }, false, null]];
+  for (const [viewport, mobile, layout] of cases) {
+    const where = viewport.width + ' x ' + viewport.height + (layout ? ', the foot sized ' + layout.foot : ', the foot unsized');
+    const storage = { local: Object.assign({}, asTester.local, layout ? { symphony_panel_layout: JSON.stringify(layout) } : {}) };
+    const { context, page, errors } = await open({ script: real, routes: longRunRoutes(), path: '/symphony/control/?repo=acme/demo', storage, viewport, mobile });
+    await loaded(page);
+    await sleep(300);
+    const before = await footOf(page);
+    await page.click('#cp-run-workers');
+    await untilFoot(page, 'Finished: failure', 20000);
+    await sleep(300);
+    const box = await page.evaluate(taskBoxFacts);
+    const after = await footOf(page);
+    console.log('      ' + where + ': foot', before.foot.height, '->', after.foot.height, '| box', JSON.stringify(box));
+    assert.equal(box.steps, 14);
+    assert.equal(box.log, true, where + ': the box shows no log');
+    // the box is taller than a small foot and than the usual cap, and fits whole in the tall one
+    const tall = !!layout && layout.foot === 400;
+    assert.ok(/auto|scroll/.test(box.overflow), where + ': the message box cannot scroll inside itself');
+    assert.equal(box.scrolls, !tall, where + (tall ? ': the box does not fit the tall foot whole' : ': the long box does not scroll inside the message box'));
+    assert.ok(box.headShown, where + ': the box\'s first line does not show');
+    assert.ok(box.inFoot, where + ': the message box runs out of the foot');
+    assert.ok(box.endReached, where + ': the box\'s last line cannot be scrolled into the message box');
+    assert.ok(box.clearHit, where + ': Clear is covered');
+    if (layout) {
+      assert.ok(near(after.foot.height, before.foot.height), where + ': the foot grew from ' + before.foot.height + ' to ' + after.foot.height + ' though it was sized');
+      // a foot sized taller than the message box's usual cap: the box fills it, past that cap
+      if (layout.foot === 400) assert.ok(near(after.foot.height, 400) && box.msg.height >= 400 - 12, where + ': the message box is ' + box.msg.height + ' tall in a foot of ' + after.foot.height);
+    } else {
+      assert.ok(after.foot.height > before.foot.height + 100, where + ': the unsized foot did not grow with the box');
+      assert.ok(box.msg.height <= 0.26 * viewport.height + 1, where + ': the message box grew past its cap: ' + box.msg.height);
+    }
+    if (mobile) { assertPhoneFits(after, where); assert.equal(after.sy, 0, where + ': the box scrolled the page'); } else assertFits(after, where);
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+});
+
+// In the page: whether the site's bar is wanted, where it and its section strip are, the deck, the
+// hot strip and the handle, and what holds the focus
+function barFacts() {
+  const box = (n) => { if (!n || !n.getClientRects().length) return null; const r = n.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height }; };
+  const nav = document.getElementById('nav'), strip = document.querySelector('.console__barstrip'), handle = document.querySelector('.console__barhandle');
+  const focus = document.activeElement;
+  // the section strips that show, as one box: on a computer they wait unseen until a tab drops one
+  const shownStrips = () => {
+    const boxes = Array.from(document.querySelectorAll('#flyouts .subnav')).filter((s) => s.checkVisibility({ opacityProperty: true, visibilityProperty: true })).map((s) => s.getBoundingClientRect());
+    return boxes.length ? { top: Math.min.apply(null, boxes.map((b) => b.top)), bottom: Math.max.apply(null, boxes.map((b) => b.bottom)) } : null;
+  };
+  return { auto: document.body.classList.contains('console-bar-auto'), shown: document.body.classList.contains('console-bar-shown'), full: document.body.classList.contains('console-full'),
+    nav: box(nav), navDisplay: getComputedStyle(nav).display, navBg: getComputedStyle(nav).backgroundColor, fly: shownStrips(), flyOpen: !!document.querySelector('#flyouts .is-open'),
+    deck: box(document.getElementById('console')), stageTop: document.querySelector('.console__stage').getBoundingClientRect().top, pad: getComputedStyle(document.body).paddingTop,
+    strip: strip ? { display: getComputedStyle(strip).display, box: box(strip) } : null, handle: handle ? { display: getComputedStyle(handle).display, box: box(handle), expanded: handle.getAttribute('aria-expanded'), label: handle.getAttribute('aria-label'), controls: handle.getAttribute('aria-controls') } : null,
+    menu: !!(document.getElementById('navLinks') && document.getElementById('navLinks').classList.contains('is-open')),
+    focusInBar: !!(focus && (nav.contains(focus) || document.getElementById('flyouts').contains(focus))), focus: focus ? (focus.className || focus.tagName) : '',
+    ih: innerHeight, iw: innerWidth, sh: document.scrollingElement.scrollHeight, sy: Math.round(scrollY) };
+}
+const barOf = (p) => p.evaluate(barFacts);
+// the bar slid back whole over the deck's top, and slid away wholly above the window with the section
+// strip that rides with it on a phone, which slides farther and so is the last to leave the top
+// in time, else the words given are the failure
+async function barIn(p, what) {
+  try { await p.waitForFunction(() => document.body.classList.contains('console-bar-shown') && Math.abs(document.getElementById('nav').getBoundingClientRect().top) < 0.5, null, { timeout: 3000 }); }
+  catch (e) { throw new Error(what + ' within 3 s'); }
+}
+async function barOut(p, what, ms) {
+  try {
+    await p.waitForFunction(() => !document.body.classList.contains('console-bar-shown') && document.getElementById('nav').getBoundingClientRect().bottom <= 0.5
+      && Array.from(document.querySelectorAll('#flyouts .subnav')).every((s) => !s.checkVisibility({ opacityProperty: true, visibilityProperty: true }) || s.getBoundingClientRect().bottom <= 0.5), null, { timeout: ms || 3000 });
+  } catch (e) { throw new Error(what + ' within ' + (ms || 3000) / 1000 + ' s'); }
+}
+// In the page: every control of the console that shows and meets the box given
+function consoleControlsUnder(r) {
+  return Array.from(document.querySelectorAll('#console button, #console a, #console select, #console input, #console summary, #console [tabindex="0"]'))
+    .filter((e) => e.checkVisibility() && e.getClientRects().length)
+    .map((e) => [e.id || e.className || e.tagName, e.getBoundingClientRect()])
+    .filter(([, b]) => b.width > 0 && b.left < r.right && b.right > r.left && b.top < r.bottom && b.bottom > r.top)
+    .map(([name]) => String(name));
+}
+
+await check('P32: on the control page the site\'s bar is hidden from the start, wholly above the window, and the deck takes the whole window from its top, inside the Home Screen app\'s top inset, with nothing of the bar over a control of the deck', async () => {
+  const cases = [[{ width: 1280, height: 800 }, false, 0], [{ width: 390, height: 844 }, true, 0], [{ width: 390, height: 844 }, true, 47]];
+  for (const [viewport, mobile, inset] of cases) {
+    const where = viewport.width + ' x ' + viewport.height + (inset ? ' with a top inset of ' + inset : '');
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport, mobile });
+    if (inset) {
+      const cdp = await context.newCDPSession(page);
+      await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: inset, bottom: 0, left: 0, right: 0 } });
+      await page.reload();
+    }
+    await loaded(page);
+    await sleep(700);
+    const f = await barOf(page);
+    const hot = f.strip && f.strip.box ? f.strip.box : null, handle = f.handle && f.handle.box ? f.handle.box : null;
+    const covered = await page.evaluate(consoleControlsUnder, hot || handle || { left: 0, right: 0, top: 0, bottom: 0 });
+    // the title's words, where the eye reads them, not its block's whole row
+    const title = await page.evaluate(() => { const range = document.createRange(); range.selectNodeContents(document.getElementById('cp-title')); const r = range.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }; });
+    console.log('      ' + where + ':', JSON.stringify({ auto: f.auto, shown: f.shown, nav: f.nav && [f.nav.top, f.nav.bottom], fly: f.fly && [f.fly.top, f.fly.bottom], deck: [f.deck.top, f.deck.bottom], pad: f.pad, strip: f.strip, handle: f.handle, covered, title }));
+    assert.deepEqual([f.auto, f.shown], [true, false], where + ': the bar is not set to hide, or is shown on load');
+    assert.ok(f.nav.bottom <= 0.5, where + ': the bar shows on load, down to ' + f.nav.bottom);
+    assert.ok(!f.fly || f.fly.bottom <= 0.5 || f.fly.top >= f.deck.bottom - 0.5, where + ': the section strip stands over the deck on load: ' + JSON.stringify(f.fly));
+    assert.ok(near(f.deck.top, inset, 0.5), where + ': the deck starts at ' + f.deck.top + ', not at ' + inset);
+    assert.equal(f.pad, inset + 'px', where + ': the page keeps a top padding of ' + f.pad);
+    assert.deepEqual(covered, [], where + ': the ' + (hot ? 'hot strip' : 'handle') + ' lies over the deck\'s ' + covered.join(', '));
+    if (mobile) {
+      assert.equal(f.strip.display, 'none', where + ': a phone shows the hot strip, which no finger reaches');
+      assert.ok(handle && f.handle.display === 'block', where + ': no handle on a phone');
+      assert.ok(near(handle.top, inset, 0.5) && near(handle.left + handle.width / 2, f.iw / 2, 1), where + ': the handle is not at the top centre: ' + JSON.stringify(handle));
+      assert.ok(!(handle.left < title.right && handle.right > title.left && handle.top < title.bottom && handle.bottom > title.top), where + ': the handle lies over the console\'s title');
+    } else {
+      assert.ok(hot && near(hot.top, 0, 0.5) && hot.height >= 4 && hot.height <= 10 && near(hot.width, f.iw), where + ': no hot strip a few pixels tall along the window\'s top: ' + JSON.stringify(hot));
+      assert.equal(f.handle.display, 'none', where + ': a computer shows the touch handle');
+      assert.ok(near(f.deck.bottom, f.ih, 0.5) && f.sh <= f.ih, where + ': the deck does not fill the window, or the page scrolls');
+    }
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+});
+
+await check('P33: the pointer at the window\'s top edge brings the bar back over the deck, which does not move; the bar stays while the pointer is over it, though the focus leaves it, or over a section strip it dropped, goes a moment after the pointer leaves and not at once, comes for a pointer leaving the window across the top, and not for one passing just under the edge', async () => {
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 800 } });
+  await loaded(page);
+  await sleep(500);
+  await page.mouse.move(640, 400);
+  const rest = await barOf(page);
+  await page.mouse.move(640, 3, { steps: 12 });
+  await barIn(page, 'the pointer at the window\'s top edge did not bring the bar');
+  const shown = await barOf(page);
+  const alpha = /rgba\(\d+, \d+, \d+, ([\d.]+)\)/.exec(shown.navBg);
+  console.log('      at rest: deck', rest.deck.top, rest.deck.bottom, 'stage', rest.stageTop, '| at the edge: bar', shown.nav.top, shown.nav.bottom, shown.navBg, 'deck', shown.deck.top, shown.deck.bottom, 'stage', shown.stageTop);
+  assert.ok(near(shown.deck.top, rest.deck.top, 0.5) && near(shown.deck.bottom, rest.deck.bottom, 0.5) && near(shown.stageTop, rest.stageTop, 0.5), 'the bar pushed the deck down instead of lying over it');
+  assert.ok(!alpha || Number(alpha[1]) >= 0.9, 'the bar is see-through over the deck: ' + shown.navBg);
+  assert.equal(shown.sh, shown.ih, 'the bar made the page scroll');
+  // over the bar, past its wait
+  await page.mouse.move(640, 30, { steps: 3 });
+  await sleep(1500);
+  assert.equal((await barOf(page)).shown, true, 'the bar went while the pointer was over it');
+  // the focus passing into the bar and out again while the pointer rests on it: the pointer holds it
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Shift+Tab');
+  await sleep(1500);
+  const rested = await barOf(page);
+  assert.equal(rested.focusInBar, false);
+  assert.equal(rested.shown, true, 'the bar went when the focus left it, though the pointer rests on it');
+  // over a section strip dropped from one of its tabs, past its wait
+  const tab = await page.evaluate(() => { const r = document.querySelector('#navLinks a[href="/symphony/"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  await page.mouse.move(tab.x, tab.y, { steps: 4 });
+  await page.waitForFunction(() => !!document.querySelector('#flyouts .is-open'), null, { timeout: 3000 });
+  const strip = await page.evaluate(() => { const r = document.querySelector('#flyouts .is-open').getBoundingClientRect(); return { x: r.left + 40, y: r.top + r.height / 2 }; });
+  await page.mouse.move(tab.x, strip.y, { steps: 4 });
+  await sleep(1500);
+  const inStrip = await barOf(page);
+  assert.deepEqual([inStrip.shown, inStrip.flyOpen], [true, true], 'the bar or its section strip went while the pointer was in the strip');
+  // the pointer leaves for the deck: still there a moment later, then gone, with its strip
+  await page.mouse.move(640, 500, { steps: 4 });
+  await sleep(200);
+  const moment = await barOf(page);
+  await barOut(page, 'the bar did not go after the pointer left it');
+  await sleep(100);
+  const gone = await barOf(page);
+  console.log('      200 ms after leaving:', moment.shown, '| then: shown', gone.shown, 'strip open', gone.flyOpen, 'bar to', gone.nav.bottom);
+  assert.equal(moment.shown, true, 'the bar went at once when the pointer left it');
+  assert.equal(gone.flyOpen, false, 'the section strip stayed open after the bar went');
+  // a pass to just under the edge brings nothing
+  await page.mouse.move(640, 300);
+  await page.mouse.move(640, 12, { steps: 6 });
+  await sleep(500);
+  assert.equal((await barOf(page)).shown, false, 'a pointer passing under the edge brought the bar');
+  // a pointer leaving the window across its top edge, past the strip between two moves, reached it
+  await page.mouse.move(640, 300);
+  const cdp = await context.newCDPSession(page);
+  for (const y of [120, 40, -10]) await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 640, y });
+  await sleep(150);
+  const out = await barOf(page);
+  await barOut(page, 'the bar brought by a pointer leaving across the top did not go');
+  console.log('      left across the top:', out.shown);
+  assert.equal(out.shown, true, 'a pointer leaving the window across the top did not bring the bar');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P34: keyboard focus brings the bar: Tab from the page\'s start reaches it and shows it, focus leaving it lets it go after its wait, it stays while the focus moves in it, and Escape sends it away at once with the focus', async () => {
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 800 } });
+  await loaded(page);
+  await sleep(500);
+  // the pointer rests on the deck, so only the focus holds the bar: one resting where the bar slides
+  // in would hold it too, as it should
+  await page.mouse.move(640, 400);
+  await page.evaluate(() => { if (document.activeElement) document.activeElement.blur(); });
+  await page.keyboard.press('Tab');
+  const skip = await barOf(page);
+  await page.keyboard.press('Tab');
+  await barIn(page, 'Tab reached the bar but did not show it');
+  const first = await barOf(page);
+  // back out of the bar to the skip link: it goes, though not at once
+  await page.keyboard.press('Shift+Tab');
+  const moment = await barOf(page);
+  await barOut(page, 'the bar did not go after the focus left it');
+  const left = await barOf(page);
+  console.log('      first Tab:', skip.focus, skip.shown, '| second:', first.focus, first.shown, '| Shift+Tab:', moment.focus, moment.shown, 'then', left.shown);
+  assert.deepEqual([skip.focusInBar, skip.shown], [false, false], 'the first Tab, to the skip link, brought the bar');
+  assert.ok(first.focusInBar && first.shown, 'Tab reached the bar but did not show it');
+  assert.deepEqual([moment.focusInBar, moment.shown], [false, true], 'the bar went at once as the focus left it');
+  // in again and on through its links, past its wait: it stays; Escape sends it with the focus
+  await page.keyboard.press('Tab');
+  await barIn(page, 'Tab into the bar again did not show it');
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Tab');
+  await sleep(1200);
+  const held = await barOf(page);
+  await page.keyboard.press('Escape');
+  const esc = await barOf(page);
+  console.log('      three more Tabs and a wait:', held.focus, held.shown, '| Escape:', esc.shown, esc.focus);
+  assert.ok(held.focusInBar && held.shown, 'the bar went while the focus was in it');
+  assert.equal(esc.shown, false, 'Escape did not send the bar away');
+  assert.equal(esc.focusInBar, false, 'Escape left the focus in the hidden bar');
+  await barOut(page, 'Escape did not send the bar away');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P35: on a phone the handle at the top centre shows the bar when tapped or swiped down, a tap outside sends it away at once, a short wait does too, a touch in the bar starts the wait again, and its open menu holds it and closes with it', async () => {
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
+  await loaded(page);
+  await sleep(700);
+  const rest = await barOf(page);
+  assert.ok(rest.handle, 'the page draws no handle');
+  assert.ok(rest.handle.box, 'the handle does not show on a phone');
+  const pill = await page.evaluate(() => getComputedStyle(document.querySelector('.console__barhandle'), '::before').backgroundColor);
+  console.log('      handle:', JSON.stringify(rest.handle), 'its tab', pill);
+  assert.deepEqual([rest.handle.label, rest.handle.controls, rest.handle.expanded], ['Show the site\'s menu', 'nav', 'false']);
+  assert.ok(rest.handle.box.width >= 44 && rest.handle.box.height >= 20, 'the handle is too small to tap: ' + JSON.stringify(rest.handle.box));
+  assert.equal(pill, 'rgb(241, 238, 227)', 'the handle\'s tab is not in the site\'s colours');
+  // outside the bar and anything it drops, its open menu among them: the deck's bare ground at its
+  // edge, where a tap presses nothing
+  const tapOutside = async () => {
+    const at = await page.evaluate(() => {
+      const c = document.getElementById('console'), x = c.getBoundingClientRect().left + 4;
+      for (let y = Math.round(innerHeight * 0.75); y > 100; y -= 10) {
+        const hit = document.elementFromPoint(x, y);
+        if (hit && c.contains(hit) && !hit.closest('button, a, input, select, summary, [tabindex], #nav, #flyouts')) return { x, y };
+      }
+      return null;
+    });
+    assert.ok(at, 'the deck shows no bare ground to tap');
+    await page.touchscreen.tap(at.x, at.y);
+  };
+  // a tap shows it, a tap outside sends it at once
+  await page.tap('.console__barhandle');
+  await barIn(page, 'a tap on the handle did not show the bar');
+  assert.equal((await barOf(page)).handle.expanded, 'true', 'the handle does not say the bar it controls is shown');
+  await tapOutside();
+  await sleep(60);
+  const outside = await barOf(page);
+  assert.deepEqual([outside.shown, outside.handle.expanded], [false, 'false'], 'a tap outside the bar did not send it away at once');
+  await barOut(page, 'a tap outside did not send the bar away');
+  // a short wait sends it, though not before two seconds
+  await page.tap('.console__barhandle');
+  await barIn(page, 'a tap on the handle did not show the bar');
+  await sleep(2000);
+  const two = await barOf(page);
+  await barOut(page, 'the bar a tap showed did not go after its wait', 4000);
+  assert.equal(two.shown, true, 'the bar went before its wait');
+  // a swipe down from the handle shows it
+  const h = rest.handle.box;
+  await fingerDrag(page, h.left + h.width / 2, h.top + 6, 60);
+  await barIn(page, 'a swipe down from the handle did not show the bar');
+  await barOut(page, 'the bar a swipe showed did not go after its wait', 6000);
+  // a touch in the bar, on its ground, starts the wait again
+  await page.tap('.console__barhandle');
+  await barIn(page, 'a tap on the handle did not show the bar');
+  const ground = await page.evaluate(() => {
+    const nav = document.getElementById('nav'), r = nav.getBoundingClientRect();
+    for (let x = r.left + 4; x < r.right - 4; x += 6) { const at = document.elementFromPoint(x, r.top + r.height / 2); if (at === nav) return { x, y: r.top + r.height / 2 }; }
+    return null;
+  });
+  assert.ok(ground, 'the bar has no bare ground to touch');
+  await sleep(2800);
+  await page.touchscreen.tap(ground.x, ground.y);
+  await sleep(2400);
+  const renewed = await barOf(page);
+  console.log('      5.2 s after the tap, 2.4 s after a touch in the bar:', renewed.shown);
+  assert.equal(renewed.shown, true, 'a touch in the bar did not start its wait again');
+  // the menu opened from the bar holds it past the wait, a touch on the menu's ground starting the
+  // wait that the open menu then holds off, and a tap outside closes both
+  await page.tap('#navToggle');
+  await sleep(300);
+  const drawer = await page.evaluate(() => {
+    const links = document.getElementById('navLinks'), r = links.getBoundingClientRect();
+    for (let y = r.bottom - 4; y > r.top; y -= 4) for (let x = r.left + 4; x < r.right; x += 12) if (document.elementFromPoint(x, y) === links) return { x, y };
+    return null;
+  });
+  assert.ok(drawer, 'the open menu has no bare ground to touch');
+  await page.touchscreen.tap(drawer.x, drawer.y);
+  await sleep(4600);
+  const menu = await barOf(page);
+  await tapOutside();
+  await barOut(page, 'a tap outside the open menu did not send the bar away');
+  const closed = await barOf(page);
+  console.log('      the menu open 4.6 s after a touch on its ground:', menu.menu, menu.shown, '| a tap outside:', closed.menu, closed.shown);
+  assert.deepEqual([menu.menu, menu.shown], [true, true], 'the open menu did not hold the bar');
+  assert.equal(closed.menu, false, 'the menu stayed open after the bar went');
+  assert.equal(closed.sy, 0, 'the taps scrolled the page');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P36: full screen still hides the bar, its hot strip and its handle, the pointer at the top bringing nothing, and leaving it gives back the bar that hides itself', async () => {
+  for (const [viewport, mobile] of [[{ width: 1280, height: 800 }, false], [{ width: 390, height: 844 }, true]]) {
+    const where = viewport.width + ' x ' + viewport.height;
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport, mobile });
+    await loaded(page);
+    await sleep(400);
+    await page.click('#cp-full');
+    await page.waitForFunction(() => document.body.classList.contains('console-full'), null, { timeout: 3000 });
+    await sleep(300);
+    if (!mobile) { await page.mouse.move(640, 300); await page.mouse.move(640, 2, { steps: 8 }); await sleep(400); }
+    const full = await barOf(page);
+    await page.click('#cp-full');
+    await page.waitForFunction(() => !document.body.classList.contains('console-full'), null, { timeout: 3000 });
+    if (!mobile) await page.mouse.move(640, 400);
+    await barOut(page, where + ': the bar did not hide itself after full screen');
+    const left = await barOf(page);
+    console.log('      ' + where + ': full screen', JSON.stringify({ nav: full.navDisplay, strip: full.strip.display, handle: full.handle.display, deck: [full.deck.top, full.deck.bottom] }), '| left', JSON.stringify({ auto: left.auto, shown: left.shown, strip: left.strip.display, handle: left.handle.display, deck: left.deck.top }));
+    assert.deepEqual([full.navDisplay, full.strip.display, full.handle.display], ['none', 'none', 'none'], where + ': something of the bar shows in full screen');
+    assert.ok(near(full.deck.top, 0, 0.5), where + ': the deck does not start at the top in full screen');
+    assert.deepEqual([left.auto, left.shown], [true, false], where + ': leaving full screen did not give back the hiding bar');
+    assert.notEqual(left.navDisplay, 'none', where + ': the bar is still gone after full screen');
+    assert.equal(mobile ? left.handle.display : left.strip.display, 'block', where + ': the ' + (mobile ? 'handle' : 'hot strip') + ' did not come back');
+    assert.ok(near(left.deck.top, 0, 0.5), where + ': the deck moved after full screen');
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+});
+
+await check('P37: where less motion is asked the bar shows and goes at once, with no slide, and otherwise it slides', async () => {
+  for (const motion of ['reduce', 'no-preference']) {
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 800 } });
+    await page.emulateMedia({ reducedMotion: motion });
+    await loaded(page);
+    await sleep(400);
+    await page.mouse.move(640, 300);
+    await page.mouse.move(640, 3, { steps: 4 });
+    const at = await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done({ shown: document.body.classList.contains('console-bar-shown'), top: document.getElementById('nav').getBoundingClientRect().top, slide: getComputedStyle(document.getElementById('nav')).transitionDuration })))));
+    console.log('      ' + motion + ': two frames after the edge', JSON.stringify(at));
+    assert.equal(at.shown, true);
+    if (motion === 'reduce') {
+      assert.ok(near(at.top, 0, 0.5), 'with less motion asked the bar is still sliding: ' + at.top);
+      assert.ok(at.slide.split(', ').every((d) => d === '0s'), 'with less motion asked the bar keeps a transition: ' + at.slide);
+    } else {
+      assert.ok(at.top < -5, 'the bar did not slide in: it stood at ' + at.top + ' two frames after the edge');
+      assert.notEqual(at.slide.split(', ')[0], '0s');
+    }
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  // a phone, whose section strip rides with the bar
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await loaded(page);
+  const slides = await page.evaluate(() => [getComputedStyle(document.getElementById('nav')).transitionDuration, getComputedStyle(document.getElementById('flyouts')).transitionDuration]);
+  console.log('      a phone with less motion asked:', JSON.stringify(slides));
+  assert.ok(slides.every((s) => s.split(', ').every((d) => d === '0s')), 'with less motion asked the phone\'s bar or strip keeps a transition');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P38: every other page of the site keeps its bar where it always was, shown at the top and pushing the page down, with no hot strip and no handle', async () => {
+  for (const path of ['/symphony/', '/symphony/cost.html', '/']) {
+    for (const [viewport, mobile] of [[{ width: 1280, height: 800 }, false], [{ width: 390, height: 844 }, true]]) {
+      const where = path + ' at ' + viewport.width;
+      const { context, page, errors } = await open({ script: real, path, storage: asTester, viewport, mobile });
+      await page.waitForLoadState('load');
+      if (!mobile) await page.mouse.move(viewport.width / 2, 500);
+      await sleep(1200);
+      const f = await page.evaluate(() => {
+        const nav = document.getElementById('nav').getBoundingClientRect();
+        return { auto: document.body.classList.contains('console-bar-auto'), top: nav.top, height: nav.height, pad: getComputedStyle(document.body).paddingTop, strip: !!document.querySelector('.console__barstrip'), handle: !!document.querySelector('.console__barhandle') };
+      });
+      console.log('      ' + where + ':', JSON.stringify(f));
+      assert.deepEqual([f.auto, f.strip, f.handle], [false, false, false], where + ': the page hides its bar');
+      assert.ok(near(f.top, 0, 0.5) && f.height > 40, where + ': the bar is not at the top');
+      assert.ok(parseFloat(f.pad) >= f.height - 0.5, where + ': the page no longer starts under the bar: ' + f.pad);
+      assert.deepEqual(errors, []);
+      await context.close();
+    }
   }
 });
 

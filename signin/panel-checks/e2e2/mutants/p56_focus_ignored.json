@@ -1,0 +1,1 @@
+[["    document.addEventListener('focusin', function (e) { if (inBar(e.target)) showBar(); });\n", "\n"]]

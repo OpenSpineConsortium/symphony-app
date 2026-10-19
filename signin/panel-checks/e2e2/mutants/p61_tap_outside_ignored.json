@@ -1,0 +1,1 @@
+[["      if (barShown() && !inBar(e.target) && e.target !== handle) hideBar();\n", "\n"]]

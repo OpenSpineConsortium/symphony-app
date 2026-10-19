@@ -1,0 +1,1 @@
+[["  function hovering(e) { return e.pointerType !== 'touch' && (!hoverMedia || hoverMedia.matches); }\n", "  function hovering(e) { return true; }\n"]]
