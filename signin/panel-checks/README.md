@@ -306,7 +306,7 @@ ghu_TEST or github_pat_X.
   too, which only widens the dark band under the status line, since H4 holds the status line's
   place alone. Run it with `SITE=<the site's checkout> BASE=<the site's address> node
   app.test.mjs`.
-- `e2e2/code.test.mjs`: 28 checks of sign-in by code (site branch claude/sign-in-by-code,
+- `e2e2/code.test.mjs`: 29 checks of sign-in by code (site branch claude/sign-in-by-code,
   2026-10-19), the Home Screen app's way in: GitHub's device flow through the sign-in service's
   routes /device and /device/token, against a mocked service that answers as signin/worker.js
   does. The site ships it switched off, `CODE_SIGNIN = false` in the panel's script, the owner's
@@ -327,7 +327,7 @@ ghu_TEST or github_pat_X.
   answer with no code, each ending with words and the token box. K10 to K13: Cancel with an
   answer on its way, a token that arrives after Cancel, a new code after Cancel, and the
   browser's two ways. K14: the link that copies the code and opens GitHub's page. K15: the cost
-  page. K16: a code that runs out at the time named though GitHub never says so. K17 to K28 hold
+  page. K16: a code that runs out at the time named though GitHub never says so. K17 to K29 hold
   what the adversarial review of the branch found that day. K17: the switch off, as the site
   ships it: in a browser and in the app, iOS's and the manifest's, on both pages, no code offered,
   the redirect's words, no code among what the page lists as sent, and the app's press leaving
@@ -335,7 +335,9 @@ ghu_TEST or github_pat_X.
   while a code is up ends the code once GitHub accepts it, before GitHub has named it, so its
   token never takes the paste's place, and Forget after it leaves the gate free and nothing signs
   the page in again. K19: the panel opening by a kept sign-in found at load, in the app, or by
-  GitHub's return, in a browser, ends a code started while it opened, with its words. K20: Forget
+  GitHub's return, in a browser, ends a code started while it opened, with its words: GitHub's
+  return on the control page and on the cost page with the code up, and with the ask for a code
+  still out, each leave neither the code's words nor "Asking GitHub for a code..." on the panel. K20: Forget
   pressed at the gate while a code is up, as a browser that reads no :has() shows it there, ends
   the code. K21: Keep me signed in read when the token comes, ticked or unticked while the code is
   up. K22: a token that comes after Cancel, or after a paste took the page, revoked through
@@ -347,10 +349,13 @@ ghu_TEST or github_pat_X.
   too, in sight on a phone. K26: the app installed through the manifest. K27: a pace under five
   seconds named, and the floor of five kept. K28: the warning beside the code, to type it only on
   github.com/login/device and only a code this page started, with GitHub naming SymphonyBoard
-  there. GitHub's 5xx and 429 while the person types the code are the service's to answer, as
-  github_unreachable, which K5 holds the page asks again at the same pace; test_worker.mjs holds
-  the service's side.
-- `e2e2/mutants/`: 429 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+  there. K29: the site ships the switch off, read from the script as `SITE` holds it before the
+  suite turns it either way, since nothing else in any suite would see a pull request that turns
+  it on; the owner's pull request that turns it on comes with one here that turns K29 round
+  (signin/README.md, step 9). GitHub's 5xx and 429 while the person types the code are the
+  service's to answer, as github_unreachable, which K5 holds the page asks again at the same
+  pace; test_worker.mjs holds the service's side.
+- `e2e2/mutants/`: 431 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
@@ -451,8 +456,8 @@ ghu_TEST or github_pat_X.
   2026-10-19, after its adversarial review, where app.test.mjs, signin.test.mjs, panel.test.mjs and
   hostile.test.mjs pass whole; H1 to H7 hold the build's head and the stylesheet, which no mutant of
   the script reaches.
-  The 46 of sign-in by code (`k*`, each naming code.test.mjs) were caught against site branch
-  claude/sign-in-by-code at 1133ea4 on 2026-10-19, with the switch turned on by the suite as it
+  The 48 of sign-in by code (`k*`, each naming code.test.mjs) were caught against site branch
+  claude/sign-in-by-code at 201a419 on 2026-10-19, with the switch turned on by the suite as it
   serves the script. k01 to k30 came with the code way (two were written and dropped as
   equivalent, the turn checked again when a refusal comes back after Cancel and the timer cleared
   by Cancel, since the ask itself checks the turn before it sends anything, so neither leaves a
@@ -468,7 +473,12 @@ ghu_TEST or github_pat_X.
   pointed again at the checks that hold them since the words and the box changed: k03 at K2,
   k12 at K11, k13 at K10 and k15 at K6. The service's side, GitHub's 5xx and 429 as
   github_unreachable, is test_worker.mjs's, whose test failed with the line removed and with the
-  refusal's own words no longer kept, each tried by hand.
+  refusal's own words no longer kept, each tried by hand. k49 and k50 came with the second
+  review of those fixes the same day: GitHub's return ending the code in storeSignin and leaving
+  its words on the signed-in panel (K19, whose case of GitHub's return checked the box and the asks
+  but not the words, and each of its three cases of GitHub's return catches it alone), and the
+  site shipping the switch on (K29); k33, whose line in storeSignin that fix rewrote, was aimed
+  at it as it now reads and caught again (K18).
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
   and every page action, visibility read and locator action on a selector first opens the tab that

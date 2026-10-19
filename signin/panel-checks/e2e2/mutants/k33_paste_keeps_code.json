@@ -1,1 +1,1 @@
-[["    endCode();\n    ended = false;\n", "    ended = false;\n"]]
+[["    if (endCode()) say('');\n    ended = false;\n", "    ended = false;\n"]]

@@ -107,10 +107,12 @@ opens beyond this service:
   else's code at https://github.com/login/device and allowing
   SymphonyBoard there, on a page that names SymphonyBoard exactly as it
   does for a code the panel showed, hands that someone a token that acts
-  as them, for eight hours and renewable for six months (next point),
-  with SymphonyBoard's permissions (Administration, Contents, Workflows,
-  Secrets, and an organization's Secrets and Variables, all write) on
-  every repository the App is installed on that the person can reach.
+  as them, eight hours at a time and renewable until it is revoked (next
+  point), with every permission SymphonyBoard has (manifest.json lists
+  them: Actions, Actions variables, Administration, Checks, Contents,
+  Issues, Pull requests, Secrets, Workflows, and an organization's
+  Secrets and Variables, all write, and Metadata read) on every
+  repository the App is installed on that the person can reach.
   The redirect sign-in cannot be turned against someone this way: its
   code comes back only to the panel's registered address and is
   exchanged only with the PKCE secret that page made. GitHub's own
@@ -123,26 +125,36 @@ opens beyond this service:
   started it a moment before, and the project never sends anyone a code;
   nothing can stop a code someone else started.
 - A sign-in by code's refresh token renews at GitHub with the client id
-  alone. Of `client_secret`, GitHub's
+  alone, and never runs out while it is renewed. Of `client_secret`,
+  GitHub's
   https://raw.githubusercontent.com/github/docs/main/content/apps/creating-github-apps/authenticating-with-a-github-app/refreshing-user-access-tokens.md
   says "Required unless the user access token was generated using the
-  device flow". So whoever holds one, phished, read from a lost phone
-  that kept it, or read from the browser by a script on the site, can
-  renew it at GitHub without this service, and the owner's levers over
-  every redirect sign-in, deleting the client secret or stopping this
-  Worker, do not end it. What does:
-  - For one person: they press "Forget the token" in the panel, which
-    sends `/revoke` (GitHub's "Delete an app token", one access token;
-    whether GitHub ends its refresh token with it is not measured), or
-    they revoke SymphonyBoard at
+  device flow", and the same page says a refresh gives "a new user
+  access token and a new refresh token", whose `refresh_token_expires_in`
+  "will always be `15897600` (6 months)"
+  (https://raw.githubusercontent.com/github/docs/main/data/reusables/apps/user-access-token-response-parameters.md).
+  Each renewal starts six months afresh, so the six months bound only a
+  sign-in nobody renews: whoever holds one, phished, read from a lost
+  phone that kept it, or read from the browser by a script on the site,
+  can renew it at GitHub without this service for as long as they like,
+  and the owner's levers over every redirect sign-in, deleting the
+  client secret or stopping this Worker, do not end it. It lasts until
+  it is revoked, by one of these:
+  - For one person: they revoke SymphonyBoard at
     https://github.com/settings/apps/authorizations ("Authorized GitHub
     Apps", Revoke beside SymphonyBoard), which ends every token
-    SymphonyBoard holds for them. GitHub lets no organization owner do
-    that for a member. The App's owner, given any one of that person's
-    SymphonyBoard tokens, ends them all with GitHub's "Delete an app
-    authorization", `DELETE https://api.github.com/applications/<client
-    id>/grant` with the token in the body, signed with the client id and
-    the client secret as for `/revoke`.
+    SymphonyBoard holds for them, a phished one and a lost phone's among
+    them. GitHub lets no organization owner do that for a member. The
+    App's owner, given any one of that person's SymphonyBoard tokens,
+    ends them all with GitHub's "Delete an app authorization",
+    `DELETE https://api.github.com/applications/<client id>/grant` with
+    the token in the body, signed with the client id and the client
+    secret as for `/revoke`. "Forget the token" in the panel is no lever
+    here: it sends `/revoke` (GitHub's "Delete an app token") for the
+    sign-in that tab and that browser hold and no other, and every code
+    earns a token of its own, so it never reaches one someone else holds
+    (whether GitHub ends the refresh token of the one it does revoke is
+    not measured).
   - For everyone at once: GitHub documents no button that revokes every
     user token of a GitHub App. The App's owner can suspend SymphonyBoard
     on an installation (`PUT /app/installations/<id>/suspended`, as the
@@ -401,9 +413,10 @@ named, and nobody else needs to.
    Decision, since it is a trade the owner makes for everyone: ticking
    "Enable Device Flow" lets anyone start a SymphonyBoard code and talk
    a person into typing it, which hands whoever started it a token that
-   acts as that person with SymphonyBoard's permissions, renewable for
-   six months without this service. "The device routes" above says it
-   in full, with what ends such a token.
+   acts as that person with SymphonyBoard's permissions, renewable at
+   GitHub without this service and without end, each renewal good for
+   six months more, until the person or the owner revokes it. "The
+   device routes" above says it in full, with what ends such a token.
 
    To turn it on, in this order. First the Apps' privacy statement
    (symphony-start's PRIVACY.md) gets a version that describes sign-in
@@ -425,7 +438,10 @@ named, and nobody else needs to.
    `CODE_SIGNIN = true`; once it merges, the installed app's "Sign in
    with GitHub" shows a code, a browser offers "Sign in with a code
    instead" beside it, and the panel's "What this page keeps and sends"
-   names the code's requests. None of these steps touches a secret.
+   names the code's requests. K29 in panel-checks/e2e2/code.test.mjs
+   holds that the site ships the switch off, so that no pull request
+   turns it on unnoticed; the owner's pull request comes with one here
+   that turns K29 round. None of these steps touches a secret.
 
    To turn it off again, in the other order. First a pull request to the
    site that sets `CODE_SIGNIN = false`, so no page offers a code: with
@@ -433,11 +449,22 @@ named, and nobody else needs to.
    `device_flow_disabled`, and the installed app, whose "Sign in with
    GitHub" asks for a code, would be left with the token box alone. Then
    untick "Enable Device Flow" and save, which stops anyone starting a
-   new SymphonyBoard code. Neither ends a token already made: a sign-in
-   by code works until its eight hours end and keeps renewing for its
-   six months, through this service or at GitHub with the client id
-   alone, until it is revoked as "The device routes" above says; whether
-   unticking the box also stops GitHub renewing those is not measured.
+   new SymphonyBoard code. That order is for turning it off at leisure.
+   When the device flow is being abused, a person phished with a code or
+   a page found handing out SymphonyBoard codes, untick the box first
+   and the site's pull request follows: the switch does nothing to stop
+   a code someone else starts, the tick is the open door, and the cost
+   of unticking first is only that the installed app offers the token
+   box alone until the site's pull request lands. Neither step ends a
+   token already made: a sign-in by code works eight hours at a time and
+   renews, through this service or at GitHub with the client id alone,
+   each renewal good for six months more, so it never ends by itself
+   while its holder renews it; it ends only when it is revoked as "The
+   device routes" above says, which after abuse means each person who
+   typed a code revokes SymphonyBoard at
+   https://github.com/settings/apps/authorizations, or the owner uses
+   one of the levers listed there for everyone. Whether unticking the
+   box also stops GitHub renewing those is not measured.
 
 To check it: `curl https://symphony-signin.<account>.workers.dev/` answers
 `{"service":"symphony-signin","routes":["/exchange","/refresh","/revoke","/device","/device/token","/drive/config","/drive/connect","/drive/token"],"keeps":"nothing"}`,

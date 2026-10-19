@@ -9,7 +9,7 @@
 // ticking SymphonyBoard's "Enable Device Flow" lets anyone start a SymphonyBoard code). The checks
 // of the code way serve the script with the switch on, whatever the site ships, as app.test.mjs
 // serves it from SITE; K17 serves it off and holds that no page then offers a code and the app
-// signs in by GitHub's page as a browser does.
+// signs in by GitHub's page as a browser does, and K29 holds that the site ships it off.
 //
 // The app is played two ways: by navigator.standalone, as iOS gives an installed page, and by the
 // display mode standalone, as an install through the manifest reports itself (K26); a browser has
@@ -44,7 +44,9 @@ assert.ok(SERVICE_LINE.test(real) && CLIENT_LINE.test(real), 'the two constants 
 // the owner's switch for the code way: on for the checks of the code way, off for K17
 const CODE_LINE = /var CODE_SIGNIN = (?:true|false);/;
 assert.ok(CODE_LINE.test(real), 'the switch CODE_SIGNIN was not found in the script');
-console.log('the script as the site ships it has ' + real.match(CODE_LINE)[0]);
+// the line as SITE holds it, a mutant's pairs applied, before the suite turns the switch either way (K29)
+const shipped = real.match(CODE_LINE)[0];
+console.log('the script as the site ships it has ' + shipped);
 const codeOn = (s) => s.replace(CODE_LINE, 'var CODE_SIGNIN = true;');
 const codeOff = (s) => s.replace(CODE_LINE, 'var CODE_SIGNIN = false;');
 const withService = real.replace(SERVICE_LINE, "var SIGNIN_SERVICE = '" + SERVICE + "';").replace(CLIENT_LINE, "var CLIENT_ID = 'Iv1.testclient';");
@@ -557,18 +559,31 @@ await check('K19: the page opening by another way ends a code started while it o
       assert.equal(where.session, null, 'the code\'s token was kept');
     } finally { await context.close(); }
   }
-  {
-    const back = { status: 200, body: { access_token: 'ghu_EXCH', token_type: 'bearer', expires_in: 28800, refresh_token: 'ghr_E', refresh_token_expires_in: 15897600 }, delay: 3000 };
+  // GitHub's return signs the page in through storeSignin before the panel opens, so the code is
+  // ended there and its words must go with it: on the control page with the code up, on the cost
+  // page, whose line stands in sight above the box, and with the ask for a code still out, whose
+  // "Asking GitHub for a code..." would otherwise stay on the signed-in panel
+  for (const [label, path, device] of [
+    ['control page, code up', '/symphony/control/', undefined],
+    ['cost page, code up', '/symphony/cost.html', undefined],
+    ['control page, ask for a code still out', '/symphony/control/', Object.assign({ delay: 5000 }, deviceOk())],
+  ]) {
+    const back = { status: 200, body: { access_token: 'ghu_EXCH', token_type: 'bearer', expires_in: 28800, refresh_token: 'ghr_E', refresh_token_expires_in: 15897600 }, delay: device ? 2500 : 3000 };
     const state = { state: 'S1', verifier: 'V1', keep: false, back: '' };
-    const { context, page, service } = await open({ path: '/symphony/control/?code=C1&state=S1', exchange: back, tokens: [token], seed: [(st) => sessionStorage.setItem('symphony_panel_oauth_state', JSON.stringify(st)), state] });
+    const { context, page, service } = await open({ path: path + '?code=C1&state=S1', exchange: back, device, tokens: [token], seed: [(st) => sessionStorage.setItem('symphony_panel_oauth_state', JSON.stringify(st)), state] });
     try {
       await page.click('#cp-signin-code');
-      await codeShown(page);
+      if (!device) await codeShown(page);
+      else await said(page, /Asking GitHub for a code/);
       await signedIn(page, 15000);
-      assert.ok(!(await gateFacts(page)).box, 'the code was left under the panel');
-      await sleep(7000);
-      assert.equal(polled(service).length, 0, 'the code was asked about after GitHub\'s return signed the page in');
-      assert.equal(JSON.parse((await stored(page)).session).access_token, 'ghu_EXCH', 'GitHub\'s return was not the page\'s sign-in');
+      const f = await gateFacts(page);
+      assert.ok(!f.box && !f.said, label + ': the code was left under the panel: ' + JSON.stringify(f));
+      assert.ok(f.msg.indexOf(CODE) < 0 && !/Asking GitHub for a code/.test(f.msg), label + ': the code\'s words stayed on the panel: ' + f.msg);
+      await sleep(device ? 8000 : 7000);
+      assert.equal(polled(service).length, 0, label + ': the code was asked about after GitHub\'s return signed the page in');
+      const later = await gateFacts(page);
+      assert.ok(later.msg.indexOf(CODE) < 0 && !/Asking GitHub for a code/.test(later.msg), label + ': the code\'s words came back on the panel: ' + later.msg);
+      assert.equal(JSON.parse((await stored(page)).session).access_token, 'ghu_EXCH', label + ': GitHub\'s return was not the page\'s sign-in');
     } finally { await context.close(); }
   }
 });
@@ -749,6 +764,14 @@ await check('K28: beside the code, plain words say to type it only on github.com
     assert.ok(/GitHub names SymphonyBoard/.test(box), 'the box does not say GitHub names SymphonyBoard: ' + box);
     assert.ok(/only there, on github\.com\/login\/device/.test(f.warn) && /only one you started on this page/.test(f.warn) && /would sign them in as you/.test(f.warn), 'the warning beside the code says ' + JSON.stringify(f.warn));
   } finally { await context.close(); }
+});
+
+// The suite turns the switch itself, so nothing above shows what the site ships; this one does.
+// Turning the code way on is the owner's choice, after a statement that describes it (symphony-app's
+// signin/README.md, step 9), and the owner's pull request that turns it on comes with one that turns
+// this check round, so no other pull request turns it on unnoticed.
+await check('K29: the site ships the code way switched off: the script as SITE holds it has var CODE_SIGNIN = false;', async () => {
+  assert.equal(shipped, 'var CODE_SIGNIN = false;', 'the site ships the code way switched on; that is the owner\'s switch alone (signin/README.md, step 9)');
 });
 
 await browser.close();
