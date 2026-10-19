@@ -1,0 +1,1 @@
+[["if (!e.relatedTarget && e.clientY < BAR_EDGE_PX && last", "if (!e.relatedTarget && last"]]

@@ -1,0 +1,1 @@
+[["  .console.console--foot > .console__status { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; align-items: center; }\n", "\n"]]

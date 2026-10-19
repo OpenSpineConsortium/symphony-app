@@ -1,0 +1,1 @@
+[["new ResizeObserver(function () { if (layout.foot != null) applyLayout(); }).observe($('cp-askbar'));", "void 0;"]]

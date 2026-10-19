@@ -1,0 +1,1 @@
+[[".console__barhandle::before { content: \"\"; position: absolute; inset: 0; border-radius: 0 0 10px 10px;", ".console__barhandle::before { content: \"\"; position: absolute; left: 10px; right: 10px; top: 0; height: 9px; border-radius: 0 0 10px 10px;"]]

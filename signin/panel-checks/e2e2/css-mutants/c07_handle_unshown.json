@@ -1,0 +1,1 @@
+[["    display: block; position: fixed; z-index: 98; top: env(safe-area-inset-top, 0px);", "    display: none; position: fixed; z-index: 98; top: env(safe-area-inset-top, 0px);"]]
