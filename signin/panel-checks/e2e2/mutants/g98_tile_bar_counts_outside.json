@@ -1,0 +1,1 @@
+[["      kind: tile.kind, title: tile.title, foot: foot, counts: graphCounts(draw, chart, tile.own) };", "      kind: tile.kind, title: tile.title, foot: foot, counts: graphCounts(draw, chart) };"]]

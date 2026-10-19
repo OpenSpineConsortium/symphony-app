@@ -13,7 +13,7 @@ ghu_TEST or github_pat_X.
 
 ## What is here
 
-- `e2e2/signin.test.mjs`: 135 checks of the sign-in and the console's foot, run against a mocked
+- `e2e2/signin.test.mjs`: 136 checks of the sign-in and the console's foot, run against a mocked
   api.github.com, a mocked GitHub authorize page and a mocked sign-in service at
   https://signin.example.test. Some checks run both ways in, Sign in with GitHub and a pasted
   token. P1 to P22 (site pull request #78, 2026-10-19) hold the work a button starts, spoken at
@@ -26,12 +26,17 @@ ghu_TEST or github_pat_X.
   Token run's marks; a lend into an organization's pool by someone who is not its owner, said as
   lent or saved with its slot (P20), the Token workflow run in the organization's repository that
   has it when the chosen one has none (P21), and a token side panel width kept from a wide window
-  leaving the tiles their room on a narrow one, a phone held sideways and a wide one (P22). P24
-  (site branch claude/lend-list-hidden, 2026-10-19) holds the organization variable SYMPHONY_LEND_TO
-  readable by no repository's workflows: written for selected repositories with none selected, and
-  a list an older page left readable by the private repositories, or by all, closed, its value kept,
-  when an owner opens the Tokens tab, a close GitHub refuses let go without a word, and the last
-  repository taken off deleting the list.
+  leaving the tiles their room on a narrow one, a phone held sideways and a wide one (P22). P23
+  (site branch claude/dependencies-look, 2026-10-19, after the owner's "the buttons for tokens ect,
+  should scale to the screen size so multiple fit on the page") holds the Tokens tiles to the
+  window: at 1280 and 1920 px the nine tiles fill one row and that row reaches the box's end, and at
+  those widths and at 2560 px, where nine tiles fill less than a row, each tile is 104 to 377 px wide
+  and never a tall square and the columns grow with the window; P6 holds the Command tab's readouts and buttons three and two to a row on a phone.
+  P24 (site branch claude/lend-list-hidden, 2026-10-19) holds the organization variable
+  SYMPHONY_LEND_TO readable by no repository's workflows: written for selected repositories with
+  none selected, and a list an older page left readable by the private repositories, or by all,
+  closed, its value kept, when an owner opens the Tokens tab, a close GitHub refuses let go without
+  a word, and the last repository taken off deleting the list.
 - `e2e2/panel.test.mjs`: the panel's walkthrough on both pages.
 - `e2e2/hostile.test.mjs`: 13 hostile-input checks.
 - `e2e2/assistant.test.mjs`: 21 checks of the panel's assistant (site branch claude/assistant-panel,
@@ -44,7 +49,7 @@ ghu_TEST or github_pat_X.
   answer, the issue read again before each question and replaced when closed, one press at a time,
   a sign-in changed under the page, a watch read on after a sign-in, and Stop watching; its cadence
   constants are shortened in the served script, and a check may serve its own.
-- `e2e2/graph.test.mjs`: 42 checks of the panel's Dependencies tab (site branch
+- `e2e2/graph.test.mjs`: 59 checks of the panel's Dependencies tab (site branch
   claude/graph-section, 2026-10-18; a section of the long page until the console): the chart text
   the page hands the drawing, byte for byte the two blocks symphony-protocol's board writes for its
   fixture board-epics.json (board-epics-STATE.md, copied into the check from symphony-protocol
@@ -73,13 +78,12 @@ ghu_TEST or github_pat_X.
   form from elsewhere, fields under the page's own ids, a directive, a link) making an element or a
   request (X), a title opening an HTML comment hiding nothing after it and a heading's escaped
   pipe read as a pipe (Y), the charts' edges, arrowheads and words showing on their ground inside
-  the dark console (C and R, by contrast ratio; `NOCSS=1` serves the stylesheet without the rule
-  that gives the ground, and C and R fail then), a press on a task the tables do not hold staying
+  the dark console (C and R, by contrast ratio), a press on a task the tables do not hold staying
   in this tab with its words here and on the message line (W), the assistant's "show
   dependencies", asked from the Ask Claude bar on another tab, opening this tab at its first chart
   and the next question naming the section (V), the window left at 0 in each of those presses at
-  1366 x 657, where the page could scroll (asserted), the tables alone when the drawing
-  script cannot load, a hostile title inert and a title holding a Mermaid directive drawn whole, a
+  1366 x 657, where the page could scroll (asserted), the lists opened by themselves when the
+  drawing script cannot load, a hostile title inert and a title holding a Mermaid directive drawn whole, a
   403, a 429, the cap and the rate limit's reserve each said in words with nothing half drawn (the
   cap lowered in the served script), no read at all once the open issues' answer says the token is
   under the reserve, a Refresh included (G5), nothing drawn without an epic, Refresh redrawing the new
@@ -91,8 +95,58 @@ ghu_TEST or github_pat_X.
   first chart shown by default and the rest hidden, a chip showing its chart and hiding the others
   with aria-pressed following, the choice kept per repository in this browser and restored on load
   and on Refresh, no strip for a single chart, and a kept choice that is gone falling back to the
-  first. Each check opens the Dependencies tab by its rail button before
-  it reads or presses inside it, and a press that crosses tabs is read at once with page.evaluate,
+  first, and the console's look (AF to AI, with A, D, E and Q, after the owner's "dependencies still
+  doesnt look very good, i want it to look more modern" of 2026-10-19): Mermaid told to draw in its
+  neo look in the deck's colours, its labels wrapped at 190 px, with its list of settings no
+  directive may change pinned (A; the neo look turns arrows at rounded corners whatever curve is
+  asked, so none is), each chart a card with its heading, an epic's bar of closed tasks named for
+  its card with its ARIA, a pill per state of the card's own issues (an epic's sub-issues in this
+  repository), one for its sub-issues in another repository, which the bar counts and the chart
+  does not draw (AQ), so the pills add up to the bar, and one for the blockers from outside the epic, its list folded under it
+  and named for its card, and the key, a swatch per state drawn with the edge its nodes have and the
+  three arrows, in two sets, shown with the charts (AF), the key hidden while there is nothing to
+  draw, while a Refresh reads again and after a Refresh that finds nothing (AG), hidden where the
+  drawing script cannot load (E) or no chart could be drawn (Q), every node of the six states drawn
+  by the real Mermaid keeping none of the board's light colours on its own elements, shaded and
+  edged by its state (blocked thick, claimed dotted, closed dashed and struck through, in review on
+  a lit fill and open with a thin pale edge), no two states told apart by hue alone (each pair
+  differs in its edge's dash, by a pixel of its edge's width, in its words' line, or by 1.4 to 1 in
+  the lightness of its edge or its fill, which R5 holds on the Board tab too), its box rounded, no label wider or taller than its box
+  though the site's face, served 160% wide, comes 1.5 s after the drawing script, and the arrows
+  left unfilled (AH), the wait for that face bounded at 2.5 s, the charts drawn within 5.5 s of the
+  script where the face never comes (AP), the same look on the Board tab's charts, every state (R5), a block
+  shown as text there giving up the chart's class (X), the list folded before it is opened and open
+  after, as a person opens it before Centre its row (D), and a chart wider than its box opening at
+  its middle on a phone, though it was drawn in a hidden tab, then left where the person scrolls it
+  (AI). The tiles and the moves between charts (AJ to AO, after the owner's "make the epics more
+  intuitive and navigating that page more fluent" of 2026-10-19): a bar on each tile of its chart's
+  own issues by state, All every epic's tasks, the tiles sharing a row on a laptop and on a phone
+  one row that scrolls sideways with the chosen tile brought into view, a kept one too when the tab
+  opens after a draw made on another tab (AJ), Previous and Next on each card stepping to the chart
+  beside it with the keyboard kept on the card shown (AK), the arrow keys moving from tile to tile,
+  Home and End across every tile to the first and the last, and a key at either end, which moves
+  nowhere, changing nothing (AL), a chart dragged with the mouse like a map, the page moving up and
+  down where the page scrolls as a whole, a drag pressing no node (AM), Fit shown only on a chart
+  wider than its card, though drawn in a hidden tab or a hidden card, and drawing it whole (AN),
+  and a chosen chart fading in, none on load and none where less motion is asked (AO). From the
+  look's second review (AQ to AU, 2026-10-19): an epic's sub-issue in another repository in a pill
+  of its own (AQ); on a laptop the tiles one compact row however many epics there are, the charts'
+  box keeping three fifths of the deck or more at 1280 x 800 with a goal and twelve epics, the row
+  turned sideways by the wheel, its ends fading where more tiles lie past them, and the wheel left
+  to the page where the page scrolls as a whole (AR); a card's tools, Fit and Previous and Next, in
+  one place on every card however long its heading and however many its pills, so Next pressed
+  again and again by the mouse steps through every chart, and on a phone Fit and the steps on one
+  row at the top of the card (AS); a press whose release never comes ended by the first move made
+  with no button held, nothing moving with the bare mouse and the next click kept (AT); and the
+  tiles' and the cards' small words at 4.5 to 1 on their ground, at rest and under the pointer
+  (AU).
+  `NOCSS=1` serves the stylesheet without its rules for a chart's nodes, the half of the look no
+  mutant of the script reaches, and AH and R5 fail then (until the console's look it took the
+  chart's light ground away and C and R failed). AR's compact row, the phone's half of AS and AU
+  hold the rest of the stylesheet's part, which no mutant reaches either, and were seen to fail
+  with the rules from before the look's second review. Each check opens the Dependencies tab by its rail
+  button before it reads or presses inside it, and a press that crosses tabs is read at once with
+  page.evaluate,
   which opens nothing, so the page and not console-tabs.mjs is seen opening the tab. A check that
   wants the drawing recorded instead of made serves a stand-in for the library on its route.
 - `e2e2/folders.test.mjs`: 58 checks of the console's Folders tab, /symphony/control/#folders
@@ -209,13 +263,56 @@ ghu_TEST or github_pat_X.
   page; a 403 and a 404 get the access words, in SymphonyBoard's words when signed in with GitHub),
   and the mocked GitHub keeps each notebook repository's visibility, so a change it answers is read
   back as it now is.
-- `e2e2/mutants/`: 326 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/app.test.mjs`: 8 checks of the control panel as a Home Screen app (site branch claude/home-
+  screen-app, 2026-10-19, after the owner's "Build way 1", the first of the three ways in symphony-
+  template's docs/research/native-ios-app.md), against the page as the site serves it, signed out,
+  with every request off the site's origin refused, so it needs no mocked GitHub; the panel's script
+  is served from `SITE`, with a mutant's pairs where `MUTANT` names one. H1: the page names a
+  manifest that Chromium reads with no error and finds installable, its start, scope and id the
+  panel's own address, standalone, its icons PNGs of the sizes they say, one for any use and one
+  maskable, the largest 512 px. H2: iOS's 180 px touch icon, the head lines that open the page as an
+  app named Symphony under iOS's light status bar, and a viewport that covers the screen. H3: where a
+  screen has no safe areas, a computer's 1280 and 1000 px wide or a phone's, the deck, the status
+  line, the header with its own padding, and the section strip, the breadcrumb and the footer with
+  theirs are where they were. H4 to H7, with safe areas played through Chromium's
+  Emulation.setSafeAreaInsetsOverride, and H8 hold what the adversarial review of the branch found
+  that day: held upright, the status line's words and buttons stand clear of the home bar, by its
+  own padding (H4); held sideways at 844 x 390, the header's bar and the deck's dark ground run to
+  the screen's edges while the brand, the menu button and the opened drawer's links, the deck's
+  content, the section strip, the Ask Claude drawer with its Close and its words, the breadcrumb and
+  the footer keep inside the notch on either side, and the visible status line's words and buttons
+  stand clear of the home bar (H5); a large phone held sideways, 932 x 430 with 59 px insets and
+  956 x 440 with 62 px, wider than 900 px but too narrow inside its insets for the header's one row,
+  keeps the header's drawer, with the brand, the menu button, the drawer's links, the strip, the
+  breadcrumb and the footer inside the insets and the page no wider than the screen, while a short
+  window on a computer, 1280 x 500 with a pointer that hovers, keeps the row (H6); a tablet held
+  sideways, 1180 x 820 with a 20 px home bar, keeps the deck's desktop layout, whose own foot pads
+  the home bar, so the status line's words stand clear of it (H7); and the Full screen button is
+  hidden where the browser has neither requestFullscreen nor webkitRequestFullscreen, as on an
+  iPhone, which has no F11 either, and shown on a computer and on a phone that has both, or WebKit's
+  older call alone, as Safari before 16.4 has (H8). The manifest, the head and the stylesheet are
+  the build's and no mutant of the panel's script reaches them, so each of their lines the checks
+  hold was taken out of a served copy by hand on 2026-10-19 and seen to fail its check: display, the maskable icon
+  and the scope (H1), the status bar's style, the covering viewport and the touch icon's size (H2),
+  the manifest's link (H1); the header's own padding at each width and the strip's, the
+  breadcrumb's and the footer's at a phone's (H3); the status line's inset, taken out (H4 and H5)
+  or kept to a narrow window (H5); the header's padding by the insets (H5 and H6), its drawer's at
+  900 px and below (H5), the drawer of a large phone held sideways, its menu button, and the
+  hovering pointer that keeps a computer's row (H6); the strip's, the breadcrumb's and the footer's
+  padding by the insets, each alone (H5 and H6); the Ask Claude drawer's (H5); the deck's left side
+  (H5); the deck's foot kept to the phone layout (H7); and the rule that hides the Full screen
+  button once the script marks it hidden (H8). Two changes no check sees: a fallback given to env(), which Chromium and Safari never
+  use since both define every inset, and the deck's foot padded by the home bar in the phone layout
+  too, which only widens the dark band under the status line, since H4 holds the status line's
+  place alone. Run it with `SITE=<the site's checkout> BASE=<the site's address> node
+  app.test.mjs`.
+- `e2e2/mutants/`: 383 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
   (`a*`, check O of assistant.test.mjs: the question dropped, the same tab, the state dropped, no
   cut, the encoded form unbounded, the referrer sent, a cut by code unit) were caught against the site branch claude/ask-in-claude. The 79 of the sign-in (`m*`) were caught against master
-  009109c; the 54 of the Dependencies tab (`g*`, five of them for the tab: show dependencies
+  009109c; the 109 of the Dependencies tab (`g*`, five of them for the tab: show dependencies
   opening no tab and leaving the charts' box where it was, the message line unsaid, the focus
   opening no tab, and the window not put back; eleven from the tab's second review: the message
   line said only when the press leaves the tab, a press always opening the Tasks tab, the board's
@@ -232,26 +329,64 @@ ghu_TEST or github_pat_X.
   again; and five from the focus strip (g51 to g55: the default chart not the first (AA), the other
   charts not hidden (AB), the choice not kept across a press and a Refresh (AC), the strip shown for
   a single chart (AD), and a gone choice not falling back to the first (AE)) against site branch
-  claude/dependencies-focus on 2026-10-19. The 63 of the Folders tab (`f*`, each with a `.json.suite` naming
-  folders.test.mjs) were caught against site branch claude/folders-explorer on 2026-10-18, the
-  first 48 also against the site's script at commit 044b8b3, f06 rewritten for the explorer's
-  name cell; f56 to f63, the saved catalog's, against site branch claude/folders-catalog the
-  same day, f60 to f63 for CAT7 to CAT9 (CAT5 and CAT6 are held by the checks alone, since a
-  connect reloads the page and a name is kept as text by the shared drawing, so no single line of
-  the catalog carries them). The 24 of the Explore tab (`x*`, each naming explore.test.mjs) were caught
-  against site branch claude/explore-tab on 2026-10-18, after its adversarial review. The 33 of
-  the foot and the phone (`p*`, for P1 to P21; P22 is a stylesheet's, which no mutant of the
-  script reaches, and was seen to fail with the old rule) were caught against site branch
-  claude/panel-feedback at f025b08 on 2026-10-19, where every other suite passes too; p34 to p40,
-  for P24 (the list written readable by the private repositories, an open list left open, the
-  close rewriting the value, a closed list closed again, a list open to all left open, a refused
-  close thrown, and the emptied list kept), against site branch claude/lend-list-hidden on
-  2026-10-19. The 39 of
-  the Notebooks tab (`n*`, each naming notebooks.test.mjs) were caught against site branch
-  claude/notebooks at 1656fbb on 2026-10-19 after its third review, n35 to n39 for its findings, where
-  every other suite passes too; N6 to N9 and N18 have no mutant of their own (N9 and N18 hold the stylesheet, which no mutant of the script reaches). The nine of Make private (n40 to n48: no
-  confirmation, the catalog's repository changed in place of the notebook's, the change not
-  recorded, the lock kept after the answer or past a sign-out, the button for a person who does not
+  claude/dependencies-focus on 2026-10-19; thirteen from the console's look (g56 to g68: the nodes
+  not restyled, restyled on the node alone and not its parts, not rounded (AH), the classic look
+  (A), the list open from the start (AF), not opened for a chart not drawn (Q) or for the drawing
+  script not loaded (E), the key never shown (AF) or kept through a Refresh's read, by the strip's clearing that a Refresh
+  and every draw go through (AG), the bar's
+  aria-valuenow given the total (AF), the closed pill dropped (AF), a wide chart not opened at its
+  middle, and opened at its middle again after the person scrolled it (AI)); sixteen from the tiles
+  and the moves (g69 to g84: the tile bar's segments even (AJ), All counting the goals (AJ), the
+  pressed tile left out of view on a phone (AJ), a step that selects nothing or loses the keyboard,
+  All's class unset (AK), the arrow keys dead or Home and End stepping one (AL), no drag, a drag
+  that presses a node or one with no threshold (AM), Fit never shown, never fitting or never checked
+  once drawn (AN), no fade or a fade on load (AO)); twelve from the look's review (g85 to g98 but
+  g95, and g97, retired as g64 again: the secure list short of themeVariables (A), the key kept after the drawing script
+  failed (E) or with no chart drawn (Q), the pills counting the blockers from outside the epic (AF),
+  no pill for them (AF), the bar named for no card (AF) or read as a percentage (AF), the list's
+  toggle named for no card (AF), the site's face not waited for (AH), waited for with no bound (AP),
+  the Board tab's charts not restyled (R5), and the tiles' bars counting the blockers from outside
+  (AJ)) against site branch claude/dependencies-look on 2026-10-19, where every other suite passes
+  too; and thirteen from its second review (g100 to g112: no pill for an epic's sub-issues in
+  another repository (AQ), the kept tile not brought into view when the tab opens after the draw
+  (AJ), the strip deaf to the wheel, its ends never marked, or the wheel taken from the page where
+  the page scrolls as a whole (AR), Previous and Next out of the tools' row or Fit back among the
+  pills (AS), End stepping one, or a key at either end still pressing its tile (AL), a drag moving
+  the tab's box where the page scrolls (AM), a press whose release never came still dragging (AT),
+  Fit's box never watched for a resize (AN), and the wait for the site's face made 6 s (AP)) against
+  the same branch the same day. Four were rewritten for that branch, since
+  their text had moved: g22 (one chart's failure failing the rest, now that the failure opens the
+  chart's list), g27 (the words for no repository listed), g29 (show dependencies scrolling only)
+  and g52 (the strip not hiding the other charts), and two more for the second review, g64 (the
+  strip's clearing now drops its faded ends too) and g75 (the strip's keys added through its own
+  name); and g45 (a block shown as text keeping the
+  chart's class), which the dark chart ground let survive, is caught again by X, which now asks that
+  such a block keep no chart's class. No mutant has graphRestyle reach the arrows: it would take off
+  only the fill:none Mermaid also gives them in its own stylesheet, so nothing it changed could be
+  seen, and AH's look at the arrows guards the console's stylesheet instead. g99 (a box held through
+  Refresh at its height rounded to a whole pixel, so the page under it moves one) names P12 in
+  signin.test.mjs, which compares the hold with the box's own height to the fraction of a pixel,
+  since the look's second review left the box a height that rounds down and moves no page. The 63 of the Folders tab (`f*`, each with a `.json.suite` naming
+  folders.test.mjs) were caught against site branch claude/folders-explorer on 2026-10-18, the first
+  48 also against the site's script at commit 044b8b3, f06 rewritten for the explorer's name cell;
+  f56 to f63, the saved catalog's, against site branch claude/folders-catalog the same day, f60 to
+  f63 for CAT7 to CAT9 (CAT5 and CAT6 are held by the checks alone, since a connect reloads the page
+  and a name is kept as text by the shared drawing, so no single line of the catalog carries them).
+  The 24 of the Explore tab (`x*`, each naming explore.test.mjs) were caught against site branch
+  claude/explore-tab on 2026-10-18, after its adversarial review. The 33 of the foot and the phone
+  (`p*`, for P1 to P21; P22 and P23 are the stylesheet's, which no mutant of the script reaches, and
+  were seen to fail with the old rules) were caught against site branch claude/panel-feedback at
+  f025b08 on 2026-10-19, where every other suite passes too; p34 to p40, for P24 (the list written
+  readable by the private repositories, an open list left open, the close rewriting the value, a
+  closed list closed again, a list open to all left open, a refused close thrown, and the emptied
+  list kept), against site branch claude/lend-list-hidden on 2026-10-19; p17 (the chart's box
+  measured after the earlier hold let it go) was rewritten for the exact height the hold now takes
+  and caught again against site branch claude/dependencies-look the same day. The 39 of the Notebooks tab
+  (`n*`, each naming notebooks.test.mjs) were caught against site branch claude/notebooks at 1656fbb
+  on 2026-10-19 after its third review, n35 to n39 for its findings, where every other suite passes
+  too; N6 to N9 and N18 have no mutant of their own (N9 and N18 hold the stylesheet, which no mutant
+  of the script reaches). The nine of Make private (n40 to n48: no confirmation, the catalog's
+  repository changed in place of the notebook's, the change not recorded, the lock kept after the answer or past a sign-out, the button for a person who does not
   administer, the access words for a rate limit, the answer ignored, and an internal repository told
   as a public one) were caught against site branch claude/make-private at 7d3255f on 2026-10-19.
   The eleven from its review (n49 to n59: the lock tied to no sign-in, a button drawn again live and
@@ -263,6 +398,12 @@ ghu_TEST or github_pat_X.
   which Make private's nb.admin had left stale, was brought up to nbForget as it stands and caught
   again (N12), and n31, whose text Make private's own refusal had come to match first, was aimed at
   the write's refusal again and caught again (N21); all 59 of the Notebooks tab are caught there.
+  The two of the Home Screen app (`h*`, each naming app.test.mjs, for H8: the button offered where
+  the browser has no full screen call, and only the standard call looked for, which would hide it
+  from Safari before 16.4) were caught against site branch claude/home-screen-app at 79d4b83 on
+  2026-10-19, after its adversarial review, where app.test.mjs, signin.test.mjs, panel.test.mjs and
+  hostile.test.mjs pass whole; H1 to H7 hold the build's head and the stylesheet, which no mutant of
+  the script reaches.
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
   and every page action, visibility read and locator action on a selector first opens the tab that
@@ -291,7 +432,7 @@ ghu_TEST or github_pat_X.
      names, and reports each mutant as KILLED, SURVIVED, STALE or ERROR; name mutants to run only
      those, by their paths from e2e2/ (`bash run-mutants.sh mutants/g*.json` there runs the
      Dependencies tab's, `mutants/f*.json` the Folders tab's, `mutants/n*.json` the Notebooks
-     tab's).
+     tab's, `mutants/h*.json` the Home Screen app's, with `SITE` set as for the checks).
 
 The site sets the two constants to the live service and SymphonyBoard's Client ID (site pull
 request #24). The checks set them for themselves, whatever the shipped script holds: the

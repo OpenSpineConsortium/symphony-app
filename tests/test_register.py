@@ -260,12 +260,16 @@ class SetupAppTest(unittest.TestCase):
         """The repository's Administration for the six settings and, as the Apps'
         privacy statement says since version 14, the organization's Administration
         for the one box "Allow GitHub Actions to create and approve pull requests"
-        that a new organization holds off."""
+        that a new organization holds off; and, as it says since version 32, the
+        organization's Secrets and Variables for lending the requester's own
+        Claude tokens of the pool to the repository adopted (symphony-start#72)."""
         manifest = register.manifest_for(path=register.MANIFEST_SETUP)
         self.assertEqual(manifest["name"], "Symphony Setup")
         self.assertTrue(manifest["public"])
         self.assertEqual(manifest["default_permissions"], {"administration": "write", "metadata": "read",
-                                                           "organization_administration": "write"})
+                                                           "organization_administration": "write",
+                                                           "organization_secrets": "write",
+                                                           "organization_actions_variables": "write"})
         self.assertEqual(manifest["default_events"], [])
         self.assertEqual(manifest["hook_attributes"], {"url": "https://example.invalid/webhook", "active": False})
 

@@ -1,0 +1,1 @@
+[["      var page = pageScrolls(), box = page ? null", "      var page = false, box = page ? null"]]
