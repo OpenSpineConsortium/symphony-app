@@ -419,12 +419,13 @@ named, and nobody else needs to.
    device routes" above says it in full, with what ends such a token.
 
    To turn it on, in this order. First the Apps' privacy statement
-   (symphony-start's PRIVACY.md) gets a version that describes sign-in
-   by code, with its page at /symphony/apps-privacy.html live: the two
-   routes, the device code the page sends every five seconds or more,
-   the client id alone and no secret, the renewal without the secret,
-   and the warning above; version 33, live now, describes the redirect
-   alone. Then open
+   (symphony-start's PRIVACY.md) describes sign-in by code, with its
+   page at /symphony/apps-privacy.html live: the two routes, the device
+   code the page sends every five seconds or more, the client id alone
+   and no secret, the renewal without the secret, and the warning
+   above; version 35, live since 2026-10-19, does, so this step is done
+   unless a later change to sign-in by code needs a new version. Then
+   open
    https://github.com/organizations/OpenSpineConsortium/settings/apps/symphonyboard
    ("General" tab), tick "Enable Device Flow" (under "Identifying and
    authorizing users") and press "Save changes". Then give the Worker
