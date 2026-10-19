@@ -1,0 +1,1 @@
+[["'?ref=' + encodeURIComponent(CATALOG_BRANCH) + '&at=' + Date.now();\n    return gh('GET', path, undefined, OBJECT)", "'?ref=' + encodeURIComponent(CATALOG_BRANCH);\n    return gh('GET', path, undefined, OBJECT)"]]

@@ -1,0 +1,1 @@
+[["c.addEventListener('change', function () { if (c.checked) ticked[p] = true; else delete ticked[p]; recount(); });", "c.addEventListener('change', recount);"]]

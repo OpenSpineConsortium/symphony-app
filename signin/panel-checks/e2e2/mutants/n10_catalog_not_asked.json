@@ -1,0 +1,1 @@
+[["      if (!r.data || r.data.sha !== catalogSha) throw changed(CATALOG_FILE);\n", ""]]

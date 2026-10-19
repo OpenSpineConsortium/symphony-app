@@ -1,0 +1,1 @@
+[["    if (!book || !nbCanWrite()) return;\n    if (nbBusy()) { say('A change to ' + NOTEBOOKS_FILE + ' on ' + nbWriting + ' is on its way; press again once it has landed.'); return; }\n", "    if (!book || !nbCanWrite()) return;\n"]]

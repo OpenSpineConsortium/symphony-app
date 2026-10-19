@@ -1,0 +1,1 @@
+[["hits.sort(function (a, b) { return (ticked[b] ? 1 : 0) - (ticked[a] ? 1 : 0) || (a < b ? -1 : a > b ? 1 : 0); });\n", ""]]

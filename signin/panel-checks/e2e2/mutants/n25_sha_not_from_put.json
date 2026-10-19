@@ -1,0 +1,1 @@
+[["nb.sha = books.length && r && r.data && isPlain(r.data.content) && typeof r.data.content.sha === 'string' ? r.data.content.sha : null;", "nb.sha = sha;"]]
