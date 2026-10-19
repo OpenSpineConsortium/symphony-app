@@ -3143,6 +3143,15 @@ function gripOver() {
   return { words: line ? g.bottom - line.top : null, buttons };
 }
 
+// In the page, with the message empty: the placeholder's line of words, the status line's ::before,
+// and the grip's bar, its ::after, each as a box on screen
+function placeholderFacts() {
+  const st = document.querySelector('.console__status'), s = st.getBoundingClientRect(), ph = getComputedStyle(st, '::before');
+  const g = document.querySelector('[data-split="foot"]'), r = g.getBoundingClientRect(), a = getComputedStyle(g, '::after');
+  const words = parseFloat(ph.height) || parseFloat(ph.lineHeight) || parseFloat(ph.fontSize) * 1.3;
+  return { content: ph.content, words: { top: s.top + parseFloat(ph.top), bottom: s.top + parseFloat(ph.top) + words }, bar: { top: r.top + parseFloat(a.top), bottom: r.top + parseFloat(a.top) + parseFloat(a.height) } };
+}
+
 await check('P25: the message foot has a grip of its own along its top, a separator over none of the message\'s words that the mouse drags: up grows the foot, down shrinks it, the stage gives up or takes back exactly what the foot takes, the size is kept, and the deck still fits the window', async () => {
   const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 800 } });
   await loaded(page);
@@ -3180,7 +3189,7 @@ await check('P25: the message foot has a grip of its own along its top, a separa
   assert.ok(near(down.foot.height, up.foot.height - 120), 'dragging the grip down 120 px made the foot ' + down.foot.height + ' tall from ' + up.foot.height);
   for (const [name, f] of [['up', up], ['down', down]]) {
     assert.ok(near(f.stage.height + f.foot.height, rest.stage.height + rest.foot.height), name + ': the stage did not give up exactly what the foot took');
-    assert.ok(near(f.grip.top + f.grip.height / 2, f.foot.top, 3), name + ': the grip no longer lies along the foot\'s top');
+    assert.ok(near(f.grip.bottom, f.foot.top, 0.5), name + ': the grip no longer lies along the foot\'s top, its bottom at ' + f.grip.bottom + ' for a foot from ' + f.foot.top);
     assert.equal(f.sized, true);
     assertFits(f, name);
   }
@@ -3198,8 +3207,11 @@ await check('P26: a finger drags the foot\'s grip on a phone, upright and sidewa
     const grip = await page.evaluate(() => {
       const g = document.querySelector('[data-split="foot"]'), a = getComputedStyle(g, '::after'), r = g.getBoundingClientRect();
       const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-      return { shown: g.checkVisibility(), height: r.height, width: r.width, touch: getComputedStyle(g).touchAction, hit: at === g, barW: parseFloat(a.width), barH: parseFloat(a.height), bar: a.backgroundColor, barTop: parseFloat(a.top) };
+      return { shown: g.checkVisibility(), height: r.height, width: r.width, left: r.left, touch: getComputedStyle(g).touchAction, hit: at === g, barW: parseFloat(a.width), barH: parseFloat(a.height), bar: a.backgroundColor, barTop: parseFloat(a.top), barMid: r.left + parseFloat(a.left) + parseFloat(a.width) / 2 };
     });
+    // the placeholder an empty foot shows, under the grip's bar and not behind it
+    await page.evaluate(() => { document.getElementById('msg').textContent = ''; });
+    const placeholder = await page.evaluate(placeholderFacts);
     await sayOneLine(page);
     const over = await page.evaluate(gripOver);
     const rest = await footOf(page);
@@ -3207,13 +3219,16 @@ await check('P26: a finger drags the foot\'s grip on a phone, upright and sidewa
     const up = await footOf(page);
     await fingerDragFoot(page, -dy / 2);
     const down = await footOf(page);
-    console.log('      ' + where + ': grip', JSON.stringify(grip), JSON.stringify(over), '| foot', rest.foot.height, '->', up.foot.height, '->', down.foot.height, '| scrolled', rest.sy, up.sy, down.sy, '| kept', down.kept);
+    console.log('      ' + where + ': grip', JSON.stringify(grip), JSON.stringify(over), 'placeholder', JSON.stringify(placeholder), '| foot', rest.foot.height, '->', up.foot.height, '->', down.foot.height, '| scrolled', rest.sy, up.sy, down.sy, '| kept', down.kept);
     assert.ok(grip.shown && grip.hit, where + ': the grip is not there to touch');
     // a thumb's grip, and still over none of the message's words nor the foot's buttons
     assert.ok(over.words !== null && over.words <= 0.5, where + ': the grip lies over the message\'s words by ' + over.words + ' px');
     assert.deepEqual(over.buttons, [], where + ': the grip lies over the foot\'s buttons');
     assert.equal(grip.touch, 'none', where + ': a finger on the grip would scroll the page');
-    assert.ok(grip.height >= 24 && grip.width >= 300, where + ': the grip is smaller than a thumb: ' + grip.width + ' x ' + grip.height);
+    assert.ok(grip.height >= 24 && grip.width >= 96, where + ': the grip is smaller than a thumb: ' + grip.width + ' x ' + grip.height);
+    // only its middle, about its bar, so the rest of the foot's top edge scrolls the page (P44)
+    assert.ok(grip.width <= 160 && near(grip.left + grip.width / 2, grip.barMid, 1), where + ': the grip is not a thumb\'s width about its bar: ' + grip.width + ' wide, centred at ' + (grip.left + grip.width / 2) + ' for a bar at ' + grip.barMid);
+    assert.ok(placeholder.content.includes('Messages from the panel show here.') && placeholder.words.top >= placeholder.bar.bottom - 0.5, where + ': the grip\'s bar lies over the empty foot\'s placeholder: ' + JSON.stringify(placeholder));
     assert.ok(grip.barW >= 48 && grip.barH >= 4 && grip.bar !== 'rgba(0, 0, 0, 0)', where + ': the grip\'s bar does not show');
     assert.ok(near(up.foot.height, rest.foot.height - dy), where + ': a finger dragging up ' + (-dy) + ' px made the foot ' + up.foot.height + ' tall from ' + rest.foot.height);
     assert.ok(near(down.foot.height, up.foot.height + dy / 2), where + ': a finger dragging down made the foot ' + down.foot.height + ' tall from ' + up.foot.height);
@@ -3384,6 +3399,27 @@ await check('P29: the foot is held between one line of message with its buttons 
     }
     assert.deepEqual(errors, []);
     await context.close();
+  }
+  // the phone's layout with a text size a computer saved, which it does not apply: a laptop's
+  // window snapped to half the screen, by the mouse, and a phone, by a finger, each dragged to the
+  // top still leave 180 px of the window above the foot, whatever the saved size
+  for (const [viewport, mobile] of [[{ width: 720, height: 760 }, false], [{ width: 390, height: 844 }, true]]) {
+    for (const zoom of [0.7, 1.5]) {
+      const where = (mobile ? 'a phone at ' : 'a narrow window at ') + viewport.width + ' x ' + viewport.height + ' with text at ' + zoom + ' saved';
+      const storage = { local: Object.assign({}, asTester.local, { symphony_panel_layout: JSON.stringify({ zoom }) }) };
+      const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage, viewport, mobile });
+      await loaded(page);
+      await sayOneLine(page);
+      await sleep(400);
+      if (mobile) await fingerDragFoot(page, -3000); else await mouseDragFoot(page, -3000);
+      const top = await footOf(page);
+      console.log('      ' + where + ': up', top.foot.top, 'to', top.foot.bottom, 'scrolled', top.sy);
+      assert.ok(near(top.foot.top, 180, 1.5), where + ': dragged up, the foot runs from ' + top.foot.top + ' to ' + top.foot.bottom + ', not from 180');
+      assertPhoneFits(top, where);
+      assert.equal(top.sy, 0, where + ': the drag scrolled the page');
+      assert.deepEqual(errors, []);
+      await context.close();
+    }
   }
 });
 
@@ -3601,6 +3637,24 @@ await check('P33: the pointer at the window\'s top edge brings the bar back over
   await page.mouse.move(640, 12, { steps: 6 });
   await sleep(500);
   assert.equal((await barOf(page)).shown, false, 'a pointer passing under the edge brought the bar');
+  // a pointer that grazes the edge and is back on the deck before the bar has slid in under it
+  // lets the bar go after its wait, though it never was over the bar
+  await page.mouse.move(640, 3);
+  await page.mouse.move(640, 500);
+  const grazed = await barOf(page);
+  assert.equal(grazed.shown, true, 'a pointer at the top edge did not bring the bar');
+  await barOut(page, 'the bar a pointer grazing the top edge brought did not go after the pointer left for the deck', 2000);
+  // a pointer leaving the window by its left or right side near the top, as to a second screen or a
+  // dock, has not reached the top edge
+  for (const [inside, outside] of [[40, -10], [1240, 1290]]) {
+    await page.mouse.move(inside, 300);
+    await page.mouse.move(inside, 60, { steps: 4 });
+    const side = await context.newCDPSession(page);
+    await side.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: outside, y: 60 });
+    await side.detach();
+    await sleep(400);
+    assert.equal((await barOf(page)).shown, false, 'a pointer leaving the window by its ' + (outside < 0 ? 'left' : 'right') + ' side at 60 px brought the bar');
+  }
   // a pointer leaving the window across its top edge, past the strip between two moves, reached it
   await page.mouse.move(640, 300);
   const cdp = await context.newCDPSession(page);
@@ -3735,6 +3789,28 @@ await check('P35: on a phone the handle at the top centre shows the bar when tap
   assert.deepEqual([menu.menu, menu.shown], [true, true], 'the open menu did not hold the bar');
   assert.equal(closed.menu, false, 'the menu stayed open after the bar went');
   assert.equal(closed.sy, 0, 'the taps scrolled the page');
+  // the menu opened and closed by two taps on its button, which keeps the focus a tap gives it: that
+  // focus is no keyboard's and does not hold the bar past its wait
+  await page.tap('.console__barhandle');
+  await barIn(page, 'a tap on the handle did not show the bar');
+  await page.tap('#navToggle');
+  await sleep(400);
+  await page.tap('#navToggle');
+  await sleep(5500);
+  const tapped = await barOf(page);
+  console.log('      the menu opened and closed by its button, 5.5 s later:', tapped.shown, tapped.menu, 'focus', tapped.focus);
+  assert.equal(tapped.menu, false, 'the second tap on the menu\'s button did not close the menu');
+  assert.equal(tapped.shown, false, 'the focus a tap left on the menu\'s button held the bar past its wait');
+  // a swipe down on the handle with the page scrolled shows the bar and never scrolls the page
+  await page.evaluate(() => window.scrollTo({ top: 300, behavior: 'instant' }));
+  await sleep(300);
+  const scrolled = await scrollYOf(page);
+  await fingerDrag(page, h.left + h.width / 2, h.top + 6, 60);
+  await barIn(page, 'a swipe down from the handle with the page scrolled did not show the bar');
+  const swiped = await scrollYOf(page);
+  console.log('      a swipe on the handle with the page scrolled to', scrolled, ': scrolled to', swiped);
+  assert.ok(scrolled >= 290, 'the page did not scroll to 300 to swipe over it: ' + scrolled);
+  assert.equal(swiped, scrolled, 'the swipe on the handle scrolled the page from ' + scrolled + ' to ' + swiped);
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -3818,6 +3894,455 @@ await check('P38: every other page of the site keeps its bar where it always was
       assert.deepEqual(errors, []);
       await context.close();
     }
+  }
+});
+
+// The review of the foot and the bar, 2026-10-19: each check below holds what one of its findings
+// found wrong, and fails on the branch as it stood before the fix (site 2d22660).
+
+// In the page: what a press just inside each of the foot's buttons' top edge, at its middle, lands
+// on: the button itself, or what took it from the button
+function buttonEdges() {
+  return Array.from(document.querySelectorAll('.console__status button')).filter((b) => b.getClientRects().length && getComputedStyle(b).visibility !== 'hidden').map((b) => {
+    const r = b.getBoundingClientRect();
+    const missed = [1, 2].map((dy) => document.elementFromPoint(r.left + r.width / 2, r.top + dy)).filter((at) => !at || !(at === b || b.contains(at)))
+      .map((at) => !at ? 'nothing' : at.hasAttribute('data-split') ? 'the grip' : String(at.id || at.className || at.tagName));
+    return { name: b.id || b.textContent.trim(), missed };
+  });
+}
+// In the page: the foot's grip, the foot and the Ask Claude bar's last line of content, on screen
+function gripGap() {
+  const g = document.querySelector('[data-split="foot"]').getBoundingClientRect(), st = document.querySelector('.console__status').getBoundingClientRect();
+  const ask = document.getElementById('cp-askbar');
+  const inner = Array.from(ask.querySelectorAll('*')).filter((n) => n.getClientRects().length && n.checkVisibility()).map((n) => n.getBoundingClientRect().bottom);
+  return { top: g.top, bottom: g.bottom, height: g.height, footTop: st.top, askContent: inner.length ? Math.max.apply(null, inner) : null };
+}
+
+await check('P39: the foot\'s grip lies in the gap above the foot and the Ask Claude bar\'s bottom padding, over none of the foot\'s buttons and none of the bar\'s content at any text size, sized or not, so a press just inside a button\'s top edge is the button\'s and a double press on A+ steps the text and leaves the foot its size', async () => {
+  for (const zoom of [0.7, 1, 1.5, 1.7]) {
+    for (const foot of [null, 200]) {
+      const layout = Object.assign({}, zoom === 1 ? {} : { zoom }, foot ? { foot } : {});
+      const where = 'text at ' + zoom + (foot ? ', the foot sized ' + foot : '');
+      const storage = { local: Object.assign({}, asTester.local, Object.keys(layout).length ? { symphony_panel_layout: JSON.stringify(layout) } : {}) };
+      const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage, viewport: { width: 1440, height: 900 } });
+      await loaded(page);
+      await sayOneLine(page);
+      await sleep(300);
+      const edges = await page.evaluate(buttonEdges);
+      const g = await page.evaluate(gripGap);
+      console.log('      ' + where + ': grip', g.top.toFixed(1), 'to', g.bottom.toFixed(1), 'foot from', g.footTop.toFixed(1), 'the bar\'s content to', g.askContent && g.askContent.toFixed(1), '| missed', JSON.stringify(edges.filter((e) => e.missed.length)));
+      assert.ok(edges.length >= 5, where + ': the foot shows ' + edges.length + ' buttons');
+      for (const e of edges) assert.deepEqual(e.missed, [], where + ': a press just inside ' + e.name + '\'s top edge lands on ' + e.missed.join(', '));
+      assert.ok(near(g.bottom, g.footTop, 0.5), where + ': the grip runs down to ' + g.bottom + ', past the foot\'s top ' + g.footTop);
+      assert.ok(g.askContent !== null && g.top >= g.askContent - 0.5, where + ': the grip reaches up to ' + g.top + ', over the Ask Claude bar\'s content, which ends at ' + g.askContent);
+      assert.ok(g.height >= 12, where + ': the grip is too thin to take with a mouse: ' + g.height);
+      if (zoom === 1 && foot) {
+        const up = await page.evaluate(() => { const r = document.getElementById('cp-zoom-up').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 2 }; });
+        await page.mouse.dblclick(up.x, up.y);
+        await sleep(400);
+        const after = await page.evaluate(() => ({ zoom: document.getElementById('cp-zoom-reset').textContent, kept: JSON.parse(localStorage.getItem('symphony_panel_layout') || '{}') }));
+        console.log('      a double press 2 px inside A+\'s top edge:', JSON.stringify(after));
+        assert.notEqual(after.zoom, '100%', 'a double press just inside A+\'s top edge did not step the text');
+        assert.equal(after.kept.foot, 200, 'a double press just inside A+\'s top edge put the foot back: ' + JSON.stringify(after.kept));
+      }
+      assert.deepEqual(errors, []);
+      await context.close();
+    }
+  }
+});
+
+// In the page, from before it first paints: on each frame, where the bar and the deck are and
+// whether the panel's script has drawn the foot's grip yet, and every transition the bar runs
+const frameRecorder = () => {
+  window.__frames = []; window.__slides = [];
+  document.addEventListener('transitionrun', (e) => { if (e.target && e.target.id === 'nav') window.__slides.push(e.propertyName); }, true);
+  const look = () => {
+    const nav = document.getElementById('nav'), deck = document.getElementById('console');
+    if (nav) {
+      const n = nav.getBoundingClientRect(), d = deck && deck.getBoundingClientRect();
+      window.__frames.push({ t: Math.round(performance.now()), navBottom: n.bottom, deckTop: d ? d.top : null, deckBottom: d ? d.bottom : null, script: !!document.querySelector('[data-split="foot"]') });
+    }
+    if (window.__frames.length < 600) requestAnimationFrame(look);
+  };
+  requestAnimationFrame(look);
+};
+
+await check('P40: on a fresh load, the panel\'s script slow to come, the bar is above the window from the first frame the page paints and never slides, and the deck starts where it stays and never moves, on a computer and on a phone', async () => {
+  for (const [viewport, mobile] of [[{ width: 1280, height: 800 }, false], [{ width: 390, height: 844 }, true]]) {
+    const where = viewport.width + ' x ' + viewport.height;
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport, mobile, noLoad: true });
+    await context.route('**/assets/js/symphony-panel.js*', async (route) => { await sleep(700); await route.fulfill({ status: 200, contentType: 'application/javascript', body: real }); });
+    await context.addInitScript(frameRecorder);
+    await page.goto(BASE + '/symphony/control/?repo=acme/demo');
+    await loaded(page);
+    await sleep(800);
+    const { frames, slides } = await page.evaluate(() => ({ frames: window.__frames, slides: window.__slides }));
+    const last = frames[frames.length - 1], early = frames.filter((f) => !f.script);
+    const shown = frames.filter((f) => f.navBottom > 0.5), moved = frames.filter((f) => f.deckTop !== null && (!near(f.deckTop, last.deckTop, 0.5) || (!mobile && !near(f.deckBottom, last.deckBottom, 0.5))));
+    console.log('      ' + where + ':', frames.length, 'frames,', early.length, 'before the script; the bar in sight in', shown.length, '; the deck moved in', moved.length, JSON.stringify(moved.slice(0, 2)), '; the bar ran', JSON.stringify(slides));
+    assert.ok(early.length >= 3, where + ': no frame was painted before the script came, so the check saw nothing of the load');
+    assert.deepEqual(shown.slice(0, 1), [], where + ': the bar is in sight as the page loads');
+    assert.deepEqual(slides, [], where + ': the bar ran a transition as the page loaded');
+    assert.deepEqual(moved.slice(0, 1), [], where + ': the deck moved as the page loaded');
+    assert.ok(near(last.deckTop, 0, 0.5), where + ': the deck starts at ' + last.deckTop);
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+});
+
+await check('P41: a drag that is no grip\'s, a text selection run up to the window\'s top or a press moved off a button to the edge, brings no bar while its button is held, nor does a pointer that leaves across the top just after moving with a button held, and the edge brings the bar as ever to a pointer with no button held', async () => {
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 800 } });
+  await loaded(page);
+  await page.click('.console__rail [data-tab="about"]');
+  await sleep(400);
+  // a selection from a paragraph of the About tab run up to the window's top edge and held there
+  const p = await page.evaluate(() => { const n = Array.from(document.querySelectorAll('#tab-about p')).find((x) => x.getBoundingClientRect().height > 0 && x.textContent.length > 80); const r = n.getBoundingClientRect(); return { x: r.left + 30, y: r.top + 8 }; });
+  await page.mouse.move(p.x, p.y);
+  await page.mouse.down();
+  await page.mouse.move(p.x + 300, 3, { steps: 15 });
+  await sleep(800);
+  const selecting = await barOf(page);
+  const chars = await page.evaluate(() => String(getSelection()).length);
+  await page.mouse.up();
+  await sleep(300);
+  // a press on a launch button moved off it to the edge, to take it back
+  await page.click('.console__rail [data-tab="command"]');
+  await sleep(300);
+  const b = await page.evaluate(() => { const r = document.getElementById('cp-run-workers').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  await page.mouse.move(b.x, b.y);
+  await page.mouse.down();
+  await page.mouse.move(b.x, 2, { steps: 12 });
+  await sleep(800);
+  const pressing = await barOf(page);
+  await page.mouse.up();
+  await sleep(300);
+  console.log('      a selection held at the top edge:', selecting.shown, chars, 'characters | a press moved to the edge:', pressing.shown);
+  assert.ok(chars > 0, 'the drag selected nothing, so it was no selection');
+  assert.equal(selecting.shown, false, 'a text selection run up to the top edge brought the bar');
+  assert.equal(pressing.shown, false, 'a press moved off a button to the top edge brought the bar');
+  // as an engine that tells a held drag's leaving the window sends it: a mouseout across the top,
+  // no button held, just after a move with one held, is a drag let go out of the window, not a
+  // pointer reaching the edge; after a move with none held, the same mouseout brings the bar
+  const leave = (held) => page.evaluate((held) => new Promise((done) => {
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 640, clientY: 40, buttons: held ? 1 : 0, bubbles: true }));
+    document.documentElement.dispatchEvent(new MouseEvent('mouseout', { clientX: 640, clientY: 2, buttons: 0, relatedTarget: null, bubbles: true }));
+    setTimeout(() => done(document.body.classList.contains('console-bar-shown')), 300);
+  }), held);
+  await page.mouse.move(640, 400);
+  const afterHeld = await leave(true);
+  const afterFree = await leave(false);
+  console.log('      left across the top after a held move:', afterHeld, '| after a free one:', afterFree);
+  assert.equal(afterHeld, false, 'a mouseout across the top just after a move with a button held brought the bar');
+  assert.equal(afterFree, true, 'a mouseout across the top after a move with no button held did not bring the bar');
+  await page.keyboard.press('Escape');
+  await barOut(page, 'Escape did not send the bar away');
+  // the edge brings it to a pointer with no button held
+  await page.mouse.move(640, 300);
+  await page.mouse.move(640, 3, { steps: 8 });
+  await barIn(page, 'the pointer at the top edge with no button held did not bring the bar');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P42: a grip pressed while the keyboard\'s focus is in the shown bar sends the bar away with the focus, so nothing of the hidden bar keeps it and Enter follows no link nobody sees, for the foot\'s grip and the side column\'s', async () => {
+  for (const [sel, dx, dy] of [['[data-split="foot"]', 0, -60], ['[data-split="side"]', 30, 0]]) {
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 800 } });
+    await loaded(page);
+    await sleep(400);
+    await page.mouse.move(640, 400);
+    await page.evaluate(() => { if (document.activeElement) document.activeElement.blur(); });
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await barIn(page, 'Tab into the bar did not show it');
+    const before = await barOf(page);
+    const g = await page.evaluate((s) => { const r = document.querySelector(s).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, sel);
+    await page.mouse.move(g.x, g.y);
+    await page.mouse.down();
+    await page.mouse.move(g.x + dx, g.y + dy, { steps: 5 });
+    await page.mouse.up();
+    await page.mouse.move(640, 400);
+    await barOut(page, sel + ': the bar did not go for a press on the grip');
+    await sleep(800);
+    const after = await barOf(page);
+    const url = page.url();
+    await page.keyboard.press('Enter');
+    await sleep(800);
+    console.log('      ' + sel + ': focus before', before.focus, before.focusInBar, '| after the drag', after.focus, after.focusInBar, after.shown, '| Enter:', page.url() === url ? 'stayed' : 'went to ' + page.url());
+    assert.equal(before.focusInBar, true, sel + ': Tab did not put the focus in the bar');
+    assert.equal(after.focusInBar, false, sel + ': the bar went with the focus left in it, on ' + after.focus);
+    assert.equal(page.url(), url, sel + ': Enter after the drag left the panel for ' + page.url());
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+});
+
+await check('P43: where the page scrolls, a phone\'s, a narrow window\'s or a tablet\'s held upright, the foot rests on the window\'s bottom on every tab at the page\'s top, and its grip stays under the finger or the mouse that drags it, on a short tab and with the page scrolled past the deck\'s end', async () => {
+  {
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
+    await loaded(page);
+    await sleep(400);
+    const off = [];
+    for (const tab of PHONE_TABS) {
+      await page.click('.console__rail [data-tab="' + tab + '"]');
+      await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+      await sleep(250);
+      const f = await footOf(page);
+      if (!near(f.foot.bottom, f.ih, 1)) off.push(tab + ' (the foot ends at ' + f.foot.bottom.toFixed(1) + ')');
+    }
+    console.log('      390 x 844, tabs whose foot does not rest on the window\'s bottom at the page\'s top:', off.join(', ') || 'none');
+    assert.deepEqual(off, [], 'at the page\'s top the foot does not rest on the window\'s bottom on ' + off.join(', '));
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  const cases = [
+    ['a phone, the Board tab at the page\'s top', { width: 390, height: 844 }, true, 'board', false, -120],
+    ['a phone, the page scrolled past the deck\'s end', { width: 390, height: 844 }, true, 'command', true, -100],
+    ['a phone sideways, the page scrolled past the deck\'s end', { width: 844, height: 390 }, true, 'command', true, -60],
+    ['a tablet upright, the Board tab', { width: 768, height: 1024 }, true, 'board', false, -150],
+    ['a narrow window, the Board tab, by the mouse', { width: 800, height: 900 }, false, 'board', false, -100],
+  ];
+  for (const [where, viewport, mobile, tab, end, dy] of cases) {
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport, mobile });
+    await loaded(page);
+    await page.click('.console__rail [data-tab="' + tab + '"]');
+    await sayOneLine(page);
+    await sleep(400);
+    // past the deck's end: the deck ends a third of the window above its bottom, the breadcrumb and
+    // the footer under it, so the foot rests on the deck's end and not on the window's bottom
+    if (end) await page.evaluate(() => { const d = document.getElementById('console').getBoundingClientRect(); window.scrollTo({ top: window.scrollY + d.bottom - innerHeight * 2 / 3, behavior: 'instant' }); });
+    await sleep(300);
+    // the grip is read after every step of the drag as well as after it, since a grip that catches
+    // the pointer up only once the drag is over, by a scroll that glides, is not under it meanwhile
+    const gripY = () => page.evaluate(() => { const r = document.querySelector('[data-split="foot"]').getBoundingClientRect(); return r.top + r.height / 2; });
+    const drag = async (by) => {
+      const g0 = await page.evaluate(() => { const r = document.querySelector('[data-split="foot"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+      const f0 = await footOf(page);
+      let lag = 0;
+      if (mobile) {
+        const cdp = await page.context().newCDPSession(page);
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: g0.x, y: g0.y }] });
+        for (let i = 1; i <= 10; i++) {
+          const y = g0.y + by * i / 10;
+          await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: g0.x, y }] });
+          await sleep(16);
+          lag = Math.max(lag, Math.abs(await gripY() - y));
+        }
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        await cdp.detach();
+      } else {
+        await page.mouse.move(g0.x, g0.y);
+        await page.mouse.down();
+        for (let i = 1; i <= 8; i++) {
+          const y = g0.y + by * i / 8;
+          await page.mouse.move(g0.x, y);
+          lag = Math.max(lag, Math.abs(await gripY() - y));
+        }
+        await page.mouse.up();
+      }
+      await sleep(150);
+      const f1 = await footOf(page);
+      return { moved: (f1.grip.top + f1.grip.height / 2) - g0.y, grew: f1.foot.height - f0.foot.height, lag, from: f0, to: f1 };
+    };
+    const up = await drag(dy);
+    const down = await drag(-dy / 2);
+    console.log('      ' + where + ': up ' + (-dy) + ': the grip moved ' + up.moved.toFixed(1) + ', the foot grew ' + up.grew.toFixed(1) + ', scrolled ' + up.from.sy + ' -> ' + up.to.sy + ', at most ' + up.lag.toFixed(1) + ' from the pointer on the way | down ' + (-dy / 2) + ': the grip moved ' + down.moved.toFixed(1) + ', the foot ' + down.grew.toFixed(1) + ', at most ' + down.lag.toFixed(1) + ' from the pointer');
+    if (end) assert.ok(up.from.foot.bottom < up.from.ih - 40, where + ': the foot rested on the window\'s bottom, so the case is not the one meant');
+    assert.ok(near(up.moved, dy, 3), where + ': the grip moved ' + up.moved.toFixed(1) + ' under a pointer that moved ' + dy);
+    assert.ok(near(up.grew, -dy, 3), where + ': the foot grew ' + up.grew.toFixed(1) + ' for ' + (-dy));
+    assert.ok(near(down.moved, -dy / 2, 3), where + ': dragged back, the grip moved ' + down.moved.toFixed(1) + ' under a pointer that moved ' + (-dy / 2));
+    assert.ok(near(down.grew, dy / 2, 3), where + ': dragged back, the foot changed by ' + down.grew.toFixed(1));
+    assert.ok(up.lag <= 3 && down.lag <= 3, where + ': on the way the grip fell ' + up.lag.toFixed(1) + ' and ' + down.lag.toFixed(1) + ' px behind the pointer');
+    assert.ok(up.to.sw <= up.to.iw && up.to.sx === 0, where + ': the page pans sideways');
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+});
+
+await check('P44: on a phone a thumb that swipes up from the foot\'s top edge beside the grip\'s bar scrolls the page and leaves the foot its size, since only the grip\'s middle, about its bar, sizes the foot', async () => {
+  for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
+    const where = viewport.width + ' x ' + viewport.height;
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport, mobile: true });
+    await loaded(page);
+    await sleep(400);
+    const g = await page.evaluate(() => { const r = document.querySelector('[data-split="foot"]').getBoundingClientRect(); return { left: r.left, right: r.right, y: r.top + r.height / 2 }; });
+    const x = Math.max(30, g.left - 50);
+    const at = await page.evaluate(([x, y]) => { const n = document.elementFromPoint(x, y); return n ? String(n.className || n.tagName) : 'nothing'; }, [x, g.y]);
+    const before = await footOf(page);
+    await fingerDrag(page, x, g.y, -160);
+    await sleep(300);
+    const after = await footOf(page);
+    console.log('      ' + where + ': the grip from', g.left, 'to', g.right, '| a thumb at', x, 'on', at, '| scrolled', before.sy, '->', after.sy, '| the foot', before.foot.height, '->', after.foot.height, 'kept', after.kept);
+    assert.ok(!/console__split/.test(at), where + ': the foot\'s top edge at ' + x + ' is the grip\'s');
+    assert.ok(after.sy - before.sy > 60, where + ': the thumb\'s swipe scrolled the page ' + (after.sy - before.sy) + ' px');
+    assert.ok(near(after.foot.height, before.foot.height, 0.5) && after.kept === null, where + ': the thumb\'s swipe sized the foot to ' + after.foot.height + ', kept ' + after.kept);
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+});
+
+// A tablet whose main pointer is a finger, with a mouse beside it, answers (hover: none) and
+// (any-hover: hover); Chromium's emulation offers no such screen (a touch screen it emulates answers
+// any-hover: none, and its media emulation takes no hover feature), so the script is told the
+// any-hover answer such a screen gives, and the stylesheet, which shows the hot strip there under the
+// same any-hover, is left as Chromium answers it: the strip is not shown, and the mouse reaches the
+// top edge by leaving the window across it
+const tabletWithMouse = () => {
+  const real = window.matchMedia.bind(window);
+  window.matchMedia = (q) => (/^\(any-hover: hover\)$/.test(q) ? { matches: true, media: q, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent() { return false; } } : real(q));
+};
+
+await check('P45: on a touch-first screen with a mouse too, the mouse leaving the window across the top brings the bar, and the mouse resting on the bar keeps it, past a touch\'s wait too, as on a computer', async () => {
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1024, height: 1366 }, mobile: true, initScript: tabletWithMouse });
+  await loaded(page);
+  await sleep(400);
+  const media = await page.evaluate(() => ({ hover: matchMedia('(hover: hover)').matches, any: matchMedia('(any-hover: hover)').matches }));
+  assert.deepEqual([media.hover, media.any], [false, true], 'the screen is not one whose main pointer is a finger with a mouse beside it');
+  // the strip along the top is drawn by the stylesheet's media query, which the stub above does not
+  // reach and which no emulation in Chromium can answer as such a screen does (setEmulatedMedia leaves
+  // the hover features alone), so the rule itself is read: the strip shows where any pointer hovers
+  const strip = await page.evaluate(() => {
+    const found = [];
+    for (const sheet of document.styleSheets) {
+      let rules; try { rules = sheet.cssRules; } catch (e) { continue; }
+      for (const r of rules) if (r.media && r.cssRules) for (const inner of r.cssRules) if (inner.selectorText === 'body.console-bar-auto .console__barstrip' && inner.style.display === 'block') found.push(r.media.mediaText);
+    }
+    return found;
+  });
+  assert.deepEqual(strip, ['(any-hover: hover)'], 'the strip along the top shows under ' + JSON.stringify(strip) + ', not wherever any pointer hovers');
+  const brand = await page.evaluate(() => { const r = document.querySelector('#nav .nav__brand').getBoundingClientRect(); return { x: r.left + r.width / 2, dy: r.top + r.height / 2 - document.getElementById('nav').getBoundingClientRect().top }; });
+  // the mouse leaving the window across its top edge, then back on the brand past a touch's wait
+  await page.mouse.move(512, 400);
+  const cdp = await context.newCDPSession(page);
+  for (const y of [120, 40, -10]) await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 512, y });
+  await barIn(page, 'the mouse leaving the window across the top did not bring the bar');
+  await page.mouse.move(brand.x, brand.dy, { steps: 4 });
+  await sleep(4800);
+  const resting = await barOf(page);
+  await page.mouse.move(512, 900, { steps: 4 });
+  await barOut(page, 'the bar did not go after the mouse left it');
+  // the handle pressed by the mouse, the mouse then resting on the bar past the touch's wait
+  const h = (await barOf(page)).handle.box;
+  await page.mouse.click(h.left + h.width / 2, h.top + h.height / 2);
+  await barIn(page, 'a click on the handle did not show the bar');
+  await page.mouse.move(brand.x, brand.dy, { steps: 4 });
+  await sleep(4800);
+  const past = await barOf(page);
+  console.log('      the mouse resting on the bar 4.8 s:', resting.shown, '| after a click on the handle, 4.8 s:', past.shown);
+  assert.equal(resting.shown, true, 'the bar went while the mouse rested on it');
+  assert.equal(past.shown, true, 'the bar went after a touch\'s wait though the mouse rested on it');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P46: on a phone the handle\'s whole press area is the tab a person sees, in the site\'s colours, so a tap just under it presses what lies under it and shows no bar', async () => {
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
+  await loaded(page);
+  await sleep(500);
+  const tab = await page.evaluate(() => {
+    const h = document.querySelector('.console__barhandle'), r = h.getBoundingClientRect(), b = getComputedStyle(h, '::before');
+    return { box: { left: r.left, top: r.top, width: r.width, height: r.height }, tab: { left: parseFloat(b.left), top: parseFloat(b.top), width: parseFloat(b.width), height: parseFloat(b.height), bg: b.backgroundColor } };
+  });
+  console.log('      handle', JSON.stringify(tab));
+  assert.ok(near(tab.tab.left, 0, 0.5) && near(tab.tab.top, 0, 0.5) && near(tab.tab.width, tab.box.width, 0.5) && near(tab.tab.height, tab.box.height, 0.5), 'the tab a person sees is smaller than the handle\'s press area: ' + JSON.stringify(tab));
+  assert.equal(tab.tab.bg, 'rgb(241, 238, 227)', 'the handle\'s tab is not drawn in the site\'s colours');
+  // the page scrolled so the Command tab's readouts pass under the handle, a tap just below the tab
+  // presses the readout there, which opens its tab
+  await page.evaluate(() => { const r = document.querySelector('.readout[data-jump="cp-given"]').getBoundingClientRect(); window.scrollTo({ top: window.scrollY + r.top - 4, behavior: 'instant' }); });
+  await sleep(300);
+  await page.evaluate(() => { window.__pressed = []; document.addEventListener('click', (e) => window.__pressed.push(String(e.target.closest('button') ? e.target.closest('button').className : e.target.className)), true); });
+  const below = { x: tab.box.left + tab.box.width / 2, y: tab.box.top + tab.box.height + 3 };
+  const under = await page.evaluate(([x, y]) => { const n = document.elementFromPoint(x, y); const b = n && n.closest('button'); return b ? String(b.className) : n ? String(n.className || n.tagName) : 'nothing'; }, [below.x, below.y]);
+  await page.touchscreen.tap(below.x, below.y);
+  await sleep(400);
+  const f = await barOf(page), pressed = await page.evaluate(() => window.__pressed);
+  console.log('      a tap 3 px under the tab, on', under, ': pressed', JSON.stringify(pressed), 'bar', f.shown);
+  assert.equal(under, 'readout', 'no readout lies 3 px under the tab, so the case is not the one meant');
+  assert.deepEqual(pressed, ['readout'], 'a tap 3 px under the handle\'s tab pressed ' + JSON.stringify(pressed));
+  assert.equal(f.shown, false, 'a tap just under the handle\'s tab showed the bar');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P47: on a tablet, either way up, the foot\'s grip is a thumb\'s as on a phone, over none of the foot\'s buttons, its message\'s words or the empty foot\'s placeholder, which stands where a message\'s words do, and a finger drags it', async () => {
+  for (const viewport of [{ width: 1024, height: 1366 }, { width: 1366, height: 1024 }]) {
+    const where = 'a tablet at ' + viewport.width + ' x ' + viewport.height;
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport, mobile: true });
+    await loaded(page);
+    await sleep(400);
+    await page.evaluate(() => { document.getElementById('msg').textContent = ''; });
+    const placeholder = await page.evaluate(placeholderFacts);
+    const grip = await page.evaluate(() => { const g = document.querySelector('[data-split="foot"]'), r = g.getBoundingClientRect(), a = getComputedStyle(g, '::after'); return { height: r.height, barW: parseFloat(a.width), coarse: matchMedia('(pointer: coarse)').matches }; });
+    await sayOneLine(page);
+    // where a message's first line stands, which the placeholder stands at while the foot is empty
+    const said = await page.evaluate(() => { const range = document.createRange(); range.selectNodeContents(document.getElementById('msg')); return range.getClientRects()[0].top; });
+    const over = await page.evaluate(gripOver);
+    const edges = (await page.evaluate(buttonEdges)).filter((e) => e.missed.length);
+    const rest = await footOf(page);
+    const g = await fingerDragFoot(page, -100);
+    const up = await footOf(page);
+    const moved = (up.grip.top + up.grip.height / 2) - g.y;
+    console.log('      ' + where + ':', JSON.stringify(grip), JSON.stringify(over), 'placeholder', JSON.stringify(placeholder), 'a message from', said.toFixed(1), '| missed', JSON.stringify(edges), '| a finger up 100: the grip', moved.toFixed(1), 'the foot', rest.foot.height.toFixed(1), '->', up.foot.height.toFixed(1));
+    assert.equal(grip.coarse, true, where + ': the tablet\'s pointer is not coarse');
+    assert.ok(grip.height >= 24 && grip.barW >= 48, where + ': the grip is not a thumb\'s: ' + JSON.stringify(grip));
+    assert.ok(over.words !== null && over.words <= 0.5, where + ': the grip lies over the message\'s words by ' + over.words + ' px');
+    assert.deepEqual(over.buttons, [], where + ': the grip lies over the foot\'s buttons');
+    assert.deepEqual(edges, [], where + ': a press just inside a button\'s top edge is not the button\'s');
+    assert.ok(placeholder.words.top >= placeholder.bar.bottom - 0.5, where + ': the grip\'s bar lies over the empty foot\'s placeholder: ' + JSON.stringify(placeholder));
+    // the placeholder moves down with the words the foot's top padding moves down, within the 2 px a
+    // computer's foot shows between them too, so the empty foot reads as the same line a message fills
+    assert.ok(near(placeholder.words.top, said, 3), where + ': the placeholder stands at ' + placeholder.words.top.toFixed(1) + ' and a message\'s words at ' + said.toFixed(1));
+    assert.ok(near(moved, -100, 2) && near(up.foot.height - rest.foot.height, 100, 2), where + ': a finger up 100 moved the grip ' + moved.toFixed(1) + ' and the foot ' + (up.foot.height - rest.foot.height).toFixed(1));
+    assertFits(up, where);
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+});
+
+await check('P48: each grip says its part\'s size and the bounds it is held to, and says the new size as a drag or the arrow keys change it: the foot\'s, the side column\'s and a token\'s panel\'s, which the script draws later', async () => {
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 800 } });
+  await loaded(page);
+  await sleep(300);
+  const saidOn = (pg, sel) => pg.evaluate((s) => { const g = document.querySelector(s); return ['aria-valuenow', 'aria-valuemin', 'aria-valuemax'].map((a) => g.hasAttribute(a) ? Number(g.getAttribute(a)) : null); }, sel);
+  const said = (sel) => saidOn(page, sel);
+  const foot = '[data-split="foot"]', side = '[data-split="side"]';
+  const rest = await footOf(page), atRest = await said(foot);
+  await mouseDragFoot(page, -3000);
+  const top = await footOf(page), atTop = await said(foot);
+  await mouseDragFoot(page, 3000);
+  const low = await footOf(page), atLow = await said(foot);
+  await page.focus(foot);
+  await page.keyboard.press('ArrowUp');
+  const keyed = await footOf(page), atKey = await said(foot);
+  console.log('      the foot: at rest', rest.foot.height.toFixed(1), JSON.stringify(atRest), '| at its top', top.foot.height, JSON.stringify(atTop), '| at its least', low.foot.height, JSON.stringify(atLow), '| ArrowUp', keyed.foot.height, JSON.stringify(atKey));
+  assert.ok(atRest.every((v) => v !== null), 'the foot\'s grip says no size or bounds: ' + JSON.stringify(atRest));
+  assert.ok(near(atRest[0], rest.foot.height, 1), 'the foot\'s grip says ' + atRest[0] + ' for a foot ' + rest.foot.height + ' tall');
+  assert.deepEqual([atTop[0], atTop[0]], [atTop[2], Math.round(top.foot.height)], 'dragged to its top, the foot\'s grip says ' + JSON.stringify(atTop));
+  assert.deepEqual([atLow[0], atLow[0]], [atLow[1], Math.round(low.foot.height)], 'dragged to its least, the foot\'s grip says ' + JSON.stringify(atLow));
+  assert.equal(atKey[0], Math.round(keyed.foot.height), 'after ArrowUp the foot\'s grip says ' + atKey[0] + ' for a foot ' + keyed.foot.height);
+  const width = () => page.evaluate(() => document.querySelector('#console .console__side').offsetWidth);
+  const sideAt = await said(side), w0 = await width();
+  await page.focus(side);
+  await page.keyboard.press('ArrowRight');
+  const sideKey = await said(side), w1 = await width();
+  console.log('      the side column:', w0, JSON.stringify(sideAt), '| ArrowRight', w1, JSON.stringify(sideKey));
+  assert.deepEqual(sideAt, [w0, 150, 520], 'the side column\'s grip says ' + JSON.stringify(sideAt) + ' for a column ' + w0 + ' wide');
+  assert.deepEqual(sideKey, [w1, 150, 520], 'after ArrowRight the side column\'s grip says ' + JSON.stringify(sideKey) + ' for ' + w1);
+  assert.deepEqual(errors, []);
+  await context.close();
+  // a token's panel, whose grip the script draws when a tile is opened, says its size once focused
+  {
+    const extra = { 'GET /repos/acme/demo/actions/secrets': { total_count: 2, secrets: [{ name: 'CLAUDE_CODE_OAUTH_TOKEN' }, { name: 'SYMPHONY_CLAUDE_1' }] } };
+    const { context, page, errors } = await open({ script: real, routes: signInRoutes([], extra), path: '/symphony/control/?repo=acme/demo#tokens', storage: asTester, viewport: { width: 1280, height: 900 } });
+    await loaded(page);
+    await page.waitForSelector('#tk-tile-1', { timeout: 10000 });
+    await page.evaluate(() => document.getElementById('tk-tile-1').click());
+    await page.waitForFunction(() => { const s = document.getElementById('tk-side'); return s && !s.hidden; }, null, { timeout: 5000 });
+    await page.focus('[data-split="tkside"]');
+    const tk = await saidOn(page, '[data-split="tkside"]'), tw = await page.evaluate(() => document.getElementById('tk-side').offsetWidth);
+    console.log('      a token\'s panel, focused:', tw, JSON.stringify(tk));
+    assert.deepEqual(tk, [tw, 220, 760], 'the token panel\'s grip says ' + JSON.stringify(tk) + ' for a panel ' + tw + ' wide');
+    assert.deepEqual(errors, []);
+    await context.close();
   }
 });
 

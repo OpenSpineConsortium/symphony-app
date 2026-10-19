@@ -1,1 +1,1 @@
-[["    var b = p.bounds ? p.bounds() : p;\n", "    var b = p;\n"]]
+[["  function sizeWithin(p, px) {\n    var b = p.bounds ? p.bounds() : p;\n", "  function sizeWithin(p, px) {\n    var b = p;\n"]]
