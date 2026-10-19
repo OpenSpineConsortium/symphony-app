@@ -1,0 +1,1 @@
+[["    if (!line || $('console')) return;\n", "    return;\n"]]

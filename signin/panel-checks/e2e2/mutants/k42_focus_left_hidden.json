@@ -1,0 +1,1 @@
+[["    if (lost && back && back.getClientRects().length) back.focus({ preventScroll: true });\n", ""]]

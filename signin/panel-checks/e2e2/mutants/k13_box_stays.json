@@ -1,0 +1,1 @@
+[["    box.hidden = true;\n    if ($('cp-code-said')) $('cp-code-said').hidden = true;\n", "    if ($('cp-code-said')) $('cp-code-said').hidden = true;\n"]]

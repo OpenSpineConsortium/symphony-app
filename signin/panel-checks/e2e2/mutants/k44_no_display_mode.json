@@ -1,0 +1,1 @@
+[["    try { return !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches); } catch (e2) { return false; }\n", "    return false;\n"]]

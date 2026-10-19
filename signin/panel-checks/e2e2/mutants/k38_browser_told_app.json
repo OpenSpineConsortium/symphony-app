@@ -1,0 +1,1 @@
+[["    if (app && how && how.getAttribute('data-in-app'))", "    if (how && how.getAttribute('data-in-app'))"]]

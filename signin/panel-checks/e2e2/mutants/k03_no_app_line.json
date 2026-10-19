@@ -1,0 +1,1 @@
+[["    if (app && how && how.getAttribute('data-in-app')) how.textContent = how.getAttribute('data-in-app');\n", ""]]
