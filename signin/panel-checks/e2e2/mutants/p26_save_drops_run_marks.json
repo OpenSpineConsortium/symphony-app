@@ -1,0 +1,1 @@
+[["      if (s.uid != null && who && typeof s.owner === 'string' && who.toLowerCase() === s.owner.toLowerCase()) out.uid = s.uid;\n      if (s.keeping) out.keeping = s.keeping;\n", ""]]

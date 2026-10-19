@@ -13,9 +13,20 @@ ghu_TEST or github_pat_X.
 
 ## What is here
 
-- `e2e2/signin.test.mjs`: 112 checks of the sign-in, run against a mocked api.github.com, a mocked
-  GitHub authorize page and a mocked sign-in service at https://signin.example.test. Some checks
-  run both ways in, Sign in with GitHub and a pasted token.
+- `e2e2/signin.test.mjs`: 134 checks of the sign-in and the console's foot, run against a mocked
+  api.github.com, a mocked GitHub authorize page and a mocked sign-in service at
+  https://signin.example.test. Some checks run both ways in, Sign in with GitHub and a pasted
+  token. P1 to P22 (site pull request #78, 2026-10-19) hold the work a button starts, spoken at
+  the deck's foot, and the phone: a followed run with its link, steps, log tail and end, a failed
+  run, a refused start as a plain line, a task kept through a message, the token sign-in drawn in
+  the foot with the dialog closed at once, every tab fitting a phone with Refresh holding the page,
+  a long message leaving Clear reachable; reads of a run retried before giving up, a run left when
+  the page goes to another repository, a second Refresh never letting go early, the person's own
+  run preferred to another's, a second Add Token refused while one saves, a tile's save keeping the
+  Token run's marks; a lend into an organization's pool by someone who is not its owner, said as
+  lent or saved with its slot (P20), the Token workflow run in the organization's repository that
+  has it when the chosen one has none (P21), and a token side panel width kept from a wide window
+  leaving the tiles their room on a narrow one, a phone held sideways and a wide one (P22).
 - `e2e2/panel.test.mjs`: the panel's walkthrough on both pages.
 - `e2e2/hostile.test.mjs`: 13 hostile-input checks.
 - `e2e2/assistant.test.mjs`: 21 checks of the panel's assistant (site branch claude/assistant-panel,
@@ -157,7 +168,7 @@ ghu_TEST or github_pat_X.
   suite alone), and holds that the storage is asked one plain read with no token and no header of
   GitHub's. XP9 switches the repository while the tab is open, and XP10 holds that an epic whose
   sub-issues could not be read says so.
-- `e2e2/mutants/`: 214 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/mutants/`: 260 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
@@ -187,7 +198,10 @@ ghu_TEST or github_pat_X.
   same day, f60 to f63 for CAT7 to CAT9 (CAT5 and CAT6 are held by the checks alone, since a
   connect reloads the page and a name is kept as text by the shared drawing, so no single line of
   the catalog carries them). The 24 of the Explore tab (`x*`, each naming explore.test.mjs) were caught
-  against site branch claude/explore-tab on 2026-10-18, after its adversarial review.
+  against site branch claude/explore-tab on 2026-10-18, after its adversarial review. The 33 of
+  the foot and the phone (`p*`, for P1 to P21; P22 is a stylesheet's, which no mutant of the
+  script reaches, and was seen to fail with the old rule) were caught against site branch
+  claude/panel-feedback at f025b08 on 2026-10-19, where every other suite passes too.
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
   and every page action, visibility read and locator action on a selector first opens the tab that

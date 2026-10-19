@@ -1,0 +1,1 @@
+[["var run = mine[0] || (!shownLogin || !named.length ? fresh[0] : null);", "var run = mine[0] || fresh[0];"]]

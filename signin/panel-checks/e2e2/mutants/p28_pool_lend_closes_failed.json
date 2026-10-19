@@ -1,0 +1,1 @@
+[["      closeRunIssue(home, issue);\n      over();\n      if (alsoMain && alsoMain.pooled) {", "      closeRunIssue(home, issue, true);\n      over();\n      if (alsoMain && alsoMain.pooled) {"]]
