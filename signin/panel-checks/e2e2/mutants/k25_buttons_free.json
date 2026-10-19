@@ -1,0 +1,1 @@
+[["    ['cp-signin', 'cp-signin-code'].forEach(function (id) { if ($(id)) $(id).disabled = true; });\n", ""]]

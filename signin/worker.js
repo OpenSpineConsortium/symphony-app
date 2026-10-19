@@ -13,6 +13,14 @@
 // token GitHub gave beside it, and /revoke kills the token at GitHub when the person presses
 // "Forget the token".
 //
+// The device routes serve the panel installed as a Home Screen app, where a sign-in that leaves for
+// GitHub's page may not come back into the app: GitHub's device flow, which needs no client secret,
+// signs the person in by a code instead. POST /device asks GitHub for a code with the App's public
+// client id and hands back the short code the person types at github.com/login/device and the
+// device code the page keeps; POST /device/token passes the device code back to GitHub until the
+// person has typed theirs, and hands back the same token and refresh token as /exchange. GitHub's
+// login endpoints answer no browser's cross-origin request, which is all the service adds here.
+//
 // The drive routes serve the panel's Folders tab (/symphony/control/#folders), which makes
 // a repository track files and folders of a person's OneDrive (symphony-template's
 // docs/research/drive-sync.md). The same shape as the GitHub sign-in, with Microsoft's token
@@ -26,7 +34,8 @@
 // other provider is answered 400 unknown_provider.
 //
 // What it never does: it never sees a Claude token, never reads a repository, never calls anything
-// but GitHub's token endpoint and its token-revocation endpoint and Microsoft's token endpoint, and
+// but GitHub's token endpoint, its device-code endpoint and its token-revocation endpoint and
+// Microsoft's token endpoint, and
 // answers only the page's origin (ALLOWED_ORIGIN), except that /drive/token takes a call with no
 // Origin at all, the repository's run, which is no browser. The Origin header is the browser's
 // word, which a script elsewhere cannot forge but a program can; what binds a code to the page
@@ -53,13 +62,18 @@
 // README.md beside this file gives the clicks.
 
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
+const GITHUB_DEVICE_URL = 'https://github.com/login/device/code';
+const DEVICE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code';
+// the one page a person types the code on; whatever address GitHub's answer names, the page is sent
+// only this one
+const DEVICE_PAGE = 'https://github.com/login/device';
 const GITHUB_API = 'https://api.github.com';
 const DEFAULT_ORIGIN = 'https://openspineconsortium.com';
 const MAX_BODY = 4096;
 // a drive's consent code and refresh token run to a few thousand characters, so the drive routes
 // read twice as much
 const MAX_DRIVE_BODY = 8192;
-const ROUTES = ['/exchange', '/refresh', '/revoke', '/drive/config', '/drive/connect', '/drive/token'];
+const ROUTES = ['/exchange', '/refresh', '/revoke', '/device', '/device/token', '/drive/config', '/drive/connect', '/drive/token'];
 // the one address a drive's consent may come back to: the control panel's own page, the same one
 // GitHub's sign-in returns to, which tells the two returns apart by the state each left with and
 // then opens its Folders tab; the trailing slash is part of it, since Microsoft matches the
@@ -171,27 +185,34 @@ function unreachable() {
   return { status: 502, body: { error: 'github_unreachable', error_description: 'GitHub could not be reached; try again' } };
 }
 
-/** GitHub's exchange: the code, or a refresh token, for a token; GitHub's own error words come back */
-async function askGitHub(env, form, fetchImpl) {
+/** GitHub reached but answering a 5xx or a 429 for the moment: the same word, with GitHub's status */
+function busy(status) {
+  return { status: 502, body: { error: 'github_unreachable', error_description: 'GitHub answered ' + status + ' for the moment; try again' } };
+}
+
+/** one form POSTed to one of GitHub's login endpoints, with the App's client id and, where asked,
+ * its secret; back comes GitHub's status and JSON, or null where GitHub could not be reached */
+async function postToGitHub(env, url, form, withSecret, fetchImpl) {
   const body = new URLSearchParams(form);
   body.set('client_id', env.GITHUB_CLIENT_ID);
-  body.set('client_secret', env.GITHUB_CLIENT_SECRET);
+  if (withSecret) body.set('client_secret', env.GITHUB_CLIENT_SECRET);
   let r;
   try {
-    r = await (fetchImpl || fetch)(GITHUB_TOKEN_URL, {
+    r = await (fetchImpl || fetch)(url, {
       method: 'POST',
       headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'symphony-signin' },
       body: body.toString()
     });
   } catch (e) {
-    return unreachable();
+    return null;
   }
   let data;
   try { data = await r.json(); } catch (e) { data = {}; }
-  if (!r.ok || !data || !data.access_token) {
-    return { status: 502, body: { error: (data && data.error) || 'github_refused', error_description: (data && data.error_description) || ('GitHub answered ' + r.status) } };
-  }
-  // only the fields the page needs; whatever else GitHub says stays here and is dropped
+  return { status: r.status, ok: r.ok, data: data && typeof data === 'object' ? data : {} };
+}
+
+/** only the fields of a token answer the page needs; whatever else GitHub says stays here and is dropped */
+function tokenAnswer(data) {
   return {
     status: 200,
     body: {
@@ -202,6 +223,60 @@ async function askGitHub(env, form, fetchImpl) {
       refresh_token_expires_in: data.refresh_token_expires_in || null
     }
   };
+}
+
+/** GitHub's exchange: the code, or a refresh token, for a token; GitHub's own error words come back */
+async function askGitHub(env, form, fetchImpl) {
+  const r = await postToGitHub(env, GITHUB_TOKEN_URL, form, true, fetchImpl);
+  if (!r) return unreachable();
+  const data = r.data;
+  if (!r.ok || !data.access_token) {
+    return { status: 502, body: { error: data.error || 'github_refused', error_description: data.error_description || ('GitHub answered ' + r.status) } };
+  }
+  return tokenAnswer(data);
+}
+
+/** a whole number of seconds GitHub gave, bounded, or the fallback */
+function seconds(value, fallback, max) {
+  return Number.isInteger(value) && value > 0 && value <= max ? value : fallback;
+}
+
+/** GitHub's device flow, first step: a code for the person to type, asked with the client id alone */
+async function askDeviceCode(env, fetchImpl) {
+  const r = await postToGitHub(env, GITHUB_DEVICE_URL, {}, false, fetchImpl);
+  if (!r) return unreachable();
+  const data = r.data;
+  const device = tokenish(data.device_code, 128);
+  const user = typeof data.user_code === 'string' && /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(data.user_code) ? data.user_code : null;
+  if (!r.ok || !device || !user) {
+    // device_flow_disabled is GitHub's word while the App's "Enable Device Flow" is unticked
+    return { status: 502, body: { error: data.error || 'github_refused', error_description: data.error_description || ('GitHub answered ' + r.status) } };
+  }
+  return {
+    status: 200,
+    body: { device_code: device, user_code: user, verification_uri: DEVICE_PAGE, expires_in: seconds(data.expires_in, 900, 3600), interval: seconds(data.interval, 5, 60) }
+  };
+}
+
+/** GitHub's device flow, second step: the device code for a token once the person has typed theirs.
+ * While they have not, GitHub answers authorization_pending, or slow_down with a longer interval,
+ * and those words come back with 400 so the page asks again; its other refusals (expired_token,
+ * access_denied, device_flow_disabled) come back the same way, and the page stops. */
+async function askDeviceToken(env, device, fetchImpl) {
+  const r = await postToGitHub(env, GITHUB_TOKEN_URL, { grant_type: DEVICE_GRANT, device_code: device }, false, fetchImpl);
+  if (!r) return unreachable();
+  const data = r.data;
+  if (r.ok && data.access_token) return tokenAnswer(data);
+  if (r.ok && typeof data.error === 'string' && /^[a-z_]{1,64}$/.test(data.error)) {
+    const out = { error: data.error, error_description: typeof data.error_description === 'string' ? data.error_description.slice(0, 300) : '' };
+    if (data.interval !== undefined) out.interval = seconds(data.interval, 10, 120);
+    return { status: 400, body: out };
+  }
+  // GitHub's own trouble of the moment, a 5xx or a 429 with no OAuth word of its own, is no refusal:
+  // the person may be typing the code right now, so it goes back as a moment GitHub cannot be
+  // reached, which the page asks again at the same pace until the code runs out
+  if ((r.status >= 500 || r.status === 429) && !data.error) return busy(r.status);
+  return { status: 502, body: { error: data.error || 'github_refused', error_description: data.error_description || ('GitHub answered ' + r.status) } };
 }
 
 /** GitHub's revocation of one token of the App, which takes the client id and secret as a password */
@@ -311,6 +386,16 @@ export async function handle(request, env, fetchImpl) {
       return answer(env, 400, { error: 'bad_request', error_description: 'code, code_verifier and redirect_uri are needed; redirect_uri is the page itself' });
     }
     const out = await askGitHub(env, { code, code_verifier: verifier, redirect_uri: redirect }, fetchImpl);
+    return answer(env, out.status, out.body);
+  }
+  if (url.pathname === '/device') {
+    const out = await askDeviceCode(env, fetchImpl);
+    return answer(env, out.status, out.body);
+  }
+  if (url.pathname === '/device/token') {
+    const device = tokenish(body.device_code, 128);
+    if (!device) return answer(env, 400, { error: 'bad_request', error_description: 'device_code is needed' });
+    const out = await askDeviceToken(env, device, fetchImpl);
     return answer(env, out.status, out.body);
   }
   if (url.pathname === '/refresh') {

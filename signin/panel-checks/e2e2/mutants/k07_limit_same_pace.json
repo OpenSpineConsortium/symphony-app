@@ -1,0 +1,1 @@
+[["          if (e.code === 'too_many_requests') { every = Math.min(every + 5, 120); later(); return; }", "          if (e.code === 'too_many_requests') { later(); return; }"]]

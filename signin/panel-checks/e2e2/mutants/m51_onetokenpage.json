@@ -1,1 +1,1 @@
-[["    if (pasted.some(function (t) { return /^ghp_/.test(t); })) pages.push('github.com/settings/tokens');\n", ""]]
+[["    if (pasted.some(function (t) { return /^ghp_/.test(t); })) pages.push('https://github.com/settings/tokens');\n", ""]]

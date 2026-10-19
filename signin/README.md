@@ -57,6 +57,114 @@ below has the clicks); until it does, the panel says which press waits on
 it. A fine-grained token pasted into the page needs the same permissions
 of its own.
 
+## The device routes, for the Home Screen app
+
+The control panel installs as a Home Screen app (site pull request #86,
+the first of the three ways in symphony-template's
+docs/research/native-ios-app.md). A sign-in that leaves the app for
+GitHub's page may come back to the browser rather than into the app, so
+the installed app signs in by a code instead, through GitHub's device
+flow, which a GitHub App may turn on and which needs no client secret
+(https://raw.githubusercontent.com/github/docs/main/content/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app.md,
+"Using the device flow"). `POST /device` asks GitHub's
+`https://github.com/login/device/code` for a code with the App's client
+id alone and hands back the short code the person types at
+https://github.com/login/device (always that page, whatever address
+GitHub's answer names), the device code the page keeps, and how long
+and how often to ask. `POST /device/token` sends GitHub the device code,
+with the client id and the device flow's grant type and no secret, and
+hands back the same five fields as `/exchange` once the person has typed
+the code and allowed SymphonyBoard; until then GitHub's own word comes
+back with 400 (`authorization_pending`, or `slow_down` with a longer
+interval), and so do its refusals (`expired_token`, `access_denied`,
+`device_flow_disabled`). GitHub answering a 5xx, or a 429 with no word
+of its own, is no refusal: it comes back as 502 `github_unreachable`,
+which the page asks again at the same pace until the code runs out, so
+a moment of GitHub's trouble while the person types the code does not
+waste it. The token is the same eight-hour token with the same
+six-month refresh token, which the panel renews through `/refresh` as
+any other. The service adds nothing but the one thing a page cannot do
+itself: GitHub's login endpoints answer no browser's cross-origin
+request. The routes answer the site's origin alone and spend the rate
+limit like the others; the device code is a bearer credential for the
+fifteen minutes it lives, held in the open page's memory and nowhere
+else.
+
+The site ships sign-in by code switched off: `CODE_SIGNIN = false` in
+assets/js/symphony-panel.js, and while it is off no page offers a code
+and the installed app's "Sign in with GitHub" leaves for GitHub's page
+as a browser's does, so these routes are never asked. Turning it on is
+the owner's choice (step 9 below), because of what the device flow
+opens beyond this service:
+
+- Anyone can start a SymphonyBoard code. Ticking "Enable Device Flow"
+  turns the device flow on for SymphonyBoard everywhere, not only
+  through this Worker: any program can ask
+  https://github.com/login/device/code for a code with the App's client
+  id, which is public, and poll GitHub for the token, and the Worker's
+  origin check and rate limit are not on that path. Whoever asked for a
+  code gets the token it earns. A person talked into typing someone
+  else's code at https://github.com/login/device and allowing
+  SymphonyBoard there, on a page that names SymphonyBoard exactly as it
+  does for a code the panel showed, hands that someone a token that acts
+  as them, eight hours at a time and renewable until it is revoked (next
+  point), with every permission SymphonyBoard has (manifest.json lists
+  them: Actions, Actions variables, Administration, Checks, Contents,
+  Issues, Pull requests, Secrets, Workflows, and an organization's
+  Secrets and Variables, all write, and Metadata read) on every
+  repository the App is installed on that the person can reach.
+  The redirect sign-in cannot be turned against someone this way: its
+  code comes back only to the panel's registered address and is
+  exchanged only with the PKCE secret that page made. GitHub's own
+  guidance is not to enable the device flow without reason: "an
+  attacker can use the device flow to remotely impersonate your app as
+  part of a phishing attack"
+  (https://raw.githubusercontent.com/github/docs/main/content/apps/creating-github-apps/about-creating-github-apps/best-practices-for-creating-a-github-app.md,
+  "Don't enable device flow without reason"). The panel warns beside
+  every code it shows to type it only there and only when the panel
+  started it a moment before, and the project never sends anyone a code;
+  nothing can stop a code someone else started.
+- A sign-in by code's refresh token renews at GitHub with the client id
+  alone, and never runs out while it is renewed. Of `client_secret`,
+  GitHub's
+  https://raw.githubusercontent.com/github/docs/main/content/apps/creating-github-apps/authenticating-with-a-github-app/refreshing-user-access-tokens.md
+  says "Required unless the user access token was generated using the
+  device flow", and the same page says a refresh gives "a new user
+  access token and a new refresh token", whose `refresh_token_expires_in`
+  "will always be `15897600` (6 months)"
+  (https://raw.githubusercontent.com/github/docs/main/data/reusables/apps/user-access-token-response-parameters.md).
+  Each renewal starts six months afresh, so the six months bound only a
+  sign-in nobody renews: whoever holds one, phished, read from a lost
+  phone that kept it, or read from the browser by a script on the site,
+  can renew it at GitHub without this service for as long as they like,
+  and the owner's levers over every redirect sign-in, deleting the
+  client secret or stopping this Worker, do not end it. It lasts until
+  it is revoked, by one of these:
+  - For one person: they revoke SymphonyBoard at
+    https://github.com/settings/apps/authorizations ("Authorized GitHub
+    Apps", Revoke beside SymphonyBoard), which ends every token
+    SymphonyBoard holds for them, a phished one and a lost phone's among
+    them. GitHub lets no organization owner do that for a member. The
+    App's owner, given any one of that person's SymphonyBoard tokens,
+    ends them all with GitHub's "Delete an app authorization",
+    `DELETE https://api.github.com/applications/<client id>/grant` with
+    the token in the body, signed with the client id and the client
+    secret as for `/revoke`. "Forget the token" in the panel is no lever
+    here: it sends `/revoke` (GitHub's "Delete an app token") for the
+    sign-in that tab and that browser hold and no other, and every code
+    earns a token of its own, so it never reaches one someone else holds
+    (whether GitHub ends the refresh token of the one it does revoke is
+    not measured).
+  - For everyone at once: GitHub documents no button that revokes every
+    user token of a GitHub App. The App's owner can suspend SymphonyBoard
+    on an installation (`PUT /app/installations/<id>/suspended`, as the
+    App with its JWT, one installation at a time and through the API
+    only), which blocks the App from that account's repositories; an
+    organization's owner can uninstall SymphonyBoard from the
+    organization; and deleting the App, the last resort, ends every token
+    it ever gave. Whether a suspension stops user tokens as well as the
+    App's own is not measured.
+
 ## The drive routes, for the Folders tab
 
 The control panel's Folders tab, https://openspineconsortium.com/symphony/control/#folders,
@@ -294,8 +402,72 @@ named, and nobody else needs to.
    nothing; a fine-grained token pasted into the page needs the same
    repository permission.
 
+9. Sign-in by code, for the Home Screen app: the owner's switch, off
+   until the owner turns it on. The site ships it off
+   (`CODE_SIGNIN = false` in assets/js/symphony-panel.js): no page
+   offers a code, and the installed app's "Sign in with GitHub" leaves
+   for GitHub's page as a browser's does. Turn it on only if that
+   sign-in, tried in the installed app on a real iPhone, does not come
+   back into the app (symphony-template's docs/research/native-ios-app.md
+   lists that test as not yet measured), and record the choice as a
+   Decision, since it is a trade the owner makes for everyone: ticking
+   "Enable Device Flow" lets anyone start a SymphonyBoard code and talk
+   a person into typing it, which hands whoever started it a token that
+   acts as that person with SymphonyBoard's permissions, renewable at
+   GitHub without this service and without end, each renewal good for
+   six months more, until the person or the owner revokes it. "The
+   device routes" above says it in full, with what ends such a token.
+
+   To turn it on, in this order. First the Apps' privacy statement
+   (symphony-start's PRIVACY.md) gets a version that describes sign-in
+   by code, with its page at /symphony/apps-privacy.html live: the two
+   routes, the device code the page sends every five seconds or more,
+   the client id alone and no secret, the renewal without the secret,
+   and the warning above; version 33, live now, describes the redirect
+   alone. Then open
+   https://github.com/organizations/OpenSpineConsortium/settings/apps/symphonyboard
+   ("General" tab), tick "Enable Device Flow" (under "Identifying and
+   authorizing users") and press "Save changes". Then give the Worker
+   the code that has the device routes, as step 6 does, if it does not
+   have them yet: open
+   https://github.com/OpenSpineConsortium/symphony-app/blob/main/signin/worker.js
+   once the pull request that brings them has merged, press "Copy raw
+   file", and in Cloudflare, on the Worker `symphony-signin`'s page,
+   press "Edit code", replace everything in the editor with what you
+   copied and press "Deploy". Last, a pull request to the site that sets
+   `CODE_SIGNIN = true`; once it merges, the installed app's "Sign in
+   with GitHub" shows a code, a browser offers "Sign in with a code
+   instead" beside it, and the panel's "What this page keeps and sends"
+   names the code's requests. K29 in panel-checks/e2e2/code.test.mjs
+   holds that the site ships the switch off, so that no pull request
+   turns it on unnoticed; the owner's pull request comes with one here
+   that turns K29 round. None of these steps touches a secret.
+
+   To turn it off again, in the other order. First a pull request to the
+   site that sets `CODE_SIGNIN = false`, so no page offers a code: with
+   the switch on and the box unticked, `/device` answers 502
+   `device_flow_disabled`, and the installed app, whose "Sign in with
+   GitHub" asks for a code, would be left with the token box alone. Then
+   untick "Enable Device Flow" and save, which stops anyone starting a
+   new SymphonyBoard code. That order is for turning it off at leisure.
+   When the device flow is being abused, a person phished with a code or
+   a page found handing out SymphonyBoard codes, untick the box first
+   and the site's pull request follows: the switch does nothing to stop
+   a code someone else starts, the tick is the open door, and the cost
+   of unticking first is only that the installed app offers the token
+   box alone until the site's pull request lands. Neither step ends a
+   token already made: a sign-in by code works eight hours at a time and
+   renews, through this service or at GitHub with the client id alone,
+   each renewal good for six months more, so it never ends by itself
+   while its holder renews it; it ends only when it is revoked as "The
+   device routes" above says, which after abuse means each person who
+   typed a code revokes SymphonyBoard at
+   https://github.com/settings/apps/authorizations, or the owner uses
+   one of the levers listed there for everyone. Whether unticking the
+   box also stops GitHub renewing those is not measured.
+
 To check it: `curl https://symphony-signin.<account>.workers.dev/` answers
-`{"service":"symphony-signin","routes":["/exchange","/refresh","/revoke","/drive/config","/drive/connect","/drive/token"],"keeps":"nothing"}`,
+`{"service":"symphony-signin","routes":["/exchange","/refresh","/revoke","/device","/device/token","/drive/config","/drive/connect","/drive/token"],"keeps":"nothing"}`,
 and the panel's "Sign in with GitHub" lands back on the panel signed in.
 
 Later, if the address is abused: the Workers free plan allows 100,000
@@ -315,8 +487,13 @@ is 429. Without it the service runs the same, with no limit of its own.
 `handle()` with a fake GitHub and a fake Microsoft: the origin check, the
 body limits in bytes, the exchange with its verifier, the refresh, the
 revoke, the rate limit when a binding is there, GitHub refusing or
-unreachable, that nothing but the five fields reaches the page, and the
-drive routes: the config's one provider, the connect's form and its four
+unreachable, that nothing but the five fields reaches the page, the
+device routes (the code asked with the client id and no secret, GitHub's
+page the only one named, the times bounded, GitHub's waiting words and
+refusals passed through with 400 and anything else 502, a malformed
+device code refused before GitHub is asked, GitHub's 5xx and a 429 with
+no word of its own answered as `github_unreachable` while its refusals
+keep their words, and the origin and the rate limit as for the others), and the drive routes: the config's one provider, the connect's form and its four
 fields, the token's two, the run's call with no origin, the control
 panel's own address as the one redirect (its old Folders page and the
 address without its trailing slash refused), a provider the table lacks,

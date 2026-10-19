@@ -1,0 +1,1 @@
+[["nbPrivateBusy() === owner + '/' + book.repository ? 'Making it private...' : 'Make private'", "'Make private'"]]

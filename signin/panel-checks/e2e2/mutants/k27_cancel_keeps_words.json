@@ -1,0 +1,1 @@
+[["cancel.addEventListener('click', function () { endCode(); say(''); });", "cancel.addEventListener('click', function () { endCode(); });"]]

@@ -1,0 +1,1 @@
+[["    codeLive = true;\n", "    codeLive = true;\n    var keepAtPress = $('cp-keep') ? $('cp-keep').checked : false;\n"], ["      var keep = $('cp-keep') ? $('cp-keep').checked : false;\n      endCode();\n", "      var keep = keepAtPress;\n      endCode();\n"]]

@@ -39,7 +39,7 @@ ghu_TEST or github_pat_X.
   a word, and the last repository taken off deleting the list.
 - `e2e2/panel.test.mjs`: the panel's walkthrough on both pages.
 - `e2e2/hostile.test.mjs`: 13 hostile-input checks.
-- `e2e2/assistant.test.mjs`: 21 checks of the panel's assistant (site branch claude/assistant-panel,
+- `e2e2/assistant.test.mjs`: 26 checks of the panel's assistant (site branch claude/assistant-panel,
   2026-10-18): who may ask (write access, and the repository's workflow carrying
   .github/symphony/assistant.md), the label and the issue made once and only on a press, the
   question's state block and its size, the conditional polling (If-None-Match and a 304) and where
@@ -207,7 +207,7 @@ ghu_TEST or github_pat_X.
   page.evaluate,
   which opens nothing, so the page and not console-tabs.mjs is seen opening the tab. A check that
   wants the drawing recorded instead of made serves a stand-in for the library on its route.
-- `e2e2/folders.test.mjs`: 58 checks of the console's Folders tab, /symphony/control/#folders
+- `e2e2/folders.test.mjs`: 63 checks of the console's Folders tab, /symphony/control/#folders
   (site branch claude/folders-page, 2026-10-18; the tab took the place of the page folders.html
   before that page shipped), against a mocked Microsoft consent page, a mocked Microsoft Graph,
   the mocked service's three `/drive` routes and a mocked GitHub that keeps what Track writes as
@@ -285,7 +285,7 @@ ghu_TEST or github_pat_X.
   suite alone), and holds that the storage is asked one plain read with no token and no header of
   GitHub's. XP9 switches the repository while the tab is open, and XP10 holds that an epic whose
   sub-issues could not be read says so.
-- `e2e2/notebooks.test.mjs`: 26 checks of the console's Notebooks tab, /symphony/control/#notebooks
+- `e2e2/notebooks.test.mjs`: 36 checks of the console's Notebooks tab, /symphony/control/#notebooks
   (site pull request #82, 2026-10-19), against a mocked GitHub that keeps notebooks.json and
   catalog.json on the branch drive-catalog as GitHub does: read as objects with their sha, a file
   over 1 MB by its blob, written over only with the sha it has (422 without one, 409 with another).
@@ -303,7 +303,24 @@ ghu_TEST or github_pat_X.
   is. N24 to N26, from the third: a refusal whose sha cannot be read again frees the lock, a refused
   read before the write asks for no write access, and a write that lands after a sign-out and a
   sign-in again frees no lock a later write holds; N19 and N20 grew there too (the lock a write after
-  a sign-in again holds, and the x on an internal repository's notebook).
+  a sign-in again holds, and the x on an internal repository's notebook). N27 to N32 (site branch
+  claude/make-private, 2026-10-19, after the owner's "Add the button"): Make private on a public
+  notebook repository asks once, saying what GitHub erases, then changes the repository as the
+  person and says it is private by GitHub's answer; an internal repository's confirmation says what
+  becomes of its forks; a person GitHub says does not administer the repository gets no button; a
+  refusal is said in GitHub's words with the access it needs, and a rate limit is not taken for
+  missing access; the button waits while GitHub is asked, and a sign-out on the way leaves no lock;
+  GitHub's answer, not the press, says what the repository is now. N33 to N36, from its review: a
+  side panel drawn again while the change is on its way shows the button waiting and a press of it
+  sends nothing, before a sign-out and after a sign-in again; a change answered after a sign-out and
+  a sign-in again frees no lock a later change holds; a Refresh while the change is on its way reads
+  the repository again once GitHub answers, so the card says it is private; and a change answered
+  once the page shows another owner's repository marks nothing there and draws the freed lock. N27,
+  N29 and N30 grew there too (the confirmation says what a public repository loses on GitHub's
+  plans; a person who does not administer the repository is pointed at no button and no settings
+  page; a 403 and a 404 get the access words, in SymphonyBoard's words when signed in with GitHub),
+  and the mocked GitHub keeps each notebook repository's visibility, so a change it answers is read
+  back as it now is.
 - `e2e2/app.test.mjs`: 8 checks of the control panel as a Home Screen app (site branch claude/home-
   screen-app, 2026-10-19, after the owner's "Build way 1", the first of the three ways in symphony-
   template's docs/research/native-ios-app.md), against the page as the site serves it, signed out,
@@ -347,7 +364,56 @@ ghu_TEST or github_pat_X.
   too, which only widens the dark band under the status line, since H4 holds the status line's
   place alone. Run it with `SITE=<the site's checkout> BASE=<the site's address> node
   app.test.mjs`.
-- `e2e2/mutants/`: 392 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/code.test.mjs`: 29 checks of sign-in by code (site branch claude/sign-in-by-code,
+  2026-10-19), the Home Screen app's way in: GitHub's device flow through the sign-in service's
+  routes /device and /device/token, against a mocked service that answers as signin/worker.js
+  does. The site ships it switched off, `CODE_SIGNIN = false` in the panel's script, the owner's
+  switch (signin/README.md, step 9), since ticking SymphonyBoard's "Enable Device Flow" lets
+  anyone start a SymphonyBoard code and talk a person into typing it. The suite serves the script
+  from `SITE` with the switch on for every check of the code way and off for K17, whatever the
+  site ships, as app.test.mjs serves it with a mutant's pairs. The app is played by
+  navigator.standalone, as iOS gives an installed page, and by the display mode standalone, as an
+  install through the manifest reports itself (K26); the page asks no faster than the interval
+  named, so the checks wait in real time (about seven minutes). K1: in a browser, a second
+  button after Sign in with GitHub, none on an unconfigured page, the same on the cost page. K2
+  and K3: in the app the one button shows the code, asks at the pace named and signs in for the
+  tab, or kept on the browser; the service names seven seconds in K2, above the page's floor of
+  five, so a page that asks at its floor whatever is named fails it. K4 and K5: slow_down's
+  longer interval, the service's own limit asked again more slowly, and a moment out of reach
+  asked again at the same pace, neither faster nor slower. K6 to K9: GitHub's expired_token and
+  access_denied, an App with Device Flow unticked, a service with no device routes yet, and an
+  answer with no code, each ending with words and the token box. K10 to K13: Cancel with an
+  answer on its way, a token that arrives after Cancel, a new code after Cancel, and the
+  browser's two ways. K14: the link that copies the code and opens GitHub's page. K15: the cost
+  page. K16: a code that runs out at the time named though GitHub never says so. K17 to K29 hold
+  what the adversarial review of the branch found that day. K17: the switch off, as the site
+  ships it: in a browser and in the app, iOS's and the manifest's, on both pages, no code offered,
+  the redirect's words, no code among what the page lists as sent, and the app's press leaving
+  for GitHub's page and coming back signed in with nothing asked of /device. K18: a token pasted
+  while a code is up ends the code once GitHub accepts it, before GitHub has named it, so its
+  token never takes the paste's place, and Forget after it leaves the gate free and nothing signs
+  the page in again. K19: the panel opening by a kept sign-in found at load, in the app, or by
+  GitHub's return, in a browser, ends a code started while it opened, with its words: GitHub's
+  return on the control page and on the cost page with the code up, and with the ask for a code
+  still out, each leave neither the code's words nor "Asking GitHub for a code..." on the panel. K20: Forget
+  pressed at the gate while a code is up, as a browser that reads no :has() shows it there, ends
+  the code. K21: Keep me signed in read when the token comes, ticked or unticked while the code is
+  up. K22: a token that comes after Cancel, or after a paste took the page, revoked through
+  /revoke. K23: the gate's words, the code's way in the app on both pages and the redirect's in a
+  browser, and the code's requests named in "What this page keeps and sends". K24: the code and
+  Copy it and open GitHub in sight on a 390 x 844 phone, clear of the status line, on both pages,
+  and a keyboard's focus carried on to the box and back to the button after Cancel. K25: on the
+  cost page, whose own line stands above the sign-in box, how the code ended said under the box
+  too, in sight on a phone. K26: the app installed through the manifest. K27: a pace under five
+  seconds named, and the floor of five kept. K28: the warning beside the code, to type it only on
+  github.com/login/device and only a code this page started, with GitHub naming SymphonyBoard
+  there. K29: the site ships the switch off, read from the script as `SITE` holds it before the
+  suite turns it either way, since nothing else in any suite would see a pull request that turns
+  it on; the owner's pull request that turns it on comes with one here that turns K29 round
+  (signin/README.md, step 9). GitHub's 5xx and 429 while the person types the code are the
+  service's to answer, as github_unreachable, which K5 holds the page asks again at the same
+  pace; test_worker.mjs holds the service's side.
+- `e2e2/mutants/`: 460 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
@@ -476,13 +542,51 @@ ghu_TEST or github_pat_X.
   (`n*`, each naming notebooks.test.mjs) were caught against site branch claude/notebooks at 1656fbb
   on 2026-10-19 after its third review, n35 to n39 for its findings, where every other suite passes
   too; N6 to N9 and N18 have no mutant of their own (N9 and N18 hold the stylesheet, which no mutant
-  of the script reaches).
+  of the script reaches). The nine of Make private (n40 to n48: no confirmation, the catalog's
+  repository changed in place of the notebook's, the change not recorded, the lock kept after the answer or past a sign-out, the button for a person who does not
+  administer, the access words for a rate limit, the answer ignored, and an internal repository told
+  as a public one) were caught against site branch claude/make-private at 7d3255f on 2026-10-19.
+  The eleven from its review (n49 to n59: the lock tied to no sign-in, a button drawn again live and
+  its press let through, the waiting unsaid, a late answer freeing a later change's lock, a
+  Refresh's repository not read again, an answer recorded under another owner, the freed lock not
+  drawn, the access words for a 422 alone, a SymphonyBoard sign-in told of a token, a person who
+  does not administer told to press here, and what a public repository loses on a free plan
+  unsaid) were caught against site branch claude/make-private at 2901ee5 on 2026-10-19, where n11,
+  which Make private's nb.admin had left stale, was brought up to nbForget as it stands and caught
+  again (N12), and n31, whose text Make private's own refusal had come to match first, was aimed at
+  the write's refusal again and caught again (N21); all 59 of the Notebooks tab are caught there.
+  With site pull requests #90 and #91 merged into that branch at b9c9674 the same day, m51 and m63
+  (H10, I10) were aimed at the https:// address the classic tokens' page is now written with, and
+  p11 (P4) at the note now drawn with its addresses as links, and all three were caught again.
   The two of the Home Screen app (`h*`, each naming app.test.mjs, for H8: the button offered where
   the browser has no full screen call, and only the standard call looked for, which would hide it
   from Safari before 16.4) were caught against site branch claude/home-screen-app at 79d4b83 on
   2026-10-19, after its adversarial review, where app.test.mjs, signin.test.mjs, panel.test.mjs and
   hostile.test.mjs pass whole; H1 to H7 hold the build's head and the stylesheet, which no mutant of
   the script reaches.
+  The 48 of sign-in by code (`k*`, each naming code.test.mjs) were caught against site branch
+  claude/sign-in-by-code at 201a419 on 2026-10-19, with the switch turned on by the suite as it
+  serves the script. k01 to k30 came with the code way (two were written and dropped as
+  equivalent, the turn checked again when a refusal comes back after Cancel and the timer cleared
+  by Cancel, since the ask itself checks the turn before it sends anything, so neither leaves a
+  request a check could see; k11 and k29 are those two). k31 to k48 came with the fixes of the
+  adversarial review the same day: the switch off still offering a code, or the app's press still
+  taking it (K17); a paste, the panel opening, or Forget leaving a code asking (K18 to K20); Keep
+  me signed in read at the press (K21); a late token left alive (K22); the gate's words for the
+  app shown in a browser, and the code's requests left out of what the page sends (K23); the box
+  out of sight on a phone, a keyboard's focus dropped or left on a hidden button (K24); the cost
+  page's words unseen under its box (K25); the manifest's display mode not read (K26); no floor
+  under the pace named (K27); no warning beside the code (K28); the pace the service names
+  ignored, and a moment out of reach asked more slowly (K2, K5). k03, k12, k13 and k15 were
+  pointed again at the checks that hold them since the words and the box changed: k03 at K2,
+  k12 at K11, k13 at K10 and k15 at K6. The service's side, GitHub's 5xx and 429 as
+  github_unreachable, is test_worker.mjs's, whose test failed with the line removed and with the
+  refusal's own words no longer kept, each tried by hand. k49 and k50 came with the second
+  review of those fixes the same day: GitHub's return ending the code in storeSignin and leaving
+  its words on the signed-in panel (K19, whose case of GitHub's return checked the box and the asks
+  but not the words, and each of its three cases of GitHub's return catches it alone), and the
+  site shipping the switch on (K29); k33, whose line in storeSignin that fix rewrote, was aimed
+  at it as it now reads and caught again (K18).
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
   and every page action, visibility read and locator action on a selector first opens the tab that
@@ -511,11 +615,15 @@ ghu_TEST or github_pat_X.
    - `e2e2/run-mutants.sh` expects a server already on port 8077, or on the address `BASE`
      names, and reports each mutant as KILLED, SURVIVED, STALE or ERROR; name mutants to run only
      those, by their paths from e2e2/ (`bash run-mutants.sh mutants/g*.json styles/*.json` there
-     runs the Dependencies tab's and its stylesheet's, `mutants/f*.json` the Folders tab's, `mutants/n*.json` the Notebooks
-     tab's, `mutants/h*.json` the Home Screen app's, with `SITE` set as for the checks).
+     runs the Dependencies tab's and its stylesheet's, `mutants/f*.json` the Folders tab's,
+     `mutants/n*.json` the Notebooks tab's, `mutants/h*.json` the Home Screen app's, with `SITE`
+     set as for the checks, and `mutants/k*.json` sign-in by code's, the same way).
 
 The site sets the two constants to the live service and SymphonyBoard's Client ID (site pull
 request #24). The checks set them for themselves, whatever the shipped script holds: the
 configured page gets the mocked service and `Iv1.testclient`, and the unconfigured page, which the
-pasted-token checks of `hostile.test.mjs` and `panel.test.mjs` use, gets both emptied. `SITE`
+pasted-token checks of `hostile.test.mjs` and `panel.test.mjs` use, gets both emptied. A third
+constant beside them, `CODE_SIGNIN`, switches sign-in by code on; the site ships it false, and
+`code.test.mjs` serves it true for the checks of the code way and false for K17, whatever the
+shipped script holds, while the other suites leave it as shipped. `SITE`
 names the site's checkout for every check file and for `run-suite.sh`.

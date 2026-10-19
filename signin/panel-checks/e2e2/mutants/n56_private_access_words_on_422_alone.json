@@ -1,0 +1,1 @@
+[["var access = e.status === 404 || e.status === 422 || (e.status === 403 && !nbRateLimited(e));", "var access = e.status === 422;"]]

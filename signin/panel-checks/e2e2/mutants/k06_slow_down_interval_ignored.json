@@ -1,0 +1,1 @@
+[["Math.min(Math.max(every + 5, Number(e.interval) || 0), 120)", "Math.min(every + 5, 120)"]]
