@@ -1,0 +1,1 @@
+[["if (++fails >= RUN_FAILS) { resolve({ failed: e }); return; }", "resolve(null); return;"]]

@@ -1,0 +1,1 @@
+[["    }).catch(function (e) { task.refuse(e.message + (e.status === 403 ? ' Starting a workflow needs Actions: read and write'", "    }).catch(function (e) { task.end(e.message + (e.status === 403 ? ' Starting a workflow needs Actions: read and write'"]]

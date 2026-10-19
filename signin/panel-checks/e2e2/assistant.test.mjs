@@ -910,7 +910,7 @@ await check('N: the lines that would change something are buttons that write not
   assert.deepEqual(written().map((c) => c.key), [], 'the answer wrote by itself');
 
   await press(page, /^Run the workers now$/);
-  await page.waitForFunction(() => /the workers is queued/.test(document.getElementById('msg').textContent), null, { timeout: 5000 });
+  await page.waitForFunction(() => /Queued on main/.test(document.getElementById('msg').textContent), null, { timeout: 5000 });
   assert.deepEqual(written().map((c) => c.key), ['POST /repos/acme/demo/actions/workflows/workers.yml/dispatches']);
   assert.ok(await (await actButton(page, /^Run the workers now$/)).evaluate((x) => x.disabled), 'the button can be pressed twice');
 
@@ -963,7 +963,7 @@ await check('N2: a button kept across a Refresh still runs once, and one from be
   await page.evaluate(() => document.getElementById('cp-refresh').click());
   await sleep(400);
   await press(page, /^Run the workers now$/);
-  await page.waitForFunction(() => /the workers is queued/.test(document.getElementById('msg').textContent), null, { timeout: 5000 });
+  await page.waitForFunction(() => /Queued on main/.test(document.getElementById('msg').textContent), null, { timeout: 5000 });
   assert.equal(posts(calls).filter((c) => /workers\.yml\/dispatches$/.test(c.key)).length, 1);
   // another account's token comes in from another tab: the old answer's button refuses
   await page.evaluate(() => { localStorage.setItem('symphony_panel_token', 'github_pat_OTHER'); window.dispatchEvent(new StorageEvent('storage', { key: 'symphony_panel_token', newValue: 'github_pat_OTHER' })); });

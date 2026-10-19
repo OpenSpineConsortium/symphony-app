@@ -1,0 +1,1 @@
+[["        if (task.dropped) return;\n", ""], ["if (task.live && ends === era) task.end(", "if (true) task.end("]]

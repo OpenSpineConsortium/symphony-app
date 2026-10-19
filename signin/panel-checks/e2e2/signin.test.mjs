@@ -49,7 +49,8 @@ const browser = await chromium.launch();
 await consoleTabs(browser);
 // one fresh browser profile per check; the service and GitHub's authorize page are mocked
 async function open(opts) {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  // a phone (opts.mobile) is a narrow window with touch, as Playwright emulates one
+  const context = await browser.newContext({ viewport: opts.viewport || { width: 1280, height: 900 }, hasTouch: !!opts.mobile, isMobile: !!opts.mobile });
   const calls = [];
   const service = [];
   const authorize = [];
@@ -2114,6 +2115,808 @@ await check('I14: a page that opened naming nobody renews its own sign-in when i
   await context.close();
 });
 
+/* ---------- P: the deck's foot (a run a button started, a sign-in drawn there) and a phone ---------- */
+// Signed in with a pasted token over a repository whose Workers workflow a button starts: GitHub
+// lists the run, its job's steps on every read and, once the job has ended, its log.
+const footLog = ['2026-10-19T01:40:01.000Z ##[group]Run the workers', '2026-10-19T01:40:02.000Z Reading the board of acme/demo', '2026-10-19T01:40:03.000Z 3 issues in the queue, 1 claimed', '2026-10-19T01:40:09.000Z nightly takes #9', '2026-10-19T01:40:10.000Z ##[endgroup]', '2026-10-19T01:40:11.000Z Done: 1 claim, 0 failures'].join('\n');
+const footTail = 'Reading the board of acme/demo\n3 issues in the queue, 1 claimed\nnightly takes #9\nDone: 1 claim, 0 failures';
+// the job ends, with the conclusion, on the endsOnRead-th read of its steps
+function runRoutes(conclusion, endsOnRead) {
+  const routes = repoRoutes('acme/demo');
+  let reads = 0;
+  routes['GET /repos/acme/demo/actions/workflows/workers.yml/runs'] = (req) => /per_page=1&/.test(req.url()) ? { workflow_runs: [{ id: 10 }] } : { workflow_runs: [{ id: 11, run_number: 11, html_url: 'https://github.com/acme/demo/actions/runs/11', actor: { login: 'tester' }, created_at: now, run_started_at: now, status: 'in_progress', event: 'workflow_dispatch' }] };
+  routes['POST /repos/acme/demo/actions/workflows/workers.yml/dispatches'] = null;
+  routes['GET /repos/acme/demo/actions/runs/11/jobs'] = () => {
+    reads++;
+    const done = reads >= endsOnRead;
+    return { total_count: 1, jobs: [{ id: 501, name: 'workers', status: done ? 'completed' : 'in_progress', conclusion: done ? conclusion : null, started_at: now, completed_at: done ? new Date(Date.parse(now) + 95000).toISOString() : null,
+      steps: [{ name: 'Set up job', status: 'completed', conclusion: 'success' }, { name: 'Run the workers', status: done ? 'completed' : 'in_progress', conclusion: done ? conclusion : null }, { name: 'Complete job', status: done ? 'completed' : 'queued', conclusion: done ? 'success' : null }] }] };
+  };
+  routes['GET /repos/acme/demo/actions/jobs/501/logs'] = { raw: footLog };
+  return routes;
+}
+const asTester = { local: { symphony_panel_token: 'github_pat_TESTER', symphony_panel_repos: repoList } };
+const footText = (p) => p.evaluate(() => document.getElementById('msg').textContent.replace(/\s+/g, ' ').trim());
+const footTasks = (p) => p.evaluate(() => Array.from(document.querySelectorAll('#msg .msgtask')).map((b) => {
+  const a = b.querySelector('.msgtask__where a');
+  const line = b.querySelector('.msgtask__line');
+  const log = b.querySelector('.msgtask__log');
+  return { state: b.getAttribute('data-state'), title: b.querySelector('.msgtask__head strong').textContent, line: line.textContent, warn: line.classList.contains('admin__warn'), link: a ? a.href : '', linkText: a ? a.textContent : '', steps: Array.from(b.querySelectorAll('.msgtask__steps li')).map((li) => li.textContent + '=' + li.getAttribute('data-state')), log: log.hidden ? null : log.textContent };
+}));
+const untilFoot = (p, source, ms) => p.waitForFunction((src) => new RegExp(src).test(document.getElementById('msg').textContent), source, { timeout: ms || 20000 });
+
+await check('P1: a run a button started is followed at the deck\'s foot: its link, its steps as GitHub lists them, the last lines of its log once the job has ended, its end, and the runs list read again', async () => {
+  const routes = runRoutes('success', 2);
+  const { context, page, calls, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo', storage: asTester });
+  await loaded(page);
+  const n = calls.length;
+  await page.click('#cp-run-workers');
+  await untilFoot(page, 'Queued on main; the runs list shows it within a minute\\.', 5000);
+  let tasks = await footTasks(page);
+  assert.equal(tasks.length, 1);
+  assert.equal(tasks[0].title, 'The workers on acme/demo');
+  assert.equal(tasks[0].state, 'live');
+  assert.ok(calls.slice(n).some((c) => c.key === 'POST /repos/acme/demo/actions/workflows/workers.yml/dispatches'), 'the workflow was not started');
+  await untilFoot(page, 'Running; its steps show here as GitHub lists them\\.', 10000);
+  await page.waitForFunction(() => document.querySelectorAll('#msg .msgtask__steps li').length > 0, null, { timeout: 10000 });
+  tasks = await footTasks(page);
+  console.log('      while it runs:', JSON.stringify(tasks[0]));
+  assert.equal(tasks[0].link, 'https://github.com/acme/demo/actions/runs/11');
+  assert.equal(tasks[0].linkText, 'Run #11 on GitHub');
+  assert.deepEqual(tasks[0].steps, ['Set up job=done', 'Run the workers=running', 'Complete job=waiting']);
+  assert.equal(tasks[0].log, null, 'a log shown before the job ended');
+  const m = calls.length;
+  await untilFoot(page, 'Finished: success, in 1 min 35 s\\.', 20000);
+  tasks = await footTasks(page);
+  console.log('      at its end:', JSON.stringify(tasks[0]));
+  assert.equal(tasks[0].state, 'done');
+  assert.equal(tasks[0].warn, false);
+  assert.deepEqual(tasks[0].steps, ['Set up job=done', 'Run the workers=done', 'Complete job=done']);
+  assert.equal(tasks[0].log, footTail);
+  assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#msg .msgtask__bar')).display), 'none', 'the hidden button bar is laid out');
+  const list = tabCalls(calls, page, n);
+  assert.equal(list.filter((c) => c.key === 'GET /repos/acme/demo/actions/jobs/501/logs').length, 1, 'the log is read once, when the job has ended');
+  assert.ok(list.filter((c) => c.key === 'GET /repos/acme/demo/actions/runs/11/jobs').length >= 2, 'the steps were not read again');
+  // the runs list is read four seconds after the start and again at the end: two reads since the steps first showed
+  assert.ok(tabCalls(calls, page, m).filter((c) => c.key === 'GET /repos/acme/demo/actions/runs').length >= 2, 'the runs list was not read again at the end');
+  assert.deepEqual(unnamed(list, ['Bearer github_pat_TESTER']), []);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P2: a run that fails ends its task at the foot as failed, with the step that failed marked and its log shown', async () => {
+  const routes = runRoutes('failure', 1);
+  const { context, page, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo', storage: asTester });
+  await loaded(page);
+  await page.click('#cp-run-workers');
+  await untilFoot(page, 'Finished: failure, in 1 min 35 s\\.', 20000);
+  const tasks = await footTasks(page);
+  console.log('      failed:', JSON.stringify(tasks[0]));
+  assert.equal(tasks.length, 1);
+  assert.equal(tasks[0].state, 'failed');
+  assert.equal(tasks[0].warn, true);
+  assert.deepEqual(tasks[0].steps, ['Set up job=done', 'Run the workers=failed', 'Complete job=done']);
+  assert.equal(tasks[0].log, footTail);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P3: a start GitHub refuses is a plain message at the foot, with no task box left, and the next press starts afresh', async () => {
+  const routes = repoRoutes('acme/demo');
+  let tries = 0;
+  routes['GET /repos/acme/demo/actions/workflows/board.yml/runs'] = { workflow_runs: [] };
+  routes['POST /repos/acme/demo/actions/workflows/board.yml/dispatches'] = () => ++tries === 1 ? { status: 403, body: { message: 'Resource not accessible by personal access token' } } : null;
+  const { context, page, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo', storage: asTester });
+  await loaded(page);
+  await page.click('#cp-run-board');
+  await untilFoot(page, 'Starting a workflow needs Actions: read and write on the token\\.', 5000);
+  const text = await footText(page);
+  const boxes = await page.evaluate(() => document.querySelectorAll('#msg .msgtask').length);
+  const warned = await page.evaluate(() => document.getElementById('msg').classList.contains('admin__warn'));
+  console.log('      the refusal:', JSON.stringify(text), '| boxes:', boxes, '| warned:', warned);
+  assert.equal(boxes, 0);
+  assert.ok(warned);
+  assert.doesNotMatch(text, /The board/);
+  await page.click('#cp-run-board');
+  await untilFoot(page, 'Queued on main', 5000);
+  const tasks = await footTasks(page);
+  assert.deepEqual(tasks.map((t) => t.title + '/' + t.state), ['The board on acme/demo/live']);
+  assert.equal(await page.evaluate(() => document.querySelectorAll('#msg > p.msg__note').length), 0, 'the refusal stayed above the new task');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P4: a task under way stays at the foot through a message said meanwhile, which goes above it; a new task takes a finished one\'s place', async () => {
+  const routes = runRoutes('success', 3);
+  let tries = 0;
+  routes['GET /repos/acme/demo/actions/workflows/board.yml/runs'] = { workflow_runs: [] };
+  routes['POST /repos/acme/demo/actions/workflows/board.yml/dispatches'] = () => ++tries === 1 ? { status: 403, body: { message: 'Resource not accessible by personal access token' } } : null;
+  const { context, page, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo', storage: asTester });
+  await loaded(page);
+  await page.click('#cp-run-workers');
+  await untilFoot(page, 'Queued on main', 5000);
+  await page.click('#cp-run-board');
+  await untilFoot(page, 'Starting a workflow needs Actions', 5000);
+  const first = await page.evaluate(() => { const m = document.getElementById('msg'); return (m.firstElementChild.className || '') + '|' + m.children.length; });
+  let tasks = await footTasks(page);
+  console.log('      beside the refusal:', first, JSON.stringify(tasks.map((t) => t.title + '/' + t.state)));
+  assert.equal(first, 'msg__note|2');
+  assert.deepEqual(tasks.map((t) => t.title + '/' + t.state), ['The workers on acme/demo/live']);
+  await untilFoot(page, 'Finished: success', 30000);
+  assert.equal(await page.evaluate(() => document.querySelectorAll('#msg > p.msg__note').length), 0, 'the refusal outlived the work it was said beside');
+  await page.click('#cp-run-board');
+  await untilFoot(page, 'Queued on main', 5000);
+  tasks = await footTasks(page);
+  console.log('      after the next press:', JSON.stringify(tasks.map((t) => t.title + '/' + t.state)));
+  assert.deepEqual(tasks.map((t) => t.title + '/' + t.state), ['The board on acme/demo/live']);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P5: on a phone, Save and sign in closes the dialog at once and draws the sign-in at the foot: a link to claude.ai, a box for the code, Send posts the code; Clear hides it and the Sign-in waiting tile shows it again with the code kept', async () => {
+  const routes = repoRoutes('acme/demo');
+  const posted = [];
+  Object.assign(routes, {
+    'GET /repos/acme/demo/actions/secrets': { total_count: 1, secrets: [{ name: 'CLAUDE_CODE_OAUTH_TOKEN' }] },
+    'GET /repos/acme/demo/actions/variables': { total_count: 0, variables: [] },
+    'POST /repos/acme/demo/actions/variables': { status: 201, body: {} },
+    'GET /repos/acme/demo/actions/workflows/token.yml': { state: 'active' },
+    'GET /repos/acme/demo/actions/secrets/public-key': { key_id: 'k1', key: 'AAAA' },
+    'POST /repos/acme/demo/issues': async () => { await sleep(400); return { number: 42 }; },
+    'POST /repos/acme/demo/actions/workflows/token.yml/dispatches': null,
+    'GET /repos/acme/demo/actions/workflows/token.yml/runs': { workflow_runs: [] },
+    'GET /repos/acme/demo/issues/42/comments': [{ user: { login: 'github-actions[bot]' }, body: '<!-- symphony-token: sign-in -->\nhttps://claude.ai/oauth/authorize?code=1\n' }],
+    'POST /repos/acme/demo/issues/42/comments': (req) => { posted.push(req.postDataJSON()); return null; },
+  });
+  const { context, page, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo#tokens', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
+  await loaded(page);
+  await page.waitForSelector('#tk-tile-add', { timeout: 10000 });
+  await page.evaluate(() => document.getElementById('tk-tile-add').click());
+  await page.waitForSelector('#tk-start', { timeout: 5000 });
+  await page.waitForFunction(() => !document.getElementById('tk-start').disabled, null, { timeout: 5000 });
+  const closedAtOnce = await page.evaluate(() => { document.getElementById('tk-start').click(); return !document.getElementById('tk-dialog').open; });
+  const saving = await footText(page);
+  await page.waitForSelector('#msg #tk-code', { timeout: 15000 });
+  const facts = await page.evaluate(() => {
+    const a = document.getElementById('tk-open');
+    return { href: a.href, target: a.target, rel: a.rel, go: a.classList.contains('msgtask__go'), inFoot: !!a.closest('#msg .msgtask'), dialogOpen: document.getElementById('tk-dialog').open, tile: document.getElementById('tk-tile-add').textContent };
+  });
+  const tasks = await footTasks(page);
+  console.log('      closed at once:', closedAtOnce, '| first words:', JSON.stringify(saving), '| sign-in:', JSON.stringify(facts), '| task:', JSON.stringify(tasks.map((t) => t.title + '/' + t.state + '/' + t.line)));
+  assert.ok(closedAtOnce, 'the dialog stayed open after Save and sign in');
+  assert.match(saving, /^Add .*Saving the settings of /);
+  assert.equal(facts.href, 'https://claude.ai/oauth/authorize?code=1');
+  assert.equal(facts.target, '_blank');
+  assert.ok(facts.go && facts.inFoot && !facts.dialogOpen);
+  assert.match(facts.tile, /Sign-in waiting/);
+  assert.equal(tasks.length, 1);
+  assert.equal(tasks[0].state, 'live');
+  await page.fill('#tk-code', 'ABCDEFGH1234');
+  await page.evaluate(() => Array.from(document.querySelectorAll('#msg button')).find((b) => b.textContent === 'Send the code').click());
+  await untilFoot(page, 'Code sent; the run is making the token', 5000);
+  assert.deepEqual(posted, [{ body: '<!-- symphony-token: code -->\nABCDEFGH1234' }]);
+  await page.evaluate(() => document.getElementById('cp-msg-close').click());
+  assert.equal(await page.evaluate(() => document.getElementById('msg').children.length), 0, 'Clear left the sign-in in view');
+  await page.evaluate(() => document.getElementById('tk-tile-add').click());
+  const again = await page.evaluate(() => { const c = document.querySelector('#msg #tk-code'); return c ? c.value + '/' + c.disabled : 'gone'; });
+  console.log('      shown again from the tile:', again);
+  assert.equal(again, 'ABCDEFGH1234/true');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// a phone with much to show: forty tasks, a board with a wide table, and the text size a desktop saved
+function phoneRoutes() {
+  const routes = repoRoutes('acme/demo');
+  const issues = [];
+  for (let i = 1; i <= 40; i++) issues.push({ number: i, title: 'Task number ' + i + ' with a fairly long title to fill the card', html_url: 'https://github.com/acme/demo/issues/' + i, labels: [{ name: i % 4 === 0 ? 'claimed' : 'todo' }].concat(i % 4 === 0 ? [{ name: 'worker:nightly' }] : []), updated_at: now, body: 'Files likely touched: docs/' + i + '.md' });
+  issues.push({ number: 100, title: 'Epic one', html_url: 'https://github.com/acme/demo/issues/100', labels: [{ name: 'epic' }], updated_at: now });
+  const wide = '| Issue | Worker | Branch | Files | Pull request | Last commit | Plan | Overlaps | Since |\n|---|---|---|---|---|---|---|---|---|\n' + issues.slice(0, 12).map((i) => '| #' + i.number + ' | nightly | claude/' + i.number + ' | docs/' + i.number + '.md, tools/very_long_module_name_' + i.number + '.py | #' + (200 + i.number) + ' | 2026-10-19T01:00:00Z | the plan of the claim in a sentence that goes on | #3, #4 | 2 h |').join('\n');
+  routes['GET /repos/acme/demo/issues'] = async () => { await sleep(300); return issues; };
+  routes['GET /repos/acme/demo/contents/STATE.md'] = { raw: '# Board\n\nhttps://github.com/OpenSpineConsortium/symphony-template/blob/board/STATE.md#a-very-long-anchor-that-never-breaks-anywhere-at-all-really\n\n## Claims\n\n' + wide + '\n\n## Queue\n\n' + issues.map((i) => '- #' + i.number + ' ' + i.title).join('\n') + '\n' };
+  routes['GET /repos/acme/demo/contents/.github/symphony/workers'] = [{ type: 'file', name: 'nightly.json' }];
+  routes['GET /repos/acme/demo/contents/.github/symphony/workers/nightly.json'] = { encoding: 'base64', content: b64(JSON.stringify({ name: 'nightly', runs: 'actions', about: 'Small fixes', area: ['docs/'], lands: 'owner', model: '', max_turns: 80, rounds: 6, account: '' })) };
+  const runs = [];
+  for (let i = 1; i <= 25; i++) runs.push({ id: i, name: 'Board', event: 'push', head_branch: 'main', status: 'completed', conclusion: 'success', actor: { login: 'tester' }, run_started_at: now, html_url: 'https://github.com/acme/demo/actions/runs/' + i });
+  routes['GET /repos/acme/demo/actions/runs'] = { workflow_runs: runs };
+  routes['GET /repos/acme/demo/actions/secrets'] = { total_count: 4, secrets: [{ name: 'CLAUDE_CODE_OAUTH_TOKEN' }, { name: 'SYMPHONY_CLAUDE_1' }, { name: 'SYMPHONY_CLAUDE_2' }, { name: 'SYMPHONY_CLAUDE_3' }] };
+  routes['GET /repos/acme/demo/actions/variables'] = { total_count: 0, variables: [] };
+  return routes;
+}
+const PHONE_TABS = ['command', 'board', 'tasks', 'dependencies', 'explore', 'pulls', 'runs', 'workers', 'agents', 'tokens', 'leaders', 'share', 'folders', 'about'];
+const scrollYOf = (p) => p.evaluate(() => Math.round(window.scrollY));
+
+await check('P6: on a phone every tab fits the window, the saved text size and its buttons are left to the desktop, the status line sticks to the window\'s foot, and Refresh holds the page where it was', async () => {
+  const routes = phoneRoutes();
+  const storage = { local: Object.assign({ symphony_panel_layout: JSON.stringify({ zoom: 1.5 }) }, asTester.local) };
+  const { context, page, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo', storage, viewport: { width: 390, height: 844 }, mobile: true });
+  await loaded(page);
+  await sleep(500);
+  const wide = [];
+  for (const tab of PHONE_TABS) {
+    await page.click('.console__rail [data-tab="' + tab + '"]');
+    await sleep(350);
+    const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+    if (m.sw > m.iw) wide.push(tab + ':' + m.sw + '/' + m.iw);
+  }
+  const deck = await page.evaluate(() => {
+    const c = document.getElementById('console');
+    const zoom = getComputedStyle(c.querySelector('.console__app')).zoom;
+    const down = document.getElementById('cp-zoom-down');
+    return { clip: getComputedStyle(c).overflowX, zoom: String(zoom), zoomButtons: !!(down && down.checkVisibility()) };
+  });
+  await page.click('.console__rail [data-tab="tasks"]');
+  await sleep(300);
+  await page.evaluate(() => window.scrollTo(0, 1e6));
+  await sleep(300);
+  const status = await page.evaluate(() => { const st = document.querySelector('.console__status'); const r = st.getBoundingClientRect(); return { pos: getComputedStyle(st).position, top: Math.round(r.top), bottom: Math.round(r.bottom), ih: window.innerHeight, scrollY: Math.round(window.scrollY) }; });
+  // the phone's own rules win over the desktop's: a run's card puts its name and its time on the
+  // first line and the rest under them, the tiles stand two to a row, and the foot's buttons spread
+  await page.click('.console__rail [data-tab="runs"]');
+  await sleep(300);
+  const card = await page.evaluate(() => {
+    const tr = document.querySelector('#cp-runs tbody tr');
+    const name = tr.querySelector('td.cell--name'), event = tr.querySelector('td.cell--event'), when = tr.querySelector('td.cell--when');
+    const cs = getComputedStyle(name);
+    return { grow: cs.flexGrow, max: cs.maxWidth, nameTop: Math.round(name.getBoundingClientRect().top), whenTop: Math.round(when.getBoundingClientRect().top), eventTop: Math.round(event.getBoundingClientRect().top), rowWidth: Math.round(tr.getBoundingClientRect().width), tableScroll: tr.parentElement.scrollWidth };
+  });
+  await page.click('.console__rail [data-tab="tokens"]');
+  await sleep(300);
+  const tiles = await page.evaluate(() => ({ columns: getComputedStyle(document.getElementById('tk-tiles')).gridTemplateColumns.split(' ').length, width: document.getElementById('tk-tiles').clientWidth, me: getComputedStyle(document.querySelector('.console__me')).justifyContent }));
+  console.log('      wider than the window:', wide.length ? wide.join(' ') : 'no tab', '| deck:', JSON.stringify(deck), '| status:', JSON.stringify(status), '| run card:', JSON.stringify(card), '| tiles:', JSON.stringify(tiles));
+  assert.deepEqual(wide, []);
+  assert.equal(card.grow, '1', 'the run name takes its line');
+  assert.equal(card.max, 'none');
+  assert.equal(card.whenTop, card.nameTop, 'the time sits on the name\'s line');
+  assert.ok(card.eventTop > card.nameTop + 10, 'the event sits under the name');
+  assert.equal(tiles.columns, 2, 'the token tiles stand two to a row');
+  assert.ok(tiles.width > 300, 'the tiles fill the row');
+  assert.equal(tiles.me, 'space-between');
+  assert.equal(deck.clip, 'clip');
+  assert.notEqual(deck.zoom, '1.5');
+  assert.equal(deck.zoomButtons, false);
+  assert.equal(status.pos, 'sticky');
+  assert.ok(status.scrollY > 300 && status.top > 0 && status.bottom <= status.ih + 1, 'the status line does not stick to the foot');
+  // Refresh on the tab whose chart is drawn afresh, the page scrolled into the tab
+  await page.click('.console__rail [data-tab="dependencies"]');
+  await sleep(600);
+  await page.evaluate(() => window.scrollTo(0, 1e6));
+  let before = 0;
+  for (let i = 0; i < 6; i++) { await sleep(150); before = await scrollYOf(page); }
+  const held = await page.evaluate(() => { document.getElementById('cp-refresh').click(); return document.querySelector('.console__stage').style.minHeight; });
+  const seen = [];
+  for (let i = 0; i < 12; i++) { await sleep(150); seen.push(await scrollYOf(page)); }
+  await loaded(page);
+  await sleep(400);
+  const released = await page.evaluate(() => document.querySelector('.console__stage').style.minHeight);
+  console.log('      refresh: before', before, 'after', seen.join(','), '| stage held:', JSON.stringify(held), '| released:', JSON.stringify(released));
+  assert.ok(before > 300, 'the page did not scroll into the tab');
+  assert.match(held, /^\d+(\.\d+)?px$/);
+  assert.equal(released, '');
+  assert.ok(seen.every((v) => v === before), 'the page jumped through Refresh');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P7: a long message at the foot wraps inside the message and never pushes Clear under the text-size buttons', async () => {
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 620 } });
+  await loaded(page);
+  await page.evaluate(() => { document.getElementById('msg').textContent = 'A long message that goes on and on about the run that was started and what it is doing now, wrapping to a second and perhaps a third line on a narrow deck so the status row grows and the stage shrinks by that much, which is what we measure here, and some more words to be sure it wraps on a wide screen too, and then some.'; });
+  await sleep(200);
+  const hit = await page.evaluate(() => {
+    const c = document.getElementById('cp-msg-close').getBoundingClientRect();
+    const at = document.elementFromPoint(c.left + c.width / 2, c.top + c.height / 2);
+    return { visible: c.width > 0 && c.height > 0, under: at ? (at.id || at.className) : 'nothing', ok: !!(at && at.closest('#cp-msg-close')) };
+  });
+  console.log('      under Clear\'s middle:', JSON.stringify(hit));
+  assert.ok(hit.visible && hit.ok);
+  await page.click('#cp-msg-close', { timeout: 2000 });
+  assert.equal(await footText(page), '');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P8: Queue for the workers and Ask @claude now close the task dialog at once, the request speaking at the foot', async () => {
+  const routes = repoRoutes('acme/demo');
+  let opened = 0;
+  routes['POST /repos/acme/demo/issues'] = async () => { await sleep(400); return { number: 50 + ++opened, labels: [{ name: 'todo' }], html_url: 'https://github.com/acme/demo/issues/5' + opened }; };
+  const { context, page, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo#tasks', storage: asTester });
+  await loaded(page);
+  await page.click('#cp-task-new');
+  await page.waitForFunction(() => document.getElementById('dlg-task').open, null, { timeout: 3000 });
+  await page.fill('#cp-task-title', 'Fix the phone layout');
+  await page.fill('#cp-task-goal', 'Every tab fits a phone.');
+  const queued = await page.evaluate(() => { document.getElementById('cp-task-queue').click(); return { open: document.getElementById('dlg-task').open, foot: document.getElementById('msg').textContent }; });
+  await untilFoot(page, 'Queued as #51;', 5000);
+  await page.click('#cp-task-new');
+  await page.waitForFunction(() => document.getElementById('dlg-task').open, null, { timeout: 3000 });
+  await page.fill('#cp-task-title', 'Explain the board');
+  await page.fill('#cp-task-goal', 'Say what the board shows.');
+  const asked = await page.evaluate(() => { document.getElementById('cp-task-ask').click(); return { open: document.getElementById('dlg-task').open, foot: document.getElementById('msg').textContent }; });
+  await untilFoot(page, '#52', 5000);
+  console.log('      queue:', JSON.stringify(queued), '| ask:', JSON.stringify(asked));
+  assert.deepEqual(queued, { open: false, foot: 'Queueing the task...' });
+  assert.deepEqual(asked, { open: false, foot: 'Sending...' });
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+
+/* ---------- P9 on: what the review of the foot and the phone found ---------- */
+await check('P9: a read GitHub fails once is made again and the run is followed to its end; three failures in a row, of the jobs or of the runs list, end the task as failed with the reason, never as done', async () => {
+  // the jobs fail once, then answer as before
+  let routes = runRoutes('success', 3);
+  const steps = routes['GET /repos/acme/demo/actions/runs/11/jobs'];
+  let jobReads = 0;
+  routes['GET /repos/acme/demo/actions/runs/11/jobs'] = (req) => ++jobReads === 1 ? { status: 502, body: { message: 'Bad Gateway' } } : steps(req);
+  let { context, page, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo', storage: asTester });
+  await loaded(page);
+  await page.click('#cp-run-workers');
+  await untilFoot(page, 'Finished: success, in 1 min 35 s\\.', 45000);
+  let tasks = await footTasks(page);
+  console.log('      one lost answer:', jobReads, 'reads |', JSON.stringify(tasks[0].state + '/' + tasks[0].line));
+  assert.equal(tasks[0].state, 'done');
+  assert.ok(jobReads >= 4, 'the jobs were not read again after the lost answer');
+  assert.deepEqual(errors, []);
+  await context.close();
+  // every read of the jobs fails
+  routes = runRoutes('success', 3);
+  let fails = 0;
+  routes['GET /repos/acme/demo/actions/runs/11/jobs'] = () => { fails++; return { status: 502, body: { message: 'Bad Gateway' } }; };
+  ({ context, page, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo', storage: asTester }));
+  await loaded(page);
+  await page.click('#cp-run-workers');
+  await untilFoot(page, 'GitHub could not be read while the run was followed', 45000);
+  tasks = await footTasks(page);
+  console.log('      jobs never read:', fails, 'tries |', JSON.stringify(tasks[0].state + '/' + tasks[0].line));
+  assert.equal(tasks[0].state, 'failed');
+  assert.equal(tasks[0].warn, true);
+  assert.equal(fails, 3);
+  assert.equal(tasks[0].link, 'https://github.com/acme/demo/actions/runs/11', 'the run\'s link went');
+  assert.deepEqual(errors, []);
+  await context.close();
+  // every look at the runs list fails, the read before the press aside
+  routes = runRoutes('success', 3);
+  let looks = 0;
+  routes['GET /repos/acme/demo/actions/workflows/workers.yml/runs'] = (req) => /per_page=1&/.test(req.url()) ? { workflow_runs: [{ id: 10 }] } : (looks++, { status: 502, body: { message: 'Bad Gateway' } });
+  ({ context, page, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo', storage: asTester }));
+  await loaded(page);
+  await page.click('#cp-run-workers');
+  await untilFoot(page, 'GitHub could not be read while the run was looked for', 30000);
+  tasks = await footTasks(page);
+  console.log('      runs never listed:', looks, 'looks |', JSON.stringify(tasks[0].state + '/' + tasks[0].line));
+  assert.equal(tasks[0].state, 'failed');
+  assert.equal(looks, 3);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P10: a run followed when the page goes to another repository is read no more, and its task, named for its repository, says it was left at its link', async () => {
+  const routes = Object.assign(runRoutes('success', 1000), repoRoutes('acme/other'));
+  const storage = { local: { symphony_panel_token: 'github_pat_TESTER', symphony_panel_repos: JSON.stringify(['acme/demo', 'acme/other']) } };
+  const { context, page, calls, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo', storage });
+  await loaded(page);
+  await page.click('#cp-run-workers');
+  await page.waitForFunction(() => document.querySelectorAll('#msg .msgtask__steps li').length > 0, null, { timeout: 15000 });
+  const at = calls.length;
+  await page.selectOption('#cp-repo', 'acme/other');
+  await page.waitForFunction(() => /^acme\/other, default/.test(document.getElementById('cp-summary').textContent), null, { timeout: 15000 });
+  await untilFoot(page, 'Left as the page went to another repository', 10000);
+  await sleep(7000);
+  const later = calls.slice(at).filter((c) => c.key === 'GET /repos/acme/demo/actions/runs/11/jobs' || c.key === 'GET /repos/acme/demo/actions/jobs/501/logs').length;
+  const tasks = await footTasks(page);
+  console.log('      reads of the old run after the switch:', later, '|', JSON.stringify(tasks[0]));
+  assert.ok(later <= 1, 'the old repository\'s run was still read');
+  assert.equal(tasks.length, 1);
+  assert.equal(tasks[0].title, 'The workers on acme/demo');
+  assert.equal(tasks[0].link, 'https://github.com/acme/demo/actions/runs/11');
+  assert.doesNotMatch(tasks[0].line, /Finished/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P11: Forget the token pressed while a run is followed keeps Forget\'s words at the foot, the dropped task saying nothing more', async () => {
+  const routes = runRoutes('success', 1000);
+  const { context, page, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo', storage: asTester });
+  await loaded(page);
+  await page.click('#cp-run-workers');
+  await page.waitForFunction(() => document.querySelectorAll('#msg .msgtask__steps li').length > 0, null, { timeout: 15000 });
+  await page.click('#cp-signout');
+  await untilFoot(page, 'The token is forgotten', 5000);
+  const said = await footText(page);
+  await sleep(8000);
+  const after = await footText(page);
+  console.log('      at the press:', JSON.stringify(said.slice(0, 60)), '| eight seconds on:', JSON.stringify(after.slice(0, 60)));
+  assert.match(after, /^The token is forgotten/);
+  assert.equal(after, said);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// an epic with three sub-issues, its chart drawn by Mermaid as the site serves it
+function graphRoutes() {
+  const routes = repoRoutes('acme/demo');
+  const task = (n, labels) => ({ number: n, title: 'Task ' + n, html_url: 'https://github.com/acme/demo/issues/' + n, labels: labels.map((l) => ({ name: l })), updated_at: now, state: 'open', user: { login: 'tester' } });
+  const issues = [task(1, ['todo']), task(2, ['todo']), task(3, ['claimed', 'worker:nightly'])];
+  issues.push(Object.assign(task(100, ['epic']), { title: 'Epic one', sub_issues_summary: { total: 3, completed: 0, percent_completed: 0 } }));
+  const phase = { subFail: false, issuesDelay: 0, subDelay: 0 };
+  routes['GET /repos/acme/demo/issues'] = async () => { if (phase.issuesDelay) await sleep(phase.issuesDelay); return issues; };
+  routes['GET /repos/acme/demo/issues/100/sub_issues'] = async () => { if (phase.subDelay) await sleep(phase.subDelay); return phase.subFail ? { status: 500, body: { message: 'boom' } } : issues.slice(0, 3); };
+  for (const n of [1, 2, 3]) routes['GET /repos/acme/demo/issues/' + n + '/dependencies/blocked_by'] = [];
+  return { routes, phase };
+}
+const graphDrawn = (p) => p.waitForFunction(() => /^Drawn /.test(document.getElementById('cp-graph-state').textContent), null, { timeout: 25000 });
+// the window scrolls smoothly on a phone, so it is read until it rests
+async function restingY(page) {
+  let last = -1;
+  for (let i = 0; i < 40; i++) { await sleep(100); const y = await scrollYOf(page); if (y === last) return y; last = y; }
+  return last;
+}
+
+await check('P12: on a phone, Refresh on the Dependencies tab keeps the chart\'s box at its height until the chart is drawn again, and a read that fails lets the box go', async () => {
+  const { routes, phase } = graphRoutes();
+  const { context, page, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo#dependencies', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
+  await loaded(page);
+  await graphDrawn(page);
+  await page.evaluate(() => window.scrollTo(0, 1e6));
+  const before = await restingY(page);
+  // the sub-issues take a while, so the box stands empty long enough to be seen held or not
+  phase.subDelay = 700;
+  await page.evaluate(() => {
+    const box = document.getElementById('cp-graph');
+    window.__seen = [];
+    window.__watch = setInterval(() => window.__seen.push({ min: box.style.minHeight, kids: box.children.length, state: document.getElementById('cp-graph-state').textContent.slice(0, 30), y: Math.round(window.scrollY) }), 15);
+    document.getElementById('cp-refresh').click();
+  });
+  await loaded(page);
+  await graphDrawn(page);
+  await sleep(300);
+  const seen = await page.evaluate(() => { clearInterval(window.__watch); return window.__seen; });
+  const unheld = seen.filter((s) => s.kids === 0 && !s.min);
+  const moved = seen.filter((s) => s.y !== before);
+  console.log('      before', before, '| samples', seen.length, '| empty and unheld:', JSON.stringify(unheld.slice(0, 3)), '| moved:', JSON.stringify(moved.slice(0, 3)));
+  assert.ok(before > 300, 'the page did not scroll into the tab');
+  assert.ok(seen.some((s) => s.kids === 0), 'the box was never emptied, so nothing was measured');
+  assert.deepEqual(unheld, [], 'the empty box lost its hold before the chart was drawn');
+  assert.deepEqual(moved, [], 'the page moved through Refresh');
+  // the sub-issues cannot be read: the box stands empty under one line, at no height of its own
+  phase.subDelay = 0;
+  phase.subFail = true;
+  await page.evaluate(() => document.getElementById('cp-refresh').click());
+  await page.waitForFunction(() => /^Not drawn/.test(document.getElementById('cp-graph-state').textContent), null, { timeout: 15000 });
+  await sleep(300);
+  const box = await page.evaluate(() => { const b = document.getElementById('cp-graph'); return { min: b.style.minHeight, kids: b.children.length, h: b.offsetHeight, tabMin: document.getElementById('tab-dependencies').style.minHeight }; });
+  console.log('      after a failed read:', JSON.stringify(box));
+  assert.equal(box.kids, 0);
+  assert.equal(box.min, '', 'the emptied box kept the old chart\'s height');
+  assert.equal(box.tabMin, '', 'the tab kept the old chart\'s height');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P13: on a phone, Refresh pressed twice keeps the stage held until the second read is done', async () => {
+  const { routes, phase } = graphRoutes();
+  const { context, page, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo#dependencies', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
+  await loaded(page);
+  await graphDrawn(page);
+  await page.evaluate(() => window.scrollTo(0, 1e6));
+  await restingY(page);
+  phase.issuesDelay = 900;
+  const twice = await page.evaluate(() => { const s = document.querySelector('.console__stage'); document.getElementById('cp-refresh').click(); document.getElementById('cp-refresh').click(); return s.style.minHeight; });
+  const samples = [];
+  for (let i = 0; i < 7; i++) { await sleep(100); samples.push(await page.evaluate(() => document.querySelector('.console__stage').style.minHeight || '(none)')); }
+  await loaded(page);
+  await graphDrawn(page);
+  await sleep(400);
+  const released = await page.evaluate(() => document.querySelector('.console__stage').style.minHeight);
+  console.log('      held at the presses:', JSON.stringify(twice), '| while the issues were on their way:', samples.join(' '), '| at the end:', JSON.stringify(released));
+  assert.match(twice, /^\d+(\.\d+)?px$/);
+  assert.ok(samples.every((v) => v !== '(none)'), 'the first refresh let the second one\'s hold go');
+  assert.equal(released, '');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P14: a phone held sideways, wide but short, keeps its own text size and shows no text-size buttons, while a desktop keeps the size it saved', async () => {
+  const storage = { local: Object.assign({ symphony_panel_layout: JSON.stringify({ zoom: 1.5 }) }, asTester.local) };
+  const facts = [];
+  for (const [viewport, mobile] of [[{ width: 932, height: 430 }, true], [{ width: 1280, height: 900 }, false]]) {
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage, viewport, mobile });
+    await loaded(page);
+    facts.push(await page.evaluate(() => ({ zoom: String(getComputedStyle(document.querySelector('#console .console__app')).zoom), buttons: document.getElementById('cp-zoom-down').checkVisibility() })));
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  console.log('      sideways phone:', JSON.stringify(facts[0]), '| desktop:', JSON.stringify(facts[1]));
+  assert.deepEqual(facts[0], { zoom: '1', buttons: false });
+  assert.deepEqual(facts[1], { zoom: '1.5', buttons: true });
+});
+
+// the token sign-in of P5, on a repository whose Token run GitHub lists with its nine steps
+function signInRoutes(posted, extra) {
+  const routes = repoRoutes('acme/demo');
+  const nine = ['Set up job', 'Check out', 'Look for your token', 'Install Claude Code', 'Sign in', 'Seal the token', 'Store the token', 'Remove the held token', 'Complete job'].map((name, i) => ({ name, status: i < 4 ? 'completed' : (i === 4 ? 'in_progress' : 'queued'), conclusion: i < 4 ? 'success' : null }));
+  Object.assign(routes, {
+    'GET /repos/acme/demo/actions/secrets': { total_count: 1, secrets: [{ name: 'CLAUDE_CODE_OAUTH_TOKEN' }] },
+    'GET /repos/acme/demo/actions/variables': { total_count: 0, variables: [] },
+    'POST /repos/acme/demo/actions/variables': { status: 201, body: {} },
+    'GET /repos/acme/demo/actions/workflows/token.yml': { state: 'active' },
+    'GET /repos/acme/demo/actions/secrets/public-key': { key_id: 'k1', key: 'AAAA' },
+    'POST /repos/acme/demo/issues': async () => { await sleep(400); return { number: 42 }; },
+    'POST /repos/acme/demo/actions/workflows/token.yml/dispatches': null,
+    'GET /repos/acme/demo/actions/workflows/token.yml/runs': (req) => /per_page=1&/.test(req.url()) ? { workflow_runs: [{ id: 20 }] } : { workflow_runs: [{ id: 21, run_number: 21, html_url: 'https://github.com/acme/demo/actions/runs/21', actor: { login: 'tester' }, created_at: now, run_started_at: now, status: 'in_progress', event: 'workflow_dispatch' }] },
+    'GET /repos/acme/demo/actions/runs/21/jobs': { total_count: 1, jobs: [{ id: 601, name: 'store', status: 'in_progress', conclusion: null, started_at: now, steps: nine }] },
+    'GET /repos/acme/demo/issues/42/comments': [{ user: { login: 'github-actions[bot]' }, body: '<!-- symphony-token: sign-in -->\nhttps://claude.ai/oauth/authorize?code=1\n' }],
+    'POST /repos/acme/demo/issues/42/comments': (req) => { posted.push(req.postDataJSON()); return null; },
+  }, extra || {});
+  return routes;
+}
+async function startSignIn(page) {
+  await loaded(page);
+  await page.waitForSelector('#tk-tile-add', { timeout: 10000 });
+  await page.evaluate(() => document.getElementById('tk-tile-add').click());
+  await page.waitForSelector('#tk-start', { timeout: 5000 });
+  await page.waitForFunction(() => !document.getElementById('tk-start').disabled, null, { timeout: 5000 });
+}
+
+await check('P15: on a phone, the sign-in\'s link and code box stand in the foot\'s view under the line, with the run\'s steps below them', async () => {
+  const posted = [];
+  const { context, page, errors } = await open({ script: real, routes: signInRoutes(posted), path: '/symphony/control/?repo=acme/demo#tokens', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
+  await startSignIn(page);
+  await page.evaluate(() => document.getElementById('tk-start').click());
+  await page.waitForSelector('#msg #tk-code', { timeout: 15000 });
+  await page.waitForFunction(() => document.querySelectorAll('#msg .msgtask__steps li').length >= 9, null, { timeout: 15000 });
+  const where = await page.evaluate(() => {
+    const m = document.getElementById('msg').getBoundingClientRect();
+    const rect = (id) => { const r = document.getElementById(id).getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom) }; };
+    const steps = document.querySelector('#msg .msgtask__steps').getBoundingClientRect();
+    return { msg: { top: Math.round(m.top), bottom: Math.round(m.bottom) }, open: rect('tk-open'), code: rect('tk-code'), stepsTop: Math.round(steps.top), ih: window.innerHeight };
+  });
+  console.log('      the foot and the sign-in:', JSON.stringify(where));
+  for (const id of ['open', 'code']) {
+    assert.ok(where[id].top >= where.msg.top && where[id].bottom <= where.msg.bottom + 1, 'the sign-in\'s ' + id + ' is outside the foot\'s view');
+    assert.ok(where[id].bottom <= where.ih, 'the sign-in\'s ' + id + ' is below the window');
+  }
+  assert.ok(where.stepsTop > where.code.bottom, 'the steps stand above the sign-in');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P16: the run a press started is the signed-in person\'s own, waited for while only another person\'s is listed', async () => {
+  const routes = runRoutes('success', 2);
+  let looks = 0;
+  const other = { id: 12, run_number: 12, html_url: 'https://github.com/acme/demo/actions/runs/12', actor: { login: 'someone-else' }, created_at: now, run_started_at: now, status: 'in_progress', event: 'workflow_dispatch' };
+  const mine = { id: 13, run_number: 13, html_url: 'https://github.com/acme/demo/actions/runs/13', actor: { login: 'tester' }, created_at: now, run_started_at: now, status: 'in_progress', event: 'workflow_dispatch' };
+  routes['GET /repos/acme/demo/actions/workflows/workers.yml/runs'] = (req) => /per_page=1&/.test(req.url()) ? { workflow_runs: [{ id: 10 }] } : { workflow_runs: ++looks <= 2 ? [other] : [mine, other] };
+  routes['GET /repos/acme/demo/actions/runs/13/jobs'] = routes['GET /repos/acme/demo/actions/runs/11/jobs'];
+  const { context, page, calls, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo', storage: asTester });
+  await loaded(page);
+  await page.click('#cp-run-workers');
+  await untilFoot(page, 'Finished: success', 45000);
+  const tasks = await footTasks(page);
+  const theirs = calls.filter((c) => c.key === 'GET /repos/acme/demo/actions/runs/12/jobs').length;
+  console.log('      looks:', looks, '| link:', tasks[0].link, '| reads of the other person\'s run:', theirs);
+  assert.equal(tasks[0].link, 'https://github.com/acme/demo/actions/runs/13');
+  assert.equal(theirs, 0);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P17: a second Add Token pressed while the first one\'s settings are still being saved opens nothing and says so, and the first sign-in goes on alone', async () => {
+  const posted = [];
+  let issues = 0;
+  const extra = {
+    'POST /repos/acme/demo/actions/variables': async () => { await sleep(1500); return { status: 201, body: {} }; },
+    'POST /repos/acme/demo/issues': async () => { issues++; await sleep(400); return { number: 42 }; },
+  };
+  const { context, page, errors } = await open({ script: real, routes: signInRoutes(posted, extra), path: '/symphony/control/?repo=acme/demo#tokens', storage: asTester });
+  await startSignIn(page);
+  const second = await page.evaluate(() => {
+    document.getElementById('tk-start').click();
+    document.getElementById('tk-tile-add').click();
+    return { open: document.getElementById('tk-dialog').open, foot: document.getElementById('msg').textContent, boxes: document.querySelectorAll('#msg .msgtask').length };
+  });
+  await page.waitForSelector('#msg #tk-code', { timeout: 20000 });
+  const boxes = await page.evaluate(() => document.querySelectorAll('#msg .msgtask').length);
+  console.log('      the second press:', JSON.stringify(second), '| issues opened:', issues, '| task boxes:', boxes);
+  assert.equal(second.open, false, 'a second dialog opened');
+  assert.match(second.foot, /A token is being added already/);
+  assert.equal(second.boxes, 1);
+  assert.equal(issues, 1);
+  assert.equal(boxes, 1);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('P18: a Token run GitHub will not list leaves the sign-in to the issue\'s comments and follows no run it did not find', async () => {
+  const posted = [];
+  let looks = 0;
+  const extra = { 'GET /repos/acme/demo/actions/workflows/token.yml/runs': (req) => /per_page=1&/.test(req.url()) ? { workflow_runs: [{ id: 20 }] } : (looks++, { status: 502, body: { message: 'Bad Gateway' } }) };
+  const { context, page, calls, errors } = await open({ script: real, routes: signInRoutes(posted, extra), path: '/symphony/control/?repo=acme/demo#tokens', storage: asTester });
+  await startSignIn(page);
+  await page.evaluate(() => document.getElementById('tk-start').click());
+  await page.waitForSelector('#msg #tk-code', { timeout: 15000 });
+  for (let i = 0; i < 80 && looks < 3; i++) await sleep(250);
+  await sleep(1500);
+  const odd = calls.filter((c) => /\/actions\/runs\/(undefined|null|NaN)/.test(c.url)).map((c) => c.key);
+  const tasks = await footTasks(page);
+  console.log('      looks:', looks, '| reads of no run:', JSON.stringify(odd), '| task:', JSON.stringify(tasks.map((t) => t.state + '/' + t.linkText + '/' + t.line)));
+  assert.equal(looks, 3);
+  assert.deepEqual(odd, []);
+  assert.equal(tasks[0].state, 'live', 'the sign-in ended when the runs list failed');
+  assert.equal(tasks[0].linkText, '');
+  assert.ok(await page.evaluate(() => !!document.querySelector('#msg #tk-open')), 'the sign-in\'s link went');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+
+
+await check('P19: saving a tile\'s settings keeps the Token run\'s marks on it, the lender\'s account id and the organization\'s keeping', async () => {
+  const posted = [];
+  const written = [];
+  const kept = { '1': { id: 'a1b2c3d4', owner: 'tester', uid: 77, keeping: 'organization' } };
+  const extra = {
+    'GET /repos/acme/demo/actions/secrets': { total_count: 2, secrets: [{ name: 'CLAUDE_CODE_OAUTH_TOKEN' }, { name: 'SYMPHONY_CLAUDE_1' }] },
+    'GET /repos/acme/demo/actions/variables/SYMPHONY_CLAUDE_SETTINGS': { name: 'SYMPHONY_CLAUDE_SETTINGS', value: JSON.stringify(kept) },
+    'PATCH /repos/acme/demo/actions/variables/SYMPHONY_CLAUDE_SETTINGS': (req) => { written.push(req.postDataJSON()); return null; },
+  };
+  const { context, page, errors } = await open({ script: real, routes: signInRoutes(posted, extra), path: '/symphony/control/?repo=acme/demo#tokens', storage: asTester });
+  await loaded(page);
+  await page.waitForSelector('#tk-gear-1', { timeout: 10000 });
+  await page.evaluate(() => document.getElementById('tk-gear-1').click());
+  await page.waitForSelector('#tk-save', { timeout: 5000 });
+  await page.selectOption('#tk-d-effort', { index: 1 });
+  await page.evaluate(() => document.getElementById('tk-save').click());
+  for (let i = 0; i < 40 && !written.length; i++) await sleep(100);
+  const slot = written.length ? JSON.parse(written[0].value)['1'] : null;
+  console.log('      written:', JSON.stringify(slot));
+  assert.ok(slot, 'the settings were not written');
+  assert.equal(slot.uid, 77, 'the lender\'s account id went');
+  assert.equal(slot.keeping, 'organization', 'the organization\'s keeping went');
+  assert.equal(slot.owner, 'tester');
+  assert.equal(slot.id, 'a1b2c3d4');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+
+// a person who may write to an organization's repository but is not an owner of the organization
+// lends their token through the Token run's pool path: the run answers lent for a token already in
+// the pool, stored for a new one after its sign-in link, and the task at the foot says which, done, the
+// sign-in's code box gone and the issue closed
+function poolRoutes(marker, patched) {
+  const routes = signInRoutes([], {
+    'GET /repos/acme/demo': { full_name: 'acme/demo', default_branch: 'main', private: false, topics: ['symphony'], id: 123, owner: { id: 77, login: 'acme', type: 'Organization' }, permissions: { admin: false, push: true, pull: true } },
+    'GET /orgs/acme/memberships/tester': { role: 'member', state: 'active' },
+    'GET /orgs/acme/actions/secrets': { status: 403, body: { message: 'Resource not accessible by integration' } },
+    'GET /repos/acme/demo/issues/42/comments': [].concat(marker).map((body) => ({ user: { login: 'github-actions[bot]' }, body })),
+    'PATCH /repos/acme/demo/issues/42': (req) => { patched.push(req.postDataJSON()); return {}; },
+  });
+  return routes;
+}
+await check('P20: a lend into an organization\'s pool by someone who is not its owner ends done at the foot, saying lent for a token already there and saved for a new one, and closes its issue as completed', async () => {
+  const cases = [
+    { marker: '<!-- symphony-token: lent -->\n5\n123', want: /You have a token already \(slot 5 of acme's pool\), so it is now lent to acme\/demo too/ },
+    { marker: ['<!-- symphony-token: sign-in -->\nhttps://claude.ai/oauth/authorize?code=1\n', '<!-- symphony-token: stored -->\n6'], want: /Your token is saved in slot 6 of acme's pool, marked as yours, and lent to acme\/demo/ },
+  ];
+  for (const c of cases) {
+    const patched = [];
+    const { context, page, errors, calls } = await open({ script: real, routes: poolRoutes(c.marker, patched), path: '/symphony/control/?repo=acme/demo#tokens', storage: asTester });
+    await startSignIn(page);
+    const lead = await page.evaluate(() => document.querySelector('#tk-dialog .admin__lead').textContent);
+    assert.match(lead, /next free slot of acme's pool, marked as yours/, 'the pool\'s dialog did not open');
+    await page.evaluate(() => document.getElementById('tk-start').click());
+    await page.waitForFunction(() => { const b = document.querySelector('#msg .msgtask'); return b && b.getAttribute('data-state') !== 'live'; }, null, { timeout: 20000 });
+    for (let i = 0; i < 30 && !patched.length; i++) await sleep(100);
+    const box = await page.evaluate(() => { const b = document.querySelector('#msg .msgtask'); return { state: b.getAttribute('data-state'), head: b.querySelector('.msgtask__head').textContent, line: b.querySelector('.msgtask__line').textContent, code: !!document.getElementById('tk-code') }; });
+    console.log('      ' + [].concat(c.marker).pop().split('\n')[0] + ':', JSON.stringify(box), '| closed:', JSON.stringify(patched));
+    assert.equal(box.state, 'done', 'the lend ended ' + box.state + ': ' + box.line);
+    assert.match(box.head, /Add your token to acme's pool on acme\/demo/);
+    assert.match(box.line, c.want);
+    assert.equal(box.code, false, 'the code box stayed after the lend ended');
+    assert.deepEqual(patched, [{ state: 'closed', state_reason: 'completed' }], 'the issue was not closed once, as completed');
+    const dispatched = calls.filter((x) => x.key === 'POST /repos/acme/demo/actions/workflows/token.yml/dispatches');
+    assert.equal(dispatched.length, 1, 'the Token run was not started once');
+    assert.ok(!calls.some((x) => /\/secrets\/public-key$|PUT \/orgs\/acme\/actions\/secrets\//.test(x.key)), 'the page itself read a key or wrote a secret on the pool path');
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+});
+
+// a repository of the organization with no workflow Token of its own (adopted for the protocol alone)
+// sends the lend to another repository of the organization that has it, the topic symphony and the
+// person's push: the issue, the dispatch with lend_to, the run followed and the issue closed are all
+// that repository's, and the task still names the repository shown
+await check('P21: a pool lend from a repository with no workflow Token runs in the organization\'s repository that has it, lends to the one shown, and follows and closes everything there', async () => {
+  const patched = [];
+  const dispatched = [];
+  const now2 = new Date().toISOString();
+  let looks = 0;
+  const routes = poolRoutes('<!-- symphony-token: lent -->\n5\n123', []);
+  delete routes['GET /repos/acme/demo/actions/workflows/token.yml'];
+  delete routes['POST /repos/acme/demo/issues'];
+  delete routes['POST /repos/acme/demo/actions/workflows/token.yml/dispatches'];
+  delete routes['GET /repos/acme/demo/actions/workflows/token.yml/runs'];
+  delete routes['GET /repos/acme/demo/issues/42/comments'];
+  delete routes['PATCH /repos/acme/demo/issues/42'];
+  Object.assign(routes, {
+    'GET /orgs/acme/repos': [
+      { full_name: 'acme/old', archived: true, topics: ['symphony'], permissions: { push: true } },
+      { full_name: 'acme/other', archived: false, topics: [], permissions: { push: true } },
+      { full_name: 'acme/home', archived: false, topics: ['symphony'], permissions: { push: true } },
+    ],
+    'GET /repos/acme/home': { full_name: 'acme/home', default_branch: 'trunk', id: 456, owner: { id: 77, login: 'acme', type: 'Organization' }, permissions: { admin: false, push: true, pull: true } },
+    'GET /repos/acme/home/actions/workflows/token.yml': { state: 'active' },
+    'POST /repos/acme/home/issues': async () => { await sleep(200); return { number: 9 }; },
+    'POST /repos/acme/home/actions/workflows/token.yml/dispatches': (req) => { dispatched.push(req.postDataJSON()); return null; },
+    // the person's earlier run there is listed alone at the first look, and the new one after it, so
+    // the run followed is the one started after the newest the page read before its dispatch
+    'GET /repos/acme/home/actions/workflows/token.yml/runs': (req) => {
+      const old = { id: 30, run_number: 30, html_url: 'https://github.com/acme/home/actions/runs/30', actor: { login: 'tester' }, created_at: now2, run_started_at: now2, status: 'completed', conclusion: 'success', event: 'workflow_dispatch' };
+      if (/per_page=1&/.test(req.url())) return { workflow_runs: [old] };
+      looks++;
+      return { workflow_runs: looks < 2 ? [old] : [{ id: 31, run_number: 31, html_url: 'https://github.com/acme/home/actions/runs/31', actor: { login: 'tester' }, created_at: now2, run_started_at: now2, status: 'completed', conclusion: 'success', event: 'workflow_dispatch' }, old] };
+    },
+    'GET /repos/acme/home/actions/runs/31/jobs': { total_count: 0, jobs: [] },
+    'GET /repos/acme/home/actions/runs/30/jobs': { total_count: 0, jobs: [] },
+    // the run answers once it has been listed, as a real run answers after it starts
+    'GET /repos/acme/home/issues/9/comments': () => looks >= 2 ? [{ user: { login: 'github-actions[bot]' }, body: '<!-- symphony-token: lent -->\n5\n123' }] : [],
+    'PATCH /repos/acme/home/issues/9': (req) => { patched.push(req.postDataJSON()); return {}; },
+  });
+  const { context, page, errors, calls } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo#tokens', storage: asTester });
+  await startSignIn(page);
+  await page.evaluate(() => document.getElementById('tk-start').click());
+  await page.waitForFunction(() => { const b = document.querySelector('#msg .msgtask'); return b && b.getAttribute('data-state') !== 'live'; }, null, { timeout: 20000 });
+  for (let i = 0; i < 30 && !patched.length; i++) await sleep(100);
+  const box = await page.evaluate(() => { const b = document.querySelector('#msg .msgtask'); return { state: b.getAttribute('data-state'), head: b.querySelector('.msgtask__head').textContent, line: b.querySelector('.msgtask__line').textContent }; });
+  console.log('      task:', JSON.stringify(box), '| dispatched:', JSON.stringify(dispatched), '| closed:', JSON.stringify(patched));
+  assert.equal(box.state, 'done', 'the lend ended ' + box.state + ': ' + box.line);
+  assert.match(box.head, /Add your token to acme's pool on acme\/demo/);
+  assert.match(box.head, /Run #31/, 'the run in the repository that has the workflow was not followed');
+  assert.match(box.line, /now lent to acme\/demo too/);
+  assert.deepEqual(dispatched, [{ ref: 'trunk', inputs: { issue: '9', store: 'pool', lend_to: '123' } }]);
+  assert.deepEqual(patched, [{ state: 'closed', state_reason: 'completed' }]);
+  assert.ok(!calls.some((x) => /^POST \/repos\/acme\/demo\/(issues|actions)/.test(x.key)), 'something was opened or started in the repository with no workflow');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// the token side panel's width, set by its grip on a wide window and kept in this browser, never
+// squeezes the tiles: under the console's phone rules (900 px wide or 520 px tall) the panel stands
+// under the tiles at their width, and on a wide window it takes at most half the row
+await check('P22: a token side panel width kept from a wide window leaves the tiles their room on a narrow window, a phone held sideways and a wide one', async () => {
+  const extra = { 'GET /repos/acme/demo/actions/secrets': { total_count: 2, secrets: [{ name: 'CLAUDE_CODE_OAUTH_TOKEN' }, { name: 'SYMPHONY_CLAUDE_1' }] } };
+  const layouts = [
+    { name: 'narrow', viewport: { width: 820, height: 1000 }, mobile: false, column: true },
+    { name: 'sideways phone', viewport: { width: 844, height: 390 }, mobile: true, column: true },
+    { name: 'wide', viewport: { width: 1280, height: 900 }, mobile: false, column: false },
+  ];
+  for (const l of layouts) {
+    const storage = { local: Object.assign({}, asTester.local, { symphony_panel_layout: JSON.stringify({ tkside: 760 }) }) };
+    const { context, page, errors } = await open({ script: real, routes: signInRoutes([], extra), path: '/symphony/control/?repo=acme/demo#tokens', storage, viewport: l.viewport, mobile: l.mobile });
+    await loaded(page);
+    await page.waitForSelector('#tk-tile-1', { timeout: 10000 });
+    await page.evaluate(() => document.getElementById('tk-tile-1').click());
+    await page.waitForFunction(() => { const s = document.getElementById('tk-side'); return s && !s.hidden; }, null, { timeout: 5000 });
+    const m = await page.evaluate(() => {
+      const box = (id) => { const r = document.getElementById(id).getBoundingClientRect(); return { left: Math.round(r.left), top: Math.round(r.top), width: Math.round(r.width), bottom: Math.round(r.bottom) }; };
+      const wrap = document.getElementById('tk-tiles').parentElement.getBoundingClientRect();
+      return { tiles: box('tk-tiles'), side: box('tk-side'), wrap: Math.round(wrap.width) };
+    });
+    console.log('      ' + l.name + ':', JSON.stringify(m));
+    if (l.column) {
+      assert.ok(m.side.top >= m.tiles.bottom - 1, l.name + ': the side panel is not under the tiles');
+      assert.ok(m.tiles.width >= m.wrap - 2, l.name + ': the tiles do not take the row');
+      assert.ok(m.side.width <= m.wrap + 1, l.name + ': the side panel is wider than the row');
+    } else {
+      assert.ok(m.side.width <= m.wrap / 2 + 1, 'wide: the side panel takes more than half the row');
+      assert.ok(m.tiles.width >= m.wrap / 2 - 30, 'wide: the tiles were squeezed');
+    }
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+});
 
 await browser.close();
 console.log('\n' + results.join('\n'));

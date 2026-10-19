@@ -389,7 +389,7 @@ await check('A: with no provider set up, Connect cannot be pressed and one line 
   assert.equal(service.filter((s) => s.path === '/drive/config').length, 1);
   assert.equal(service.filter((s) => s.path !== '/drive/config').length, 0);
   assert.equal(authorize.length, 0);
-  assert.match(await page.textContent('#fd-browser'), /Connect OneDrive first/);
+  await page.waitForFunction(() => /Connect OneDrive first/.test(document.getElementById('fd-browser').textContent), null, { timeout: 8000 });
   await tabRead(page);
   assert.match(await page.textContent('#fd-tracked'), /acme\/demo tracks no drive yet/);
   assert.match(await page.textContent('body'), /Google Drive comes later/);
@@ -801,7 +801,9 @@ await check('E6: a connection Microsoft gave no refresh token is no connection: 
   const said1 = (await said(page)).filter((t) => /Microsoft gave no refresh token/.test(t));
   assert.deepEqual(said1, ['Microsoft gave no refresh token, so the sync could not run: the consent did not include keeping access when you are away. Press Connect OneDrive to try again.']);
   assert.equal(await page.textContent('#fd-connect'), 'Connect OneDrive');
-  assert.match(await page.textContent('#fd-browser'), /Connect OneDrive first/);
+  // the saved catalog's read, begun once the repository's record came in, may still be on its way
+  // and says so in the box; the prompt follows once it finds none
+  await page.waitForFunction(() => /Connect OneDrive first/.test(document.getElementById('fd-browser').textContent), null, { timeout: 8000 });
   assert.equal(await storageHolds(page, ACCESS), false);
   calls.length = 0;
   await page.click('#fd-track');
@@ -1209,7 +1211,7 @@ await check('N3: Forget the token drops the drive and what was ticked in it, so 
   assert.equal(await page.textContent('#fd-connect'), 'Connect OneDrive');
   assert.doesNotMatch(await page.textContent('#fd-connect-note'), /Connected/);
   assert.deepEqual(await page.$$eval('#fd-picked li', (l) => l.length), 0, 'what was ticked under the last sign-in is still ticked');
-  assert.match(await page.textContent('#fd-browser'), /Connect OneDrive first/);
+  await page.waitForFunction(() => /Connect OneDrive first/.test(document.getElementById('fd-browser').textContent), null, { timeout: 8000 });
   calls.length = 0;
   await page.click('#fd-track');
   await page.waitForFunction(() => /Connect OneDrive first/.test(document.getElementById('msg').textContent));
