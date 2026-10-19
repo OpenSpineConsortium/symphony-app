@@ -889,7 +889,7 @@ await check('N25: a refusal of the catalog read before the write asks for no wri
   await page.fill('#nb-d-title', 'Alpha read');
   await page.click('#nb-d-save');
   await page.waitForFunction(() => /was not written/.test(document.getElementById('msg').textContent), null, { timeout: 5000 });
-  assert.equal(await footText(page), 'notebooks.json on acme/demo was not written: The token may not do this (403: Resource protected by organization SAML enforcement.). A fine-grained token needs the permission the sign-in box names for it.');
+  assert.equal(await footText(page), 'notebooks.json on acme/demo was not written: The token may not do this (403: Resource protected by organization SAML enforcement.). A fine-grained token needs the permission the sign-in box names for it; make one at https://github.com/settings/personal-access-tokens/new.');
   assert.equal(stores['acme/demo'].puts.length, 0, 'nothing is sent');
   await context.close();
 });
@@ -1016,10 +1016,10 @@ await check('N30: a refusal is said in GitHub\'s words with what the change need
   };
   const integration = { status: 403, body: { message: 'Resource not accessible by integration' } };
   const byToken = ' Only an administrator of acme/alpha may change its visibility, with Administration: read and write on the token, and an organization may keep the change to its owners.';
-  assert.deepEqual(await refused({}, integration), { auth: ['Bearer github_pat_TEST'], words: 'GitHub did not make acme/alpha private: The token may not do this (403: Resource not accessible by integration). A fine-grained token needs the permission the sign-in box names for it.' + byToken });
+  assert.deepEqual(await refused({}, integration), { auth: ['Bearer github_pat_TEST'], words: 'GitHub did not make acme/alpha private: The token may not do this (403: Resource not accessible by integration). A fine-grained token needs the permission the sign-in box names for it; make one at https://github.com/settings/personal-access-tokens/new.' + byToken });
   assert.deepEqual(await refused({}, { status: 404, body: { message: 'Not Found' } }), { auth: ['Bearer github_pat_TEST'], words: 'GitHub did not make acme/alpha private: GitHub has nothing at /repos/acme/alpha (404): the repository, the branch or the file is not there, or the token does not reach it.' + byToken });
   // signed in with GitHub, the access is SymphonyBoard's, which the token's words would misname
-  assert.deepEqual(await refused({ byApp: true }, integration), { auth: ['Bearer ghu_TEST'], words: 'GitHub did not make acme/alpha private: The sign-in may not do this (403: Resource not accessible by integration): it acts within SymphonyBoard\'s permissions and your own access, on the repositories the App is installed on. Only an administrator of acme/alpha may change its visibility, with SymphonyBoard installed on it and its Administration permission accepted, and an organization may keep the change to its owners.' });
+  assert.deepEqual(await refused({ byApp: true }, integration), { auth: ['Bearer ghu_TEST'], words: 'GitHub did not make acme/alpha private: The sign-in may not do this (403: Resource not accessible by integration): it acts within SymphonyBoard\'s permissions and your own access, on the repositories the App is installed on. An administrator accepts the App\'s newest permissions at https://github.com/acme/alpha/settings/installations (Configure beside SymphonyBoard). Only an administrator of acme/alpha may change its visibility, with SymphonyBoard installed on it and its Administration permission accepted, and an organization may keep the change to its owners.' });
 });
 
 await check('N31: while GitHub is asked the button waits and says so, and a sign-out on the way leaves no lock for the next sign-in', async () => {
