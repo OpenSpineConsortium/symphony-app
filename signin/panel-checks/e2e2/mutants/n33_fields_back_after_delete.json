@@ -1,0 +1,1 @@
+[["nb.data = books.length ? data : { notebooks: [], left_out: Object.keys(nb.known) };", "nb.data = data;"]]

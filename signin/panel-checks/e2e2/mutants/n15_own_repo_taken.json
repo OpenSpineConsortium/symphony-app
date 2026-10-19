@@ -1,0 +1,1 @@
+[["        : r.toLowerCase() === nb.repo.split('/')[1].toLowerCase() ? 'That is the catalog\\'s own repository; a notebook gets a private repository of its own.'\n", ""]]

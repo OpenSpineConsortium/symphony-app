@@ -168,7 +168,26 @@ ghu_TEST or github_pat_X.
   suite alone), and holds that the storage is asked one plain read with no token and no header of
   GitHub's. XP9 switches the repository while the tab is open, and XP10 holds that an epic whose
   sub-issues could not be read says so.
-- `e2e2/mutants/`: 260 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/notebooks.test.mjs`: 26 checks of the console's Notebooks tab, /symphony/control/#notebooks
+  (site pull request #82, 2026-10-19), against a mocked GitHub that keeps notebooks.json and
+  catalog.json on the branch drive-catalog as GitHub does: read as objects with their sha, a file
+  over 1 MB by its blob, written over only with the sha it has (422 without one, 409 with another).
+  N1 to N9: the cards counted as the template's tools/notebook.py counts them, the side panel and
+  its https-only links, + with its dialog, the gear, the x and the last one deleting the file, a
+  public repository, no catalog, no proposal and one that does not hold together, the access a
+  refused write needs, another repository in the bar, and the phone. N10 to N18, from the first
+  review: a write goes over the sha drawn with the cards, never one read afresh, and a 409 or 422
+  reads the organizer's version; a rewritten catalog stops the write; the lock and the outcome
+  across a repository switch and a Refresh; a public notebook repository; a repository whose record
+  cannot be read; a notebook named add; a catalog of a thousand files over 1 MB; the side panel's
+  kept width on a narrow window. N19 to N23, from the second: a token refused mid-write leaves no
+  lock; an internal repository is no private one; a ruleset's 409 and a rate limit are said in
+  GitHub's words; a delete of a file already gone reads it again; "read again" is said only when it
+  is. N24 to N26, from the third: a refusal whose sha cannot be read again frees the lock, a refused
+  read before the write asks for no write access, and a write that lands after a sign-out and a
+  sign-in again frees no lock a later write holds; N19 and N20 grew there too (the lock a write after
+  a sign-in again holds, and the x on an internal repository's notebook).
+- `e2e2/mutants/`: 299 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
@@ -201,7 +220,10 @@ ghu_TEST or github_pat_X.
   against site branch claude/explore-tab on 2026-10-18, after its adversarial review. The 33 of
   the foot and the phone (`p*`, for P1 to P21; P22 is a stylesheet's, which no mutant of the
   script reaches, and was seen to fail with the old rule) were caught against site branch
-  claude/panel-feedback at f025b08 on 2026-10-19, where every other suite passes too.
+  claude/panel-feedback at f025b08 on 2026-10-19, where every other suite passes too. The 39 of
+  the Notebooks tab (`n*`, each naming notebooks.test.mjs) were caught against site branch
+  claude/notebooks at 1656fbb on 2026-10-19 after its third review, n35 to n39 for its findings, where
+  every other suite passes too; N6 to N9 and N18 have no mutant of their own (N9 and N18 hold the stylesheet, which no mutant of the script reaches).
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
   and every page action, visibility read and locator action on a selector first opens the tab that
@@ -229,7 +251,8 @@ ghu_TEST or github_pat_X.
    - `e2e2/run-mutants.sh` expects a server already on port 8077, or on the address `BASE`
      names, and reports each mutant as KILLED, SURVIVED, STALE or ERROR; name mutants to run only
      those, by their paths from e2e2/ (`bash run-mutants.sh mutants/g*.json` there runs the
-     Dependencies tab's, `mutants/f*.json` the Folders tab's).
+     Dependencies tab's, `mutants/f*.json` the Folders tab's, `mutants/n*.json` the Notebooks
+     tab's).
 
 The site sets the two constants to the live service and SymphonyBoard's Client ID (site pull
 request #24). The checks set them for themselves, whatever the shipped script holds: the
