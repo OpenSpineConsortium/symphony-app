@@ -1,1 +1,0 @@
-[["      if (asked !== catalogLoading || repo !== foldersRepo() || drive) return;\n      catalogBusy = false;\n      var data","      catalogBusy = false;\n      var data"]]

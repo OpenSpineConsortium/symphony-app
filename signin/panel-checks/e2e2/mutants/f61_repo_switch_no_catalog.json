@@ -1,1 +1,0 @@
-[["if (consoleTab === 'folders' && !drive) maybeCatalog();\n      return Promise.all([loadBoard(s)","return Promise.all([loadBoard(s)"]]

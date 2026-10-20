@@ -1,1 +1,1 @@
-[["$('fd-track-head').textContent = repo ? '3. Track in ' + repo : '3. Track';", "$('fd-track-head').textContent = '3. Track';"]]
+[["$('fd-track-head').textContent = repo ? 'Track in ' + repo : 'Track';", "$('fd-track-head').textContent = 'Track';"]]

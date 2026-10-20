@@ -1,1 +1,0 @@
-[["if (!catalogMode && officeApp(it)) openInApp(it); else openInBrowser(it);", "if (officeApp(it)) openInApp(it); else openInBrowser(it);"]]
