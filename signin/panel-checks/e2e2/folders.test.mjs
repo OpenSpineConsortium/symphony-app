@@ -379,9 +379,9 @@ await check('A: with no provider set up, Connect cannot be pressed and one line 
   await page.click('#rail-folders');
   await page.waitForFunction(() => /has not set OneDrive up/.test(document.getElementById('fd-connect-note').textContent));
   assert.equal(await page.isDisabled('#fd-connect'), true);
-  // the three steps in the side column, in the order they are taken, the third naming the repository
-  await page.waitForFunction(() => document.getElementById('fd-track-head').textContent === '3. Track in acme/demo');
-  assert.deepEqual(await page.$$eval('#tab-folders .folders__step h3', (l) => l.map((h) => h.textContent)), ['1. Connect the drive', '2. Make the repository', '3. Track in acme/demo']);
+  // the Track dialog's two steps, in the order they are taken, the second naming the repository
+  await page.waitForFunction(() => document.getElementById('fd-track-head').textContent === 'Track in acme/demo');
+  assert.deepEqual(await page.$$eval('#dlg-track .folders__step h3', (l) => l.map((h) => h.textContent)), ['Make the repository', 'Track in acme/demo']);
   assert.equal(await page.textContent('#fd-track'), 'Track');
   // the next step's button is the filled one: Connect, while no drive is held
   assert.deepEqual(await page.evaluate(() => [document.getElementById('fd-connect').classList.contains('console__primary'), document.getElementById('fd-track').classList.contains('console__primary')]), [true, false]);
@@ -529,7 +529,7 @@ await check('D: Track seals the refresh token for the public key, writes drive.j
   await page.check('#fd-items input[data-id="a1"]');
   await page.fill('#fd-folder', 'papers');
   assert.equal(await page.textContent('#fd-track'), 'Track');
-  assert.equal(await page.textContent('#fd-track-head'), '3. Track in acme/demo');
+  assert.equal(await page.textContent('#fd-track-head'), 'Track in acme/demo');
   calls.length = 0;
   // the day the page records is read on either side of the press, so a run across midnight holds
   const dayBefore = new Date().toISOString().slice(0, 10);
@@ -801,8 +801,7 @@ await check('E6: a connection Microsoft gave no refresh token is no connection: 
   const said1 = (await said(page)).filter((t) => /Microsoft gave no refresh token/.test(t));
   assert.deepEqual(said1, ['Microsoft gave no refresh token, so the sync could not run: the consent did not include keeping access when you are away. Press Connect OneDrive to try again.']);
   assert.equal(await page.textContent('#fd-connect'), 'Connect OneDrive');
-  // the saved catalog's read, begun once the repository's record came in, may still be on its way
-  // and says so in the box; the prompt follows once it finds none
+  // the explorer asks for the drive, and never for a saved catalog
   await page.waitForFunction(() => /Connect OneDrive first/.test(document.getElementById('fd-browser').textContent), null, { timeout: 8000 });
   assert.equal(await storageHolds(page, ACCESS), false);
   calls.length = 0;
@@ -1114,7 +1113,7 @@ await check('J: "Find the repository I just made" asks GitHub about each new one
   assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.getItem('symphony_panel_repos'))), ['acme/demo', 'acme/fresh']);
   assert.equal(await page.evaluate(() => localStorage.getItem('symphony_panel_repo')), 'acme/fresh');
   await page.waitForFunction(() => /acme\/fresh tracks no drive yet/.test(document.getElementById('fd-tracked').textContent));
-  assert.equal(await page.textContent('#fd-track-head'), '3. Track in acme/fresh');
+  assert.equal(await page.textContent('#fd-track-head'), 'Track in acme/fresh');
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -1286,7 +1285,7 @@ await check('N4: choosing another repository in the bar reads that repository\'s
     assert.doesNotMatch(f.tracked, /acme\/demo|thesis|Papers/, when + ': the last repository\'s state is shown');
     assert.equal(f.picked, 0, when + ': what the last repository\'s file ticked is still ticked');
     assert.equal(f.folder, 'papers', when + ': the last repository\'s folder is still in the box');
-    assert.equal(f.track, '3. Track in acme/other', when);
+    assert.equal(f.track, 'Track in acme/other', when);
   };
   await page.selectOption('#cp-repo', 'acme/other');
   await page.waitForFunction(() => /acme\/other tracks no drive yet/.test(document.getElementById('fd-tracked').textContent), null, { timeout: 10000 });
@@ -1394,8 +1393,8 @@ await check('N8: with no repository listed yet, the tab connects a drive, finds 
   await page.waitForSelector('#cp-app:not(.hidden)', { timeout: 15000 });
   await page.waitForFunction(() => /No repository listed yet/.test(document.getElementById('cp-summary').textContent), null, { timeout: 15000 });
   await page.click('#rail-folders');
-  await page.waitForFunction(() => /No repository is chosen: choose one in the bar, or make one in step 2\./.test(document.getElementById('fd-tracked').textContent));
-  assert.equal(await page.textContent('#fd-track-head'), '3. Track');
+  await page.waitForFunction(() => /No repository is chosen: choose one in the bar, or make one under Make the repository\./.test(document.getElementById('fd-tracked').textContent));
+  assert.equal(await page.textContent('#fd-track-head'), 'Track');
   assert.equal(await page.isDisabled('#fd-track'), true);
   await page.waitForFunction(() => !document.getElementById('fd-connect').disabled, null, { timeout: 15000 });
   await page.click('#fd-connect');
@@ -1409,7 +1408,7 @@ await check('N8: with no repository listed yet, the tab connects a drive, finds 
   await page.waitForFunction(() => /Added to the list: acme\/fresh\. acme\/fresh is chosen\./.test(document.getElementById('msg').textContent), null, { timeout: 15000 });
   await ready(page, 'acme/fresh');
   await tabRead(page, 'acme/fresh');
-  assert.equal(await page.textContent('#fd-track-head'), '3. Track in acme/fresh');
+  assert.equal(await page.textContent('#fd-track-head'), 'Track in acme/fresh');
   assert.equal(await page.isDisabled('#fd-track'), false);
   assert.equal(await page.textContent('#fd-connect'), 'Connect OneDrive again', 'the drive was dropped when the repository was found');
   assert.deepEqual(await page.$$eval('#fd-picked li code', (l) => l.map((c) => c.textContent)), ['notes.docx']);
@@ -1466,30 +1465,30 @@ await check('N6: at 1366 x 657 the tab keeps its words inside itself, its lists 
   await context.close();
 });
 
-// the longest names GitHub allows run past any button, so the third step's head wraps them and
-// Track keeps its place in the side column, at a laptop's size and a phone's
+// the longest names GitHub allows run past any button, so the Track step's head wraps them and
+// Track keeps its place in the Track dialog, at a laptop's size and a phone's
 const LONG = 'acme-research-laboratory/the-thesis-chapters-and-their-reviews-for-2026';
 for (const [name, viewport] of [['N6b', { width: 1366, height: 657 }], ['N6c', { width: 390, height: 844 }]]) {
-  await check(name + ': at ' + viewport.width + ' x ' + viewport.height + ' a long repository name wraps in the third step\'s head, and Track stays inside the side column and the window' + (viewport.width > 900 ? ', in view without scrolling the column' : ''), async () => {
+  await check(name + ': at ' + viewport.width + ' x ' + viewport.height + ' a long repository name wraps in the Track step\'s head, and Track stays inside the Track dialog and the window', async () => {
     const env = await open({ viewport, repos: [LONG] });
     const { context, page, errors } = env;
     await ready(page, LONG);
     await page.click('#rail-folders');
     await tabRead(page, LONG);
+    await page.click('#fd-track-open');
+    await page.waitForFunction(() => document.getElementById('dlg-track').open);
+    await page.evaluate(() => document.getElementById('fd-track').scrollIntoView({ block: 'nearest' }));
     const m = await page.evaluate(() => {
       const box = (n) => { const r = n.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width }; };
       const head = document.getElementById('fd-track-head');
-      return { side: box(document.querySelector('#tab-folders .console__col--side .admin__box')), track: box(document.getElementById('fd-track')), head: head.textContent, headOver: head.scrollWidth - head.clientWidth, winW: innerWidth, winH: innerHeight, docW: document.documentElement.scrollWidth };
+      return { dialog: box(document.getElementById('dlg-track')), track: box(document.getElementById('fd-track')), head: head.textContent, headOver: head.scrollWidth - head.clientWidth, winW: innerWidth, winH: innerHeight, docW: document.documentElement.scrollWidth };
     });
     console.log('      ' + JSON.stringify(m));
-    assert.equal(m.head, '3. Track in ' + LONG);
+    assert.equal(m.head, 'Track in ' + LONG);
     assert.ok(m.headOver <= 1, 'the head runs past its box by ' + m.headOver);
     assert.ok(m.track.width > 0, 'Track is not drawn');
-    assert.ok(m.track.left >= m.side.left - 1 && m.track.right <= m.side.right + 1, 'Track runs out of the side column: ' + JSON.stringify(m));
-    assert.ok(m.track.right <= m.winW, 'Track runs past the window\'s right edge');
-    // at a laptop's size the side column is a box of its own height, and Track is in view in it
-    // without scrolling it, as the tab's main action
-    if (viewport.width > 900) assert.ok(m.track.top >= m.side.top - 1 && m.track.bottom <= Math.min(m.side.bottom, m.winH) + 1, 'Track is below the side column\'s fold: ' + JSON.stringify({ track: m.track, side: m.side }));
+    assert.ok(m.track.left >= m.dialog.left - 1 && m.track.right <= m.dialog.right + 1, 'Track runs out of the dialog: ' + JSON.stringify(m));
+    assert.ok(m.track.right <= m.winW && m.track.bottom <= m.winH + 1, 'Track runs past the window: ' + JSON.stringify(m));
     assert.ok(m.docW <= m.winW, 'the page scrolls sideways');
     assert.deepEqual(errors, []);
     await context.close();
@@ -1647,9 +1646,9 @@ await check('N7: Folders is a tab of the console, at /symphony/control/#folders:
   await context.close();
 });
 
-// The saved-catalog route: with no drive connected, a private repository that has a catalog.json on
-// its drive-catalog branch (the drive organizer writes it) is browsed read-only in the same
-// explorer. The catalog is a flat list of folders and files whose paths start with "OneDrive/"; some
+// The saved catalog, a catalog.json on a private repository's drive-catalog branch that the drive
+// organizer wrote through the connector, is never shown in the Folders tab: the tab is the live
+// drive alone, read through Microsoft's own sign-in (the owner, 2026-10-20). The catalog is a flat list of folders and files whose paths start with "OneDrive/"; some
 // files carry no web address or modified date (unknown, not an error), and mime is empty, so the
 // kind comes from the name. One file name is hostile, to show it stays text.
 const catalogData = {
@@ -1675,186 +1674,64 @@ function catalogRoutes(o) {
   routes['GET /repos/acme/demo/contents/catalog.json'] = { raw: JSON.stringify(catalogData) };
   return routes;
 }
-await check('CAT1: with no drive connected a private repository\'s saved catalog is drawn in the same explorer, read from the drive-catalog branch with the person\'s token, and nothing is asked of Microsoft', async () => {
+await check('NC1: with no drive connected, a private repository that holds a saved catalog shows only the connect prompt: catalog.json is never read and the tab says nothing of a catalog or a connector', async () => {
   const env = await open({ routes: catalogRoutes() });
-  const { context, page, calls, graph, service, errors } = env;
+  const { context, page, calls, graph, errors } = env;
   await ready(page);
   await page.click('#rail-folders');
-  await listed(page);
-  // the catalog's root: the folder first, then the files by name, drawn read-only
-  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent)), ['Papers', HOSTILE, 'notes.docx']);
-  assert.match(await page.textContent('#fd-browser'), /saved OneDrive catalog/);
-  assert.match(await page.textContent('#fd-status'), /From the saved catalog/);
-  // read with the person's GitHub token, from the drive-catalog branch, with no call to Microsoft
-  const read = calls.find((c) => c.key === 'GET /repos/acme/demo/contents/catalog.json');
-  assert.ok(read && /[?&]ref=drive-catalog/.test(read.url), 'the catalog was not read from the drive-catalog branch');
-  assert.ok(/github_pat/.test(read.auth), 'the catalog was read without the person\'s GitHub token');
-  assert.deepEqual(graph, [], 'Microsoft Graph was called for a saved catalog');
-  assert.deepEqual(service.filter((s) => s.path === '/drive/connect' || s.path === '/drive/token').map((s) => s.path), [], 'the drive sign-in ran for a saved catalog');
-  // the tree lists the catalog's folders, and opening one shows its children
-  await page.click('#fd-tree .fx__nodename:has-text("Papers")');
-  await page.waitForFunction(() => /one\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
-  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent)), ['Drafts', 'one.docx']);
-  assert.deepEqual(errors, []);
-  await context.close();
-});
-await check('CAT2: the saved catalog is read-only: every tick is disabled, and the right-click menu offers no tracking and no Office app, only opening', async () => {
-  const env = await open({ routes: catalogRoutes() });
-  const { context, page, errors } = env;
-  await ready(page);
-  await page.click('#rail-folders');
-  await listed(page);
-  assert.equal(await page.$$eval('#fd-items input[data-id]', (l) => l.every((b) => b.disabled)), true, 'a catalog tick could be ticked');
-  assert.equal(await page.$$eval('#fd-items input[data-id]', (l) => l.length), 3);
-  // a file: only "Open in the browser", never Word and never Tick
-  await page.click('#fd-items tr[data-item="c-a1"] .fx__name', { button: 'right' });
-  assert.deepEqual(await page.$$eval('#fd-menu button', (l) => l.map((b) => b.textContent)), ['Open in the browser']);
-  // a folder: Open and Open in OneDrive, still no Tick (the new menu replaces the old)
-  await page.click('#fd-items tr[data-item="cf1"] .fx__name', { button: 'right' });
-  assert.deepEqual(await page.$$eval('#fd-menu button', (l) => l.map((b) => b.textContent)), ['Open', 'Open in OneDrive']);
-  assert.deepEqual(errors, []);
-  await context.close();
-});
-await check('CAT3: in the saved catalog a double-click opens a file at its web address in the browser, a file the catalog gave no address is not opened but said so, and nothing is written to GitHub', async () => {
-  const env = await open({ routes: catalogRoutes() });
-  const { context, page, calls, errors } = env;
-  await ready(page);
-  await page.click('#rail-folders');
-  await listed(page);
-  await recordOpens(page);
-  // a .docx in the catalog opens in the browser (never Word), at the web address the catalog holds
-  await page.dblclick('#fd-items tr[data-item="c-a1"] .fx__name');
-  assert.deepEqual(await page.evaluate(() => window.__opened), ['window:https://onedrive.live.com/?id=c-a1']);
-  // down into Papers, then Drafts, to the file with no address: it is not opened, and said so
-  await page.dblclick('#fd-items tr[data-item="cf1"] .fx__name');
-  await page.waitForFunction(() => /Drafts/.test((document.getElementById('fd-items') || {}).textContent || ''));
-  await page.dblclick('#fd-items tr[data-item="cf2"] .fx__name');
-  await page.waitForFunction(() => /draft\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
-  await page.dblclick('#fd-items tr[data-item="c-d1"] .fx__name');
-  assert.match(await page.textContent('#msg'), /gave no address for draft\.docx/);
-  assert.deepEqual(await page.evaluate(() => window.__opened), ['window:https://onedrive.live.com/?id=c-a1'], 'the addressless file was opened anyway');
-  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), [], 'the saved catalog wrote to GitHub');
-  assert.deepEqual(errors, []);
-  await context.close();
-});
-await check('CAT4: a public repository never reads a saved catalog: the explorer shows the connect prompt and catalog.json is never fetched', async () => {
-  const env = await open({ routes: catalogRoutes({ public: true }) });
-  const { context, page, calls, errors } = env;
-  await ready(page);
-  await page.click('#rail-folders');
+  await tabRead(page);
   await page.waitForFunction(() => /Connect OneDrive first/.test(document.getElementById('fd-browser').textContent), null, { timeout: 15000 });
-  assert.equal(calls.some((c) => c.key === 'GET /repos/acme/demo/contents/catalog.json'), false, 'a public repository\'s catalog.json was read');
-  assert.equal(await page.$('#fd-items input[data-id]'), null, 'a public repository drew a catalog list');
+  await sleep(500);
+  assert.equal(calls.some((c) => c.key === 'GET /repos/acme/demo/contents/catalog.json'), false, 'the Folders tab read catalog.json');
+  assert.equal(await page.$('#fd-items'), null, 'a list was drawn without a drive');
+  const words = await page.evaluate(() => document.getElementById('tab-folders').innerText + ' ' + document.getElementById('msg').textContent);
+  assert.doesNotMatch(words, /catalog/i, 'the tab speaks of a catalog');
+  assert.doesNotMatch(words, /connector/i, 'the tab offers the connector');
+  assert.deepEqual(graph, []);
   assert.deepEqual(errors, []);
   await context.close();
 });
-await check('CAT5: connecting a drive replaces the saved catalog with the live drive, and tracking is possible again', async () => {
-  const env = await open({ routes: catalogRoutes() });
+await check('NC2: at 1440 x 900 the explorer is the whole tab: no side column, the window fills the tab under its one-line head, and the page never scrolls', async () => {
+  const env = await open({ viewport: { width: 1440, height: 900 } });
   const { context, page, errors } = env;
-  await ready(page);
-  await page.click('#rail-folders');
-  await listed(page);
-  assert.match(await page.textContent('#fd-browser'), /saved OneDrive catalog/, 'the catalog was not shown first');
-  assert.equal(await page.$$eval('#fd-items input[data-id]', (l) => l.every((b) => b.disabled)), true);
-  // connect a drive: the live drive takes the explorer, its ticks work, the catalog banner is gone
   await connect(env);
-  await page.waitForFunction(() => { const b = document.querySelector('#fd-items input[data-id]'); return !!b && !b.disabled; }, null, { timeout: 15000 });
-  assert.doesNotMatch(await page.textContent('#fd-browser'), /saved OneDrive catalog/, 'the catalog banner stayed after connecting');
-  await page.check('#fd-items input[data-id="a1"]');
+  await listed(page);
+  await tabRead(page);
+  const m = await page.evaluate(() => {
+    const box = (n) => { const r = n.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; };
+    const tab = document.getElementById('tab-folders');
+    return {
+      parts: Array.prototype.map.call(tab.children, (n) => n.id || n.className),
+      side: !!tab.querySelector('.console__col--side, .console__cols'),
+      tab: box(tab), head: box(tab.querySelector('.folders__head')), win: box(tab.querySelector('.fx')),
+      scrollY: window.scrollY, docH: document.documentElement.scrollHeight, winH: innerHeight,
+    };
+  });
+  console.log('      ' + JSON.stringify(m));
+  assert.equal(m.side, false, 'the tab still has a side column');
+  assert.deepEqual(m.parts, ['console__head folders__head', 'fd-browser']);
+  assert.ok(m.head.height < 60, 'the head takes ' + m.head.height + 'px');
+  assert.ok(m.win.width >= m.tab.width - 2, 'the explorer is ' + m.win.width + 'px of the tab\'s ' + m.tab.width);
+  assert.ok(m.win.bottom >= m.tab.bottom - 2 && m.win.top <= m.head.bottom + 12, 'the explorer leaves the tab\'s height unused: ' + JSON.stringify(m));
+  assert.equal(m.scrollY, 0);
+  assert.ok(m.docH <= m.winH, 'the page scrolls');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('NC3: Track in a repository opens a dialog holding what is ticked and the steps, and Escape closes it with the explorer as it was', async () => {
+  const env = await open({});
+  const { context, page, errors } = env;
+  await connect(env);
+  await listed(page);
+  await page.click('#fd-items input[data-id="a1"]');
+  assert.equal(await page.evaluate(() => document.getElementById('dlg-track').open), false);
+  await page.click('#fd-track-open');
+  await page.waitForFunction(() => document.getElementById('dlg-track').open);
+  assert.deepEqual(await page.evaluate(() => ['fd-tracked', 'fd-picked', 'fd-create', 'fd-reload', 'fd-folder', 'fd-track'].map((id) => !!document.getElementById(id).closest('#dlg-track'))), [true, true, true, true, true, true]);
+  assert.deepEqual(await page.$$eval('#fd-picked li code', (l) => l.map((c) => c.textContent)), ['notes.docx']);
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.getElementById('dlg-track').open);
   assert.equal(await page.isChecked('#fd-items input[data-id="a1"]'), true);
-  assert.deepEqual(errors, []);
-  await context.close();
-});
-await check('CAT6: a hostile file name in the catalog is drawn as text, never as markup, and runs nothing', async () => {
-  const env = await open({ routes: catalogRoutes() });
-  const { context, page, errors } = env;
-  await ready(page);
-  await page.click('#rail-folders');
-  await listed(page);
-  const names = await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent));
-  assert.ok(names.includes(HOSTILE), 'the hostile name was changed or dropped');
-  assert.equal(await page.$$eval('#fd-items img', (l) => l.length), 0, 'the catalog injected an image');
-  assert.equal(await page.evaluate(() => !!window.__hostile), false, 'the catalog ran a script from a name');
-  assert.deepEqual(errors, []);
-  await context.close();
-});
-await check('CAT7: in the saved catalog the keyboard Space never ticks, since the whole catalog is read-only', async () => {
-  const env = await open({ routes: catalogRoutes() });
-  const { context, page, calls, errors } = env;
-  await ready(page);
-  await page.click('#rail-folders');
-  await listed(page);
-  // select a file row by clicking its name, then focus the list and press Space, the keyboard's tick
-  await page.click('#fd-items tr[data-item="c-a1"] .fx__name');
-  await page.focus('#fd-main');
-  await page.keyboard.press('Space');
-  // nothing is ticked: the keyboard path respects the read-only catalog as the disabled boxes do
-  assert.equal(await page.$$eval('#fd-picked li', (l) => l.length), 0, 'the keyboard Space ticked a catalog item');
-  assert.match(await page.textContent('#fd-picked-head'), /Nothing ticked yet/);
-  assert.match(await page.textContent('#fd-status'), /From the saved catalog/);
-  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), [], 'the saved catalog wrote to GitHub');
-  assert.deepEqual(errors, []);
-  await context.close();
-});
-await check('CAT8: choosing another private repository reads and draws that repository\'s own saved catalog, and a late answer about the last one is dropped', async () => {
-  const catalogOther = {
-    provider: 'microsoft', made: today + 'T09:00:00Z', complete: true, problems: [], totals: { folders: 1, files: 1 },
-    folders: [{ path: 'OneDrive/Grants', id: 'og1', drive: 'drive1', web: 'https://onedrive.live.com/?id=og1', files: 1, bytes: 10, latest: now }],
-    files: [{ path: 'OneDrive/budget.xlsx', id: 'o-a1', drive: 'drive1', name: 'budget.xlsx', mime: '', size: 99, modified: now, web: 'https://onedrive.live.com/?id=o-a1', kind: 'sheet', native: true }],
-  };
-  const routes = repoRoutes({}, ['acme/demo', 'acme/other']);
-  let slow = false;
-  // acme/demo's catalog can be made slow, to answer after the chosen repository has changed
-  routes['GET /repos/acme/demo/contents/catalog.json'] = async () => { if (slow) await sleep(1500); return { raw: JSON.stringify(catalogData) }; };
-  routes['GET /repos/acme/other/contents/catalog.json'] = { raw: JSON.stringify(catalogOther) };
-  const env = await open({ routes, repos: ['acme/demo', 'acme/other'] });
-  const { context, page, calls, errors } = env;
-  await ready(page);
-  await page.click('#rail-folders');
-  await listed(page);
-  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent)), ['Papers', HOSTILE, 'notes.docx']);
-  // choose acme/other: its own catalog is read from its drive-catalog branch, with the token, and drawn
-  await page.selectOption('#cp-repo', 'acme/other');
-  await page.waitForFunction(() => /budget\.xlsx/.test((document.getElementById('fd-items') || {}).textContent || ''), null, { timeout: 15000 });
-  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent)), ['Grants', 'budget.xlsx']);
-  assert.doesNotMatch(await page.textContent('#fd-items'), /notes\.docx|Papers/, 'the last repository\'s catalog is still shown');
-  const read = calls.find((c) => c.key === 'GET /repos/acme/other/contents/catalog.json');
-  assert.ok(read && /[?&]ref=drive-catalog/.test(read.url) && /github_pat/.test(read.auth), 'acme/other\'s catalog was not read from its drive-catalog branch with the person\'s token');
-  // back to acme/demo, whose catalog is slow, and on to acme/other before it comes: the late answer is dropped
-  slow = true;
-  await page.selectOption('#cp-repo', 'acme/demo');
-  await page.selectOption('#cp-repo', 'acme/other');
-  await page.waitForFunction(() => /budget\.xlsx/.test((document.getElementById('fd-items') || {}).textContent || ''), null, { timeout: 15000 });
-  await sleep(2200);
-  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent)), ['Grants', 'budget.xlsx'], 'acme/demo\'s late catalog overwrote acme/other\'s');
-  assert.deepEqual(errors, []);
-  await context.close();
-});
-await check('CAT9: two catalog folders that share an id keep their own children and never merge or loop', async () => {
-  const dupData = {
-    provider: 'microsoft', made: today + 'T09:00:00Z', complete: true, problems: [], totals: { folders: 2, files: 2 },
-    folders: [
-      { path: 'OneDrive/Alpha', id: 'dup', drive: 'drive1', web: '', files: 1, bytes: 1, latest: now },
-      { path: 'OneDrive/Beta', id: 'dup', drive: 'drive1', web: '', files: 1, bytes: 1, latest: now },
-    ],
-    files: [
-      { path: 'OneDrive/Alpha/a.docx', id: 'd-a', drive: 'drive1', name: 'a.docx', mime: '', size: 1, modified: now, web: '', kind: 'doc', native: true },
-      { path: 'OneDrive/Beta/b.docx', id: 'd-b', drive: 'drive1', name: 'b.docx', mime: '', size: 1, modified: now, web: '', kind: 'doc', native: true },
-    ],
-  };
-  const routes = repoRoutes({}, ['acme/demo']);
-  routes['GET /repos/acme/demo/contents/catalog.json'] = { raw: JSON.stringify(dupData) };
-  const env = await open({ routes });
-  const { context, page, errors } = env;
-  await ready(page);
-  await page.click('#rail-folders');
-  await listed(page);
-  // the root lists both folders despite the shared id
-  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent).sort()), ['Alpha', 'Beta']);
-  // opening Alpha shows only its own child, never Beta's: the shared id did not merge the two
-  await page.dblclick('#fd-items .fx__name:has-text("Alpha")');
-  await page.waitForFunction(() => /a\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''), null, { timeout: 15000 });
-  assert.deepEqual(await page.$$eval('#fd-items tbody tr .fx__name', (l) => l.map((n) => n.textContent)), ['a.docx'], 'Alpha showed another folder\'s children');
   assert.deepEqual(errors, []);
   await context.close();
 });

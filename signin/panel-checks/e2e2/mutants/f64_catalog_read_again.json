@@ -1,0 +1,1 @@
+[["    else drawBrowser();\n    if (foldersFor !== foldersRepo()) loadFolders();", "    else { if (foldersRepo()) nbRead(foldersRepo(), CATALOG_FILE).catch(function () {}); drawBrowser(); }\n    if (foldersFor !== foldersRepo()) loadFolders();"]]

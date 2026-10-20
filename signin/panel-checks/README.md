@@ -344,7 +344,7 @@ ghu_TEST or github_pat_X.
   page.evaluate,
   which opens nothing, so the page and not console-tabs.mjs is seen opening the tab. A check that
   wants the drawing recorded instead of made serves a stand-in for the library on its route.
-- `e2e2/folders.test.mjs`: 63 checks of the console's Folders tab, /symphony/control/#folders
+- `e2e2/folders.test.mjs`: 57 checks of the console's Folders tab, /symphony/control/#folders
   (site branch claude/folders-page, 2026-10-18; the tab took the place of the page folders.html
   before that page shipped), against a mocked Microsoft consent page, a mocked Microsoft Graph,
   the mocked service's three `/drive` routes and a mocked GitHub that keeps what Track writes as
@@ -387,27 +387,25 @@ ghu_TEST or github_pat_X.
   file and GitHub's list stay text; with no repository listed, a drive is connected, the
   repository just made is found and tracked into (N8); at 1366 x 657 the tab keeps its words
   inside itself and the window stays at 0 after Connect's return and after Track, and a long
-  repository name wraps in the third step's head with Track inside the side column at 1366 x 657
+  repository name wraps in the Track step's head with Track inside the Track dialog at 1366 x 657
   and 390 x 844 (N6b, N6c); and folders.html is gone, linked from nowhere, while #folders opens
   the tab. B, C, D, E3, I and L scan every request, the console, #msg, the markup, the fields, the
   address and the storage for the drive's tokens, which go only to Graph's Authorization header,
   to /drive/token and, sealed, into the secret. Its mutants
-  are `e2e2/mutants/f*.json`, 63, run as the section below says. X1 to X4 hold the list drawn
+  are `e2e2/mutants/f*.json`, 58, run as the section below says. X1 to X4 hold the list drawn
   as a file explorer (site branch claude/folders-explorer, 2026-10-18): the folder tree, Back,
   Forward, Up and the keyboard, Details' four columns and the status bar; a Word file opened for
   editing in Word at its d.docs.live.net address on a personal drive and at the address OneDrive
   gives on a work drive, never an address that is not https, other files on OneDrive's page, and
-  the right-click menu; Large icons, sorting with folders first, and the search box. CAT1 to
-  CAT9 hold the saved catalog drawn in the same explorer when no drive is connected (site branch
-  claude/folders-catalog, 2026-10-18): a private repository's catalog.json on its drive-catalog
-  branch, read with the person's GitHub token and nothing asked of Microsoft, drawn read-only
-  with every tick disabled and neither Track nor an Office app in the menu; a file opened at its
-  web address in the browser and one the catalog gave no address said so, with nothing written to
-  GitHub; a public repository never read, its catalog.json left alone; a connected drive taking
-  the saved catalog's place so tracking works again; a hostile name kept as text; the keyboard's
-  Space never ticking in the read-only catalog; choosing another private repository drawing that
-  repository's own catalog, with a late answer about the last one dropped; and two folders that
-  share an id keeping their own children, never merging or looping.
+  the right-click menu; Large icons, sorting with folders first, and the search box. NC1 to NC3
+  hold the tab as the owner asked on 2026-10-20 (a native File Explorer view of the drive, the right
+  side panel removed, the connector's saved catalog never offered; site branch claude/folders-native):
+  with no drive a private repository holding a catalog.json shows only the connect prompt, never
+  reads the file and says nothing of a catalog or a connector (NC1); at 1440 x 900 the tab is its
+  one-line head over the explorer, which fills the rest, with no side column and no page scroll
+  (NC2); and Track in a repository opens the dialog that holds what is ticked and the two steps,
+  Escape closing it with the explorer as it was (NC3). CAT1 to CAT9, the saved catalog drawn when no
+  drive was connected (claude/folders-catalog, 2026-10-18), were retired with that route.
 - `e2e2/explore.test.mjs`: 10 checks of the console's Explore tab, /symphony/control/#explore
   (site branch claude/explore-tab, 2026-10-18), against a mocked GitHub: a goal over an epic over
   three tasks, a draft pull request on one task's claim branch, one run with one job of four steps,
@@ -716,12 +714,13 @@ ghu_TEST or github_pat_X.
   tab, AV), whose stage now fits its chart either way, and s05 (BA), aimed now at both rules that
   keep a finger's touch for the stage, its own and the tab's, since the tab's, from the zoom's
   review, holds every stage in it alone and the Board's stage sets its own.
-  The 63 of the Folders tab (`f*`, each with a `.json.suite` naming
+  The 58 of the Folders tab (`f*`, each with a `.json.suite` naming
   folders.test.mjs) were caught against site branch claude/folders-explorer on 2026-10-18, the first
   48 also against the site's script at commit 044b8b3, f06 rewritten for the explorer's name cell;
-  f56 to f63, the saved catalog's, against site branch claude/folders-catalog the same day, f60 to
-  f63 for CAT7 to CAT9 (CAT5 and CAT6 are held by the checks alone, since a connect reloads the page
-  and a name is kept as text by the shared drawing, so no single line of the catalog carries them).
+  f56 to f63, the saved catalog's, were retired with it on 2026-10-20, and f64 to f66 (the catalog
+  read again, the catalog offered in words, the explorer narrowed) and f45 with the steps' new
+  names were caught against site branch claude/folders-native that day (NC3 is held by the check
+  alone, since the dialog is markup no line of the script carries).
   The 24 of the Explore tab (`x*`, each naming explore.test.mjs) were caught against site branch
   claude/explore-tab on 2026-10-18, after its adversarial review. The 33 of the foot and the phone
   (`p*`, for P1 to P21; P22 and P23 are the stylesheet's, which no mutant of the script reaches, and
