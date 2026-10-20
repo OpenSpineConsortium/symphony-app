@@ -1,1 +1,1 @@
-[["    var d = drive;\n    forgetKept(d && d.login || shownLogin);\n    dropDrive();", "    dropDrive();"]]
+[["    forgetKept(d && d.login || shownLogin, '', globus ? 'globus' : 'microsoft');\n    dropDrive();", "    dropDrive();"]]

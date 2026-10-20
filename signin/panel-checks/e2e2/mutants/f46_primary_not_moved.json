@@ -1,1 +1,1 @@
-[["$('fd-track').classList.toggle('console__primary', !!drive);", ""]]
+[["$('fd-track').classList.toggle('console__primary', !!drive && !onGlobus());", ""]]

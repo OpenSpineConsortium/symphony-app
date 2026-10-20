@@ -1,1 +1,1 @@
-[["    if (!drive && token && shownLogin) drive = keptFor(shownLogin);", "    if (!drive && token && shownLogin && false) drive = keptFor(shownLogin);"]]
+[["    if (!drive && token && shownLogin) {\n      var first", "    if (!drive && token && shownLogin && false) {\n      var first"]]
