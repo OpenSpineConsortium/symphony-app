@@ -2269,7 +2269,7 @@ await check('FA12: the View menu offers Explorer\'s six views; each draws every 
   const { context, page, graph, errors } = env;
   assert.match(graph.find((c) => c.key === 'GET /v1.0/me/drive/root/children').query, /\$expand=thumbnails\(\$select=medium\)/);
   await page.click('#fx-cmd-view');
-  assert.deepEqual(await page.$$eval('#fd-menu button', (l) => l.map((b) => b.textContent.trim())), ['Large icons', 'Small icons', 'List', '✓ Details', 'Tiles', 'Content']);
+  assert.deepEqual(await page.$$eval('#fd-menu button', (l) => l.map((b) => b.textContent.trim())), ['Large icons', 'Small icons', 'List', '\u2713 Details', 'Tiles', 'Content']);
   await page.keyboard.press('Escape');
   for (const [name, cls, thumb] of [['Small icons', 'fx__flow--small', false], ['List', 'fx__flow--list', false], ['Tiles', 'fx__flow--tiles', true], ['Content', 'fx__flow--content', true], ['Large icons', 'fx__grid', true]]) {
     await page.click('#fx-cmd-view');
@@ -2367,7 +2367,7 @@ await check('FA15: a key on a column heading or a tick is that control\'s: Enter
   await page.focus('#fd-items thead .fx__sort:has-text("Size")');
   await page.keyboard.press('Enter');
   assert.deepEqual(await page.evaluate(() => window.__opened), [], 'Enter on a heading opened the selected file');
-  assert.match(await page.textContent('#fd-items thead'), /Size ▴/, 'Enter on the heading did not sort');
+  assert.match(await page.textContent('#fd-items thead'), /Size \u25b4/, 'Enter on the heading did not sort');
   await page.focus('#fd-items thead .fx__sort:has-text("Name")');
   await page.keyboard.press('Space');
   assert.equal(await page.isChecked('#fd-items input[data-id="a1"]'), false, 'Space on a heading ticked the selected row');
