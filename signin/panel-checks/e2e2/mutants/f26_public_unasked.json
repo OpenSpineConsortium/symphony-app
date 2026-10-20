@@ -1,1 +1,1 @@
-[["if (isPublic(r.data) && !$('fd-public').checked) {", "if (false) {"]]
+[["      // once the person has ticked that they know it\n      if (isPublic(r.data) && !$('fd-public').checked) {", "      // once the person has ticked that they know it\n      if (false) {"]]
