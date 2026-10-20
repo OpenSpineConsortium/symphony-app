@@ -45,11 +45,14 @@ class ManifestTest(unittest.TestCase):
         # repository's secret, and for the Tokens tab on a personal account's repository; repository
         # Variables, for that same Tokens tab, which holds a slot's settings and the account list as
         # the repository's own Actions variables; Codespaces and Codespaces user secrets, which it
-        # says the App no longer uses, are not asked for again
+        # says the App no longer uses, are not asked for again; and, since the owner's rule of
+        # 2026-10-20 that the App applies a copy's settings itself, Pages, for the documentation
+        # site
         self.assertEqual(manifest["default_permissions"], {"contents": "write", "issues": "write",
                                                            "pull_requests": "write", "checks": "write",
                                                            "workflows": "write", "actions": "write",
-                                                           "administration": "write", "secrets": "write",
+                                                           "administration": "write", "pages": "write",
+                                                           "secrets": "write",
                                                            "actions_variables": "write",
                                                            "metadata": "read",
                                                            "organization_secrets": "write",

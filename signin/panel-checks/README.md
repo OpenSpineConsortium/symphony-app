@@ -873,8 +873,13 @@ ghu_TEST or github_pat_X.
   p20), the foot's grip followed by a scroll of the page (p76, p83), and the bar and the deck on
   a page that scrolls (c04, c20, c26). Their files stay, so a layout that lets the page scroll
   again finds them; the code they reach may go with its owner's next change. Of the Folders
-  tab's, f43 survives on site master at 25159ab as here, and f129 survived one run here and was
-  caught on two runs after it, a timing of the Folders checks' own.
+  tab's, f129 survived one run here and was caught on two runs after it, a timing of the Folders
+  checks' own. f43 survived on site master from 25159ab (#111) on, not for anything the home
+  screen changed: since #111 the connection is kept on the browser and heldDrive() restores it,
+  so the mutant's `drive = null` in Track's catch was undone at the next Track and changed nothing
+  a person could see (it was caught against 5deb848, the commit before). It now drops the drive as
+  the panel holds it since, `forgetKept(account)` beside `drive = null`, and E5 catches it on
+  master at 6816610 (#112), the second Track asking for Connect where it should write again.
 - `e2e2/css-mutants/`: 28 lists of pairs for the stylesheet control.css, each with its `.json.only`,
   for the part of the foot and the bar that is the stylesheet's, which no mutant of the script
   reaches; `run-mutants.sh` serves a path under css-mutants/ in place of control.css through
