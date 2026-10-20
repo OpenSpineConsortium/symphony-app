@@ -200,8 +200,12 @@ pull requests" that a new organization holds off for its repositories
 14), and the organization's Secrets and Variables (write), to add the
 repository adopted to the lists of repositories that read the requester's
 own token slots of the organization's pool and the pool's two variables
-(symphony-start#72; the Apps' privacy statement, version 32), and nothing
-else, no webhook and no events, and an adopter
+(symphony-start#72; the Apps' privacy statement, version 32), and, on
+the repository, Pages and Variables (write), with which the run turns on
+GitHub Pages built by GitHub Actions and sets the variable SYMPHONY_DOCS
+for the whole template's documentation site, on a token of its own so an
+installation that has not accepted them still adopts (symphony-start#89),
+and nothing else, no webhook and no events, and an adopter
 installs it on the one repository for that one run and uninstalls it
 afterwards; the run mints its token for that repository alone, and the
 repository's settings need no step by hand.
