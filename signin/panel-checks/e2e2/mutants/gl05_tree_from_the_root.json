@@ -1,0 +1,1 @@
+[["var top = onGlobus() && drive.home ? globusPath(drive.home) : '';", "var top = '';"]]

@@ -1,0 +1,1 @@
+[["else if (kind === 'video' || kind === 'audio') made = Promise.resolve({ media: url });", "else if (kind === 'video' || kind === 'audio') made = globusFetch(it).then(function (blob) { return { media: URL.createObjectURL(blob) }; });"]]
