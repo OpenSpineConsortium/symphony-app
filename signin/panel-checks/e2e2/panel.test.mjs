@@ -218,6 +218,10 @@ await page.click('#cp-add');
 await page.waitForFunction(() => /does not carry the topic/.test(document.getElementById('cp-add-answer').textContent));
 const install = await page.getAttribute('#cp-add-answer a', 'href');
 assert.equal(install, 'https://github.com/apps/symphonyboard/installations/new/permissions?target_id=77&suggested_target_id=77&repository_ids[]=124&state=acme%2Fother');
+// a repository without Symphony opens as it is: the answer's first button opens it, plain, and setting it up is offered below it
+assert.equal(await page.textContent('#cp-add-answer button'), 'Open acme/other');
+assert.equal(await page.$eval('#cp-add-answer button', (b) => b.classList.contains('quiet')), false, 'opening is the plain, first choice');
+assert.equal((await page.$$('#cp-add-answer button.quiet')).length, 0, 'no quiet "anyway" button');
 
 // Share lists who has access, the owner of a personal repository first; X takes access away or withdraws an invitation
 page.on('dialog', (d) => d.accept());
