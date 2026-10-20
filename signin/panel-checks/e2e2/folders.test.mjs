@@ -222,11 +222,29 @@ async function open(opts) {
     const req = route.request();
     const u = new URL(req.url());
     const key = req.method() + ' ' + u.pathname;
-    graph.push({ key, auth: req.headers()['authorization'] || '', query: u.search });
-    const r = graphTable[/skiptoken/.test(u.search) ? key + '?page2' : key];
+    let body = null;
+    if (req.method() !== 'GET') { try { body = req.postDataJSON(); } catch (e) { body = req.postData(); } }
+    const call = { key, auth: req.headers()['authorization'] || '', query: u.search, body, type: req.headers()['content-type'] || '' };
+    graph.push(call);
+    // an entry may be a function of the call, for a drive the page writes to
+    let r = graphTable[/skiptoken/.test(u.search) ? key + '?page2' : key];
+    if (typeof r === 'function') r = r(call);
+    if (r === undefined && graphTable['*']) r = graphTable['*'](call);
     if (r === undefined) return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: { code: 'itemNotFound', message: 'not found' } }) });
-    if (r && r.status) return route.fulfill({ status: r.status, contentType: 'application/json', body: JSON.stringify(r.body || {}) });
+    if (r === null) return route.fulfill({ status: 204, body: '' });
+    if (r && r.status) return route.fulfill({ status: r.status, contentType: 'application/json', body: r.status === 202 ? '' : JSON.stringify(r.body || {}) });
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(r) });
+  });
+  // an upload session's own address, which takes the pieces of a large file with no token
+  const pieces = [];
+  await context.route('https://upload.example.test/**', (route) => {
+    const req = route.request();
+    pieces.push({ range: req.headers()['content-range'] || '', auth: req.headers()['authorization'] || '', size: (req.postDataBuffer() || Buffer.alloc(0)).length });
+    const range = /bytes (\d+)-(\d+)\/(\d+)/.exec(req.headers()['content-range'] || '');
+    const last = range && Number(range[2]) + 1 === Number(range[3]);
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Range', 'Access-Control-Allow-Methods': 'PUT' };
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors, body: '' });
+    return route.fulfill({ status: last ? 201 : 202, headers: cors, contentType: 'application/json', body: JSON.stringify(last ? { id: 'big1', name: 'big.bin' } : { nextExpectedRanges: [String(Number(range[2]) + 1) + '-'] }) });
   });
   // GitHub's own sign-in, which comes back to the same console
   await context.route('https://github.com/login/oauth/**', (route) => {
@@ -267,7 +285,7 @@ async function open(opts) {
   }, o.storage === undefined ? signedIn(o.repos) : o.storage);
   service.length = 0; calls.length = 0;
   if (!o.noLoad) await page.goto(BASE + (o.path || PAGE));
-  return { context, page, calls, service, authorize, graph, errors, logs };
+  return { context, page, calls, service, authorize, graph, pieces, errors, logs };
 }
 
 const msg = (page) => page.textContent('#msg');
@@ -1526,7 +1544,7 @@ await check('X1: the drive is drawn as an explorer: a folder tree, an address wi
   assert.deepEqual(await page.$$eval('#fd-tree .fx__nodename', (l) => l.map((n) => n.textContent)), ['OneDrive', 'Papers'], 'the tree lists the drive and its one folder');
   assert.match(await page.textContent('#fd-status'), /^3 items/);
   const tools = await page.$$eval('.fx__bar .fx__tool', (l) => l.map((b) => b.getAttribute('aria-label') + (b.disabled ? ' (off)' : '')));
-  assert.deepEqual(tools.slice(0, 4), ['Back (Alt+Left) (off)', 'Forward (Alt+Right) (off)', 'Up to the folder above (Backspace) (off)', 'Refresh']);
+  assert.deepEqual(tools.slice(0, 4), ['Back (Alt+Left) (off)', 'Forward (Alt+Right) (off)', 'Up to the folder above (Backspace) (off)', 'Refresh (F5)']);
   // the tree opens a folder, and Back, Forward and Up walk the path
   await page.click('#fd-tree .fx__nodename:has-text("Papers")');
   await page.waitForFunction(() => /one\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
@@ -1560,10 +1578,10 @@ await check('X2: a double click opens a Word file in Word for editing at its d.d
   assert.deepEqual(await page.evaluate(() => window.__opened), ['ms-word:ofe|u|https://d.docs.live.net/drive1/notes.docx']);
   assert.match(await page.textContent('#msg'), /Opening notes\.docx in Word/);
   await page.click('#fd-items tr[data-item="a1"] .fx__name', { button: 'right' });
-  assert.deepEqual(await page.$$eval('#fd-menu button', (l) => l.map((b) => b.textContent)), ['Open in Word', 'Open in the browser', 'Tick to track']);
+  assert.deepEqual(await page.$$eval('#fd-menu button', (l) => l.map((b) => b.textContent)), ['Open in Word', 'Open in the browser', 'Download', 'Cut', 'Copy', 'Share', 'Rename', 'Delete', 'Tick to track', 'Properties']);
   await page.click('#fd-menu button:has-text("Open in the browser")');
   assert.equal(await page.evaluate(() => window.__opened[1]), 'window:https://onedrive.live.com/?id=a1');
-  assert.equal(await page.$('#fd-menu'), null, 'the menu stayed open');
+  assert.equal(await page.$('#fd-menu') === null, true, 'the menu stayed open');
   await page.click('#fd-items tr[data-item="a1"] .fx__name', { button: 'right' });
   await page.click('#fd-menu button:has-text("Tick to track")');
   assert.equal(await page.isChecked('#fd-items input[data-id="a1"]'), true);
@@ -1683,7 +1701,7 @@ await check('NC1: with no drive connected, a private repository that holds a sav
   await page.waitForFunction(() => /Connect OneDrive first/.test(document.getElementById('fd-browser').textContent), null, { timeout: 15000 });
   await sleep(500);
   assert.equal(calls.some((c) => c.key === 'GET /repos/acme/demo/contents/catalog.json'), false, 'the Folders tab read catalog.json');
-  assert.equal(await page.$('#fd-items'), null, 'a list was drawn without a drive');
+  assert.equal(await page.$('#fd-items') === null, true, 'a list was drawn without a drive');
   const words = await page.evaluate(() => document.getElementById('tab-folders').innerText + ' ' + document.getElementById('msg').textContent);
   assert.doesNotMatch(words, /catalog/i, 'the tab speaks of a catalog');
   assert.doesNotMatch(words, /connector/i, 'the tab offers the connector');
@@ -1775,6 +1793,602 @@ await check('NC5: on a phone a folder of many items scrolls inside the explorer,
   await context.close();
 });
 
+// A drive the page can write to: the folders' items kept here, each of Graph's writes changing them
+// as OneDrive would, so a check reads the list the page draws after it
+// waits in the check, not the page, for what only the check can see, such as a call to Graph
+async function until(fn, what) {
+  for (let i = 0; i < 100; i++) { if (fn()) return; await sleep(100); }
+  assert.fail(what);
+}
+function liveDrive(o) {
+  const opts = o || {};
+  const items = {
+    root: graphRoutes()['GET /v1.0/me/drive/root/children'].value.map((x) => Object.assign({}, x)),
+    f1: [{ id: 'b1', name: 'one.docx', file: { mimeType: 'x' }, size: 2048, parentReference: { driveId: 'drive1', path: '/drive/root:/Papers' }, webUrl: 'https://onedrive.live.com/?id=b1', lastModifiedDateTime: now }],
+  };
+  if (opts.thumbs) items.root[1].thumbnails = [{ medium: { url: opts.thumbs } }];
+  let made = 0;
+  const folderOf = (id) => (id === 'ROOTID' || id === 'root' ? 'root' : id);
+  const find = (id) => { for (const k in items) { const i = items[k].findIndex((x) => x.id === id); if (i >= 0) return { list: items[k], at: i, folder: k }; } return null; };
+  const table = graphRoutes();
+  table['GET /v1.0/me/drive/root/children'] = () => ({ value: items.root });
+  table['GET /v1.0/me/drive/items/f1/children'] = () => ({ value: items.f1 });
+  if (opts.drive) table['GET /v1.0/me/drive'] = opts.drive;
+  table['GET /v1.0/me/drive/root'] = { id: 'ROOTID' };
+  table['*'] = (call) => {
+    let m;
+    if ((m = /^POST \/v1\.0\/me\/drive\/(root|items\/([^/]+))\/children$/.exec(call.key))) {
+      const into = m[2] || 'root';
+      const it = { id: 'n' + (++made), name: call.body.name, folder: { childCount: 0 }, parentReference: { driveId: 'drive1' }, lastModifiedDateTime: now };
+      (items[into] = items[into] || []).push(it);
+      return { status: 201, body: it };
+    }
+    if ((m = /^PATCH \/v1\.0\/me\/drive\/items\/([^/]+)$/.exec(call.key))) {
+      const f = find(decodeURIComponent(m[1]));
+      if (!f) return undefined;
+      if (call.body.name) {
+        if (f.list.some((x) => x.name.toLowerCase() === call.body.name.toLowerCase() && x.id !== f.list[f.at].id)) return { status: 409, body: { error: { code: 'nameAlreadyExists', message: 'Name already exists' } } };
+        f.list[f.at].name = call.body.name;
+      }
+      if (call.body.parentReference) { const it = f.list.splice(f.at, 1)[0]; (items[folderOf(call.body.parentReference.id)] = items[folderOf(call.body.parentReference.id)] || []).push(it); }
+      return f.list[f.at] || {};
+    }
+    if ((m = /^DELETE \/v1\.0\/me\/drive\/items\/([^/]+)$/.exec(call.key))) {
+      const f = find(decodeURIComponent(m[1]));
+      if (!f) return undefined;
+      f.list.splice(f.at, 1);
+      return null;
+    }
+    if ((m = /^PUT \/v1\.0\/me\/drive\/(root|items\/([^/]+)):\/(.+):\/content$/.exec(call.key))) {
+      const into = m[2] || 'root', name = decodeURIComponent(m[3]);
+      const it = { id: 'u' + (++made), name, file: { mimeType: 'x' }, size: (call.body || '').length, parentReference: { driveId: 'drive1' }, lastModifiedDateTime: now };
+      (items[into] = items[into] || []).push(it);
+      return { status: 201, body: it };
+    }
+    if (/^POST .*:\/createUploadSession$/.test(call.key)) return { uploadUrl: 'https://upload.example.test/session1' };
+    if ((m = /^POST \/v1\.0\/me\/drive\/items\/([^/]+)\/copy$/.exec(call.key))) return { status: 202 };
+    if (/\/createLink$/.test(call.key)) return opts.link || { link: { webUrl: 'https://1drv.ms/w/s!shared-link' } };
+    if (/\/preview$/.test(call.key)) return opts.preview || { getUrl: 'https://onedrive.live.com/embed?id=a1' };
+    if (/\/thumbnails$/.test(call.key)) return { value: [{ large: { url: 'https://thumbs.example.test/large.jpg' } }] };
+    if ((m = /^GET \/v1\.0\/me\/drive\/root\/search\(q='(.*)'\)$/.exec(call.key))) {
+      const q = decodeURIComponent(m[1]).replace(/''/g, '\'').toLowerCase();
+      return { value: [].concat(items.root, items.f1).filter((x) => x.name.toLowerCase().indexOf(q) >= 0) };
+    }
+    if ((m = /^GET \/v1\.0\/me\/drive\/items\/([^/]+)$/.exec(call.key))) {
+      const f = find(decodeURIComponent(m[1]));
+      if (!f) return undefined;
+      const it = f.list[f.at];
+      return Object.assign({ '@microsoft.graph.downloadUrl': opts.download || 'https://download.example.test/' + it.id, createdDateTime: now, createdBy: { user: { displayName: 'Greg Creator' } }, lastModifiedBy: { user: { displayName: 'Greg Editor' } }, shared: { scope: 'users' } }, it);
+    }
+    return undefined;
+  };
+  return { table, items };
+}
+const writesOf = (graph) => graph.filter((c) => !c.key.startsWith('GET '));
+const shown = (page) => page.$$eval('#fd-items [data-item] [data-name]', (l) => l.map((n) => n.textContent));
+async function explorerWith(o) {
+  const live = liveDrive(o);
+  const env = await open(Object.assign({ graph: live.table }, o && o.open));
+  // OneDrive's thumbnails, served as a picture, so none falls back to the mark for a failed load
+  await env.context.route('https://thumbs.example.test/**', (r) => r.fulfill({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" fill="#4a7"/></svg>' }));
+  await connect(env);
+  await listed(env.page);
+  return Object.assign(env, { live });
+}
+async function selectRow(page, id, mods) {
+  await page.click('#fd-items [data-item="' + id + '"] [data-name]', { modifiers: mods || [] });
+}
+await check('FA1: New folder makes "New folder" in the folder shown and opens its name to edit; Enter renames it, and nothing is written before the press', async () => {
+  const env = await explorerWith();
+  const { context, page, graph, errors } = env;
+  assert.deepEqual(writesOf(graph), [], 'connecting and listing wrote to the drive');
+  await page.click('#fx-cmd-new');
+  await page.waitForSelector('#fd-items .fx__rename');
+  const post = writesOf(graph)[0];
+  assert.equal(post.key, 'POST /v1.0/me/drive/root/children');
+  assert.deepEqual(post.body, { name: 'New folder', folder: {}, '@microsoft.graph.conflictBehavior': 'rename' });
+  assert.equal(post.auth, 'Bearer ' + ACCESS);
+  assert.equal(await page.evaluate(() => document.activeElement.className), 'fx__rename', 'the new name is not being edited');
+  assert.equal(await page.inputValue('#fd-items .fx__rename'), 'New folder');
+  await page.keyboard.type('Drafts');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => /Drafts/.test(((document.getElementById('fd-items') || {}).textContent || '')));
+  const patch = writesOf(graph)[1];
+  assert.equal(patch.key, 'PATCH /v1.0/me/drive/items/n1');
+  assert.deepEqual(patch.body, { name: 'Drafts' });
+  assert.deepEqual((await shown(page)).slice(0, 2), ['Drafts', 'Papers'], 'the folder is listed with the others, folders first');
+  // a second folder in the same place takes the next free name
+  await page.focus('#fd-main');
+  await page.keyboard.press('Control+Shift+N');
+  await page.waitForSelector('#fd-items .fx__rename');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('#fd-items .fx__rename'));
+  assert.equal(writesOf(graph).length, 3, 'Escape renamed the new folder');
+  assert.ok((await shown(page)).includes('New folder'), 'Escape left no folder');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('FA2: F2 renames in place with the name chosen up to its extension; Escape keeps it, a name OneDrive refuses or one already there is said and sent nowhere, and Enter in the box opens nothing', async () => {
+  const env = await explorerWith();
+  const { context, page, graph, errors } = env;
+  await recordOpens(page);
+  await selectRow(page, 'a1');
+  await page.keyboard.press('F2');
+  await page.waitForSelector('#fd-items .fx__rename');
+  assert.deepEqual(await page.evaluate(() => { const b = document.querySelector('#fd-items .fx__rename'); return [b.selectionStart, b.selectionEnd]; }), [0, 5], 'the extension is chosen with the name');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('#fd-items .fx__rename'));
+  assert.deepEqual(writesOf(graph), []);
+  for (const bad of ['a:b.docx', 'Papers', 'con.docx', 'trailing.']) {
+    await selectRow(page, 'a1');
+    await page.keyboard.press('F2');
+    await page.fill('#fd-items .fx__rename', bad);
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => !document.querySelector('#fd-items .fx__rename'));
+    assert.match(await page.textContent('#msg'), /cannot|already|keeps for itself/, bad + ' was not refused');
+  }
+  assert.deepEqual(writesOf(graph), [], 'a refused name was sent');
+  await selectRow(page, 'a1');
+  await page.keyboard.press('F2');
+  await page.fill('#fd-items .fx__rename', 'notes-v2.docx');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => /notes-v2\.docx/.test(((document.getElementById('fd-items') || {}).textContent || '')));
+  assert.deepEqual(writesOf(graph).map((c) => [c.key, c.body]), [['PATCH /v1.0/me/drive/items/a1', { name: 'notes-v2.docx' }]]);
+  assert.deepEqual(await page.evaluate(() => window.__opened), [], 'Enter in the name box opened the file');
+  // the right click offers Rename too, and a ticked item's tick keeps its new name
+  await page.check('#fd-items input[data-id="a1"]');
+  await page.click('#fd-items [data-item="a1"] [data-name]', { button: 'right' });
+  await page.click('#fd-menu button:has-text("Rename")');
+  await page.fill('#fd-items .fx__rename', 'final.docx');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => /final\.docx/.test(document.getElementById('fd-picked').textContent));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('FA3: Delete asks in the page, says the recycle bin, and Cancel sends nothing; Delete sends one DELETE per selected item, unticks what it took and lists the folder again', async () => {
+  const env = await explorerWith();
+  const { context, page, graph, errors } = env;
+  await page.check('#fd-items input[data-id="a1"]');
+  await selectRow(page, 'a1');
+  await page.keyboard.press('Delete');
+  await page.waitForFunction(() => document.getElementById('dlg-item').open);
+  assert.match(await page.textContent('#dlg-item'), /recycle bin/);
+  await page.click('#dlg-item button:has-text("Cancel")');
+  assert.deepEqual(writesOf(graph), [], 'Cancel deleted');
+  await selectRow(page, 'h1', ['Control']);
+  await page.click('#fx-cmd-delete');
+  await page.waitForFunction(() => document.getElementById('dlg-item').open);
+  assert.match(await page.textContent('#dlg-item .cpdlg__title'), /Delete 2 items/);
+  await page.click('#fx-delete-go');
+  await page.waitForFunction(() => !/notes\.docx/.test(((document.getElementById('fd-items') || {}).textContent || '')));
+  assert.deepEqual(writesOf(graph).map((c) => c.key).sort(), ['DELETE /v1.0/me/drive/items/a1', 'DELETE /v1.0/me/drive/items/h1']);
+  assert.deepEqual(await shown(page), ['Papers']);
+  assert.match(await page.textContent('#msg'), /Moved 2 items to the recycle bin/);
+  assert.equal(await page.textContent('#fd-picked-head'), 'Nothing ticked yet.', 'a deleted item stayed ticked');
+  assert.equal(await page.evaluate(() => window.__hostile), undefined);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('FA4: Upload sends a small file in one PUT into the folder shown and a large one through an upload session in ranged pieces with no token; a name already there asks Replace, Keep both or Skip; a drop on a folder uploads into it', async () => {
+  const env = await explorerWith();
+  const { context, page, graph, pieces, errors } = env;
+  const up = async (files) => {
+    const chooser = page.waitForEvent('filechooser');
+    await page.click('#fx-cmd-upload');
+    await (await chooser).setFiles(files);
+  };
+  await up([{ name: 'new note.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') }]);
+  await page.waitForFunction(() => /new note\.txt/.test(((document.getElementById('fd-items') || {}).textContent || '')));
+  const put = writesOf(graph)[0];
+  assert.equal(put.key, 'PUT /v1.0/me/drive/root:/new%20note.txt:/content');
+  assert.equal(put.query, '?@microsoft.graph.conflictBehavior=fail');
+  assert.equal(put.body, 'hello');
+  assert.equal(put.auth, 'Bearer ' + ACCESS);
+  // a name already there: Skip sends nothing, Keep both sends with rename
+  await up([{ name: 'notes.docx', mimeType: 'x', buffer: Buffer.from('x') }]);
+  await page.waitForFunction(() => document.getElementById('dlg-item').open && /already holds notes\.docx/.test(document.getElementById('dlg-item').textContent));
+  await page.click('#fx-up-skip');
+  await page.waitForFunction(() => /Nothing was uploaded/.test(document.getElementById('msg').textContent));
+  assert.equal(writesOf(graph).length, 1, 'Skip uploaded');
+  await up([{ name: 'notes.docx', mimeType: 'x', buffer: Buffer.from('x') }]);
+  await page.waitForFunction(() => document.getElementById('dlg-item').open);
+  await page.click('#fx-up-both');
+  await page.waitForFunction(() => /Uploaded 1 file/.test(document.getElementById('msg').textContent));
+  assert.equal(writesOf(graph)[1].query, '?@microsoft.graph.conflictBehavior=rename');
+  // a file over 4 MB goes through an upload session; its pieces carry no token
+  const big = Buffer.alloc(5 * 1024 * 1024, 7);
+  await up([{ name: 'big.bin', mimeType: 'application/octet-stream', buffer: big }]);
+  await page.waitForFunction(() => /Uploaded 1 file/.test(document.getElementById('msg').textContent) && /big\.bin/.test(document.getElementById('msg').textContent + ((document.getElementById('fd-items') || {}).textContent || '')) || /Uploaded 1 file/.test(document.getElementById('msg').textContent), null, { timeout: 30000 });
+  const session = writesOf(graph).find((c) => /createUploadSession/.test(c.key));
+  assert.equal(session.key, 'POST /v1.0/me/drive/root:/big.bin:/createUploadSession');
+  assert.deepEqual(session.body, { item: { '@microsoft.graph.conflictBehavior': 'fail' } });
+  assert.deepEqual(pieces.map((p) => p.range), ['bytes 0-3276799/5242880', 'bytes 3276800-5242879/5242880']);
+  assert.deepEqual(pieces.map((p) => p.auth), ['', ''], 'the drive\'s token went to the upload address');
+  // files dropped on a folder's row go into that folder
+  await page.evaluate(() => {
+    const row = document.querySelector('#fd-items [data-item="f1"]');
+    const dt = new DataTransfer();
+    dt.items.add(new File(['dropped'], 'dropped.txt', { type: 'text/plain' }));
+    row.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    row.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+  });
+  await until(() => writesOf(graph).some((c) => c.key === 'PUT /v1.0/me/drive/items/f1:/dropped.txt:/content'), 'the drop did not upload into Papers');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('FA5: Download asks Graph for the file\'s one-time address and hands it to the browser with no token, file by file; a folder alone cannot be downloaded, and an address that is not https is never followed', async () => {
+  const env = await explorerWith();
+  const { context, page, graph, errors } = env;
+  await page.evaluate(() => {
+    window.__downloads = [];
+    const click = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function () { if (this.hasAttribute('download')) { window.__downloads.push([this.getAttribute('href'), this.getAttribute('download')]); return; } return click.call(this); };
+  });
+  await selectRow(page, 'f1');
+  assert.equal(await page.isDisabled('#fx-cmd-download'), true, 'a folder alone can be downloaded');
+  await selectRow(page, 'a1');
+  await page.click('#fx-cmd-download');
+  await page.waitForFunction(() => window.__downloads.length === 1);
+  assert.deepEqual(await page.evaluate(() => window.__downloads), [['https://download.example.test/a1', 'notes.docx']]);
+  const read = graph.find((c) => c.key === 'GET /v1.0/me/drive/items/a1');
+  assert.equal(read.query, '?$select=id,name,@microsoft.graph.downloadUrl');
+  assert.deepEqual(writesOf(graph), []);
+  await context.close();
+  const bad = await explorerWith({ download: 'javascript:window.__ran=1' });
+  await bad.page.evaluate(() => { window.__downloads = []; const click = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () { if (this.hasAttribute('download')) { window.__downloads.push(this.getAttribute('href')); return; } return click.call(this); }; });
+  await selectRow(bad.page, 'a1');
+  await bad.page.click('#fx-cmd-download');
+  await bad.page.waitForFunction(() => /no download address/.test(document.getElementById('msg').textContent));
+  assert.deepEqual(await bad.page.evaluate(() => window.__downloads), []);
+  assert.deepEqual(errors, []);
+  await bad.context.close();
+});
+await check('FA6: Cut and Paste move by one PATCH to the folder shown and greys the cut item until then; Copy and Paste ask OneDrive to copy into the root by its id; dragging an item onto a folder moves it', async () => {
+  const env = await explorerWith();
+  const { context, page, graph, errors } = env;
+  await selectRow(page, 'a1');
+  await page.keyboard.press('Control+X');
+  assert.match(await page.getAttribute('#fd-items [data-item="a1"]', 'class'), /fx__cutitem/);
+  await page.dblclick('#fd-items [data-item="f1"] [data-name]');
+  await page.waitForFunction(() => /one\.docx/.test(((document.getElementById('fd-items') || {}).textContent || '')));
+  await page.focus('#fd-main');
+  await page.keyboard.press('Control+V');
+  await page.waitForFunction(() => /notes\.docx/.test(((document.getElementById('fd-items') || {}).textContent || '')));
+  assert.deepEqual(writesOf(graph).map((c) => [c.key, c.body]), [['PATCH /v1.0/me/drive/items/a1', { parentReference: { id: 'f1' } }]]);
+  assert.equal(await page.isDisabled('#fx-cmd-paste'), true, 'a move can be pasted twice');
+  // copy back to the root, which Graph names by its id
+  await selectRow(page, 'b1');
+  await page.keyboard.press('Control+C');
+  await page.click('.fx__tool[aria-label^="Up"]');
+  await page.waitForFunction(() => /Papers/.test(((document.getElementById('fd-items') || {}).textContent || '')) && !/one\.docx/.test(((document.getElementById('fd-items') || {}).textContent || '')));
+  await page.click('#fx-cmd-paste');
+  await page.waitForFunction(() => /OneDrive is copying 1 item/.test(document.getElementById('msg').textContent));
+  const copy = writesOf(graph).find((c) => /\/copy$/.test(c.key));
+  assert.equal(copy.key, 'POST /v1.0/me/drive/items/b1/copy');
+  assert.equal(copy.query, '?@microsoft.graph.conflictBehavior=rename');
+  assert.deepEqual(copy.body, { parentReference: { driveId: 'drive1', id: 'ROOTID' } });
+  assert.ok(graph.some((c) => c.key === 'GET /v1.0/me/drive/root' && c.query === '?$select=id'), 'the root\'s id was not read');
+  // an item dragged onto a folder moves into it
+  await page.evaluate(() => {
+    const from = document.querySelector('#fd-items [data-item="h1"]'), to = document.querySelector('#fd-items [data-item="f1"]');
+    const dt = new DataTransfer();
+    from.dispatchEvent(new DragEvent('dragstart', { dataTransfer: dt, bubbles: true }));
+    to.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    to.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+  });
+  await page.waitForFunction(() => /Moved 1 item/.test(document.getElementById('msg').textContent));
+  assert.deepEqual(writesOf(graph).filter((c) => c.key === 'PATCH /v1.0/me/drive/items/h1').map((c) => c.body), [{ parentReference: { id: 'f1' } }]);
+  // a folder pasted into itself is refused before Graph is asked
+  await selectRow(page, 'f1');
+  await page.keyboard.press('Control+X');
+  await page.click('#fd-items [data-item="f1"] [data-name]', { button: 'right' });
+  await page.click('#fd-menu button:has-text("Paste into this folder")');
+  await page.waitForFunction(() => /cannot go into itself/.test(document.getElementById('msg').textContent));
+  assert.equal(writesOf(graph).filter((c) => c.key === 'PATCH /v1.0/me/drive/items/f1').length, 0);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('FA7: Share offers who and what before any link is made: a personal drive anyone with the link, a work drive its organization first; Create link sends createLink with the choice and shows the link, never one that is not https', async () => {
+  const env = await explorerWith();
+  const { context, page, graph, errors } = env;
+  await selectRow(page, 'a1');
+  await page.click('#fx-cmd-share');
+  await page.waitForFunction(() => document.getElementById('dlg-item').open);
+  assert.deepEqual(await page.$$eval('#dlg-item input[name="fx-share-scope"]', (l) => l.map((r) => r.value)), ['anonymous']);
+  assert.deepEqual(writesOf(graph), [], 'a link was made before Create link');
+  await page.check('#dlg-item input[name="fx-share-type"][value="edit"]');
+  await page.click('#fx-share-make');
+  await page.waitForSelector('#dlg-item .fx__sharelink');
+  assert.deepEqual(writesOf(graph).map((c) => [c.key, c.body]), [['POST /v1.0/me/drive/items/a1/createLink', { type: 'edit', scope: 'anonymous' }]]);
+  assert.equal(await page.inputValue('#dlg-item .fx__sharelink'), 'https://1drv.ms/w/s!shared-link');
+  await context.close();
+  const work = await explorerWith({ drive: { id: 'b!xyz', driveType: 'business', owner: { user: { displayName: 'Greg' } } }, link: { link: { webUrl: 'javascript:alert(1)' } } });
+  await work.page.waitForFunction(() => /\(business\)/.test(document.getElementById('fd-connect-note').textContent));
+  await selectRow(work.page, 'a1');
+  await work.page.click('#fx-cmd-share');
+  await work.page.waitForFunction(() => document.getElementById('dlg-item').open);
+  assert.deepEqual(await work.page.$$eval('#dlg-item input[name="fx-share-scope"]', (l) => l.map((r) => r.value + (r.checked ? '*' : ''))), ['organization*', 'anonymous']);
+  await work.page.click('#fx-share-make');
+  await work.page.waitForFunction(() => /could not be made/.test(document.getElementById('fx-share-out').textContent));
+  assert.equal(await work.page.$('#dlg-item .fx__sharelink') === null, true);
+  assert.deepEqual(writesOf(work.graph).map((c) => c.body), [{ type: 'view', scope: 'organization' }]);
+  assert.deepEqual(errors.concat(work.errors), []);
+  await work.context.close();
+});
+await check('FA8: Properties (Alt+Enter) reads one item\'s record and says its type, place, size in bytes, who made and changed it and whether it is shared; several items are summed from the list with no read', async () => {
+  const env = await explorerWith();
+  const { context, page, graph, errors } = env;
+  await selectRow(page, 'a1');
+  await page.keyboard.press('Alt+Enter');
+  await page.waitForFunction(() => /Greg Editor/.test(document.getElementById('dlg-item').textContent));
+  const text = await page.textContent('#dlg-item');
+  for (const want of [/notes\.docx Properties/, /Word document/, /Location: OneDrive/, /1,234 bytes/, /by Greg Creator/, /Shared: Yes/]) assert.match(text, want);
+  const read = graph.find((c) => c.key === 'GET /v1.0/me/drive/items/a1');
+  assert.match(read.query, /createdBy,lastModifiedBy/);
+  await page.keyboard.press('Escape');
+  const before = graph.length;
+  await selectRow(page, 'f1');
+  await selectRow(page, 'a1', ['Shift']);
+  await page.click('#fx-cmd-props');
+  await page.waitForFunction(() => /3 items Properties/.test(document.getElementById('dlg-item').textContent));
+  assert.match(await page.textContent('#dlg-item'), /2 files, 1 folder/);
+  assert.equal(graph.length, before, 'several items\' properties read the drive');
+  // a hostile name is drawn as text in the dialog's title
+  await page.keyboard.press('Escape');
+  await selectRow(page, 'h1');
+  await page.keyboard.press('Alt+Enter');
+  await page.waitForFunction(() => /Greg Editor/.test(document.getElementById('dlg-item').textContent));
+  assert.equal(await page.evaluate(() => window.__hostile), undefined);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('FA9: a click selects one item, Ctrl+click adds or takes away, Shift+click selects a range from the last click, Ctrl+A all and Escape none; the status bar counts them and the ticks are apart from it', async () => {
+  const env = await explorerWith();
+  const { context, page, errors } = env;
+  const chosen = () => page.$$eval('#fd-items [data-item][aria-selected="true"]', (l) => l.map((n) => n.getAttribute('data-item')));
+  await selectRow(page, 'f1');
+  assert.deepEqual(await chosen(), ['f1']);
+  await selectRow(page, 'a1', ['Control']);
+  assert.deepEqual(await chosen(), ['f1', 'a1']);
+  await selectRow(page, 'f1', ['Control']);
+  assert.deepEqual(await chosen(), ['a1']);
+  await selectRow(page, 'f1');
+  await selectRow(page, 'a1', ['Shift']);
+  assert.deepEqual(await chosen(), ['f1', 'h1', 'a1'], 'Shift did not select the range in the order shown');
+  assert.match(await page.textContent('#fd-status'), /3 selected/);
+  await page.focus('#fd-main');
+  await page.keyboard.press('Escape');
+  assert.deepEqual(await chosen(), []);
+  await page.keyboard.press('Control+A');
+  assert.deepEqual(await chosen(), ['f1', 'h1', 'a1']);
+  assert.equal(await page.isChecked('#fd-items input[data-id="a1"]'), false, 'selecting ticked an item');
+  // Shift with the arrows extends from the anchor; the commands follow the count
+  await selectRow(page, 'f1');
+  await page.keyboard.press('Shift+ArrowDown');
+  assert.deepEqual(await chosen(), ['f1', 'h1']);
+  assert.equal(await page.isDisabled('#fx-cmd-rename'), true, 'Rename is offered for two items');
+  assert.equal(await page.isDisabled('#fx-cmd-delete'), false);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('FA10: the preview pane is off until asked; on, one Office file shows Graph\'s preview page in a sandboxed frame, an image its large thumbnail, and nothing is read while it is off or for a folder', async () => {
+  const env = await explorerWith();
+  const { context, page, graph, errors } = env;
+  await selectRow(page, 'a1');
+  await page.waitForTimeout(500);
+  assert.equal(graph.filter((c) => /preview|thumbnails/.test(c.key)).length, 0, 'a preview was read with the pane off');
+  assert.equal(await page.isHidden('#fd-preview'), true);
+  await page.focus('#fd-main');
+  await page.keyboard.press('Alt+P');
+  await page.waitForSelector('#fd-preview iframe');
+  assert.equal(await page.getAttribute('#fd-preview iframe', 'src'), 'https://onedrive.live.com/embed?id=a1');
+  assert.equal(await page.getAttribute('#fd-preview iframe', 'sandbox'), 'allow-scripts allow-same-origin allow-popups');
+  assert.ok(graph.some((c) => c.key === 'POST /v1.0/me/drive/items/a1/preview'));
+  assert.equal(await page.getAttribute('#fx-cmd-pane', 'aria-pressed'), 'true');
+  await selectRow(page, 'f1');
+  await page.waitForTimeout(500);
+  assert.match(await page.textContent('#fd-preview'), /holds 2 items/);
+  assert.equal(graph.filter((c) => /items\/f1\/(preview|thumbnails)/.test(c.key)).length, 0, 'a folder\'s preview was read');
+  // two items selected say so; the pane closes again with its button
+  await selectRow(page, 'a1', ['Control']);
+  assert.match(await page.textContent('#fd-preview'), /2 items selected/);
+  await page.click('#fx-cmd-pane');
+  assert.equal(await page.isHidden('#fd-preview'), true);
+  await context.close();
+  // where Graph makes no preview page, the large thumbnail stands in; an image goes straight to it
+  const img = await explorerWith({ preview: { status: 403, body: { error: { message: 'no' } } } });
+  await img.page.click('#fx-cmd-pane');
+  await selectRow(img.page, 'a1');
+  await img.page.waitForSelector('#fd-preview img.fx__pvimg');
+  assert.equal(await img.page.getAttribute('#fd-preview img', 'src'), 'https://thumbs.example.test/large.jpg');
+  assert.deepEqual(errors.concat(img.errors), []);
+  await img.context.close();
+});
+await check('FA11: Enter in the search box searches all of OneDrive, with a Folder column saying where each found item is; New folder, Upload and Paste wait for a folder; a quote is doubled for Graph, and Back returns', async () => {
+  const env = await explorerWith();
+  const { context, page, graph, errors } = env;
+  await page.fill('#fd-search', 'one');
+  await page.waitForTimeout(400);
+  assert.equal(graph.filter((c) => /search/.test(c.key)).length, 0, 'typing searched the drive');
+  await page.press('#fd-search', 'Enter');
+  await page.waitForFunction(() => /one\.docx/.test(((document.getElementById('fd-items') || {}).textContent || '')));
+  assert.ok(graph.some((c) => c.key === "GET /v1.0/me/drive/root/search(q='one')"), 'the drive was not searched');
+  assert.match(await page.textContent('.fx__address'), /Search results for "one"/);
+  const heads = await page.$$eval('#fd-items thead th', (l) => l.map((th) => th.textContent.trim()));
+  assert.equal(heads[heads.length - 1], 'Folder');
+  assert.match(await page.textContent('#fd-items [data-item="b1"] .fx__where'), /OneDrive\/Papers/);
+  for (const id of ['#fx-cmd-new', '#fx-cmd-upload', '#fx-cmd-paste']) assert.equal(await page.isDisabled(id), true, id + ' is offered in search results');
+  await page.click('.fx__tool[aria-label^="Back"]');
+  await page.waitForFunction(() => /Papers/.test(((document.getElementById('fd-items') || {}).textContent || '')) && /notes/.test(((document.getElementById('fd-items') || {}).textContent || '')));
+  await page.fill('#fd-search', "it's");
+  await page.press('#fd-search', 'Enter');
+  await page.waitForFunction(() => /Nothing in OneDrive matches/.test(document.getElementById('fd-main').textContent));
+  assert.ok(graph.some((c) => c.key === "GET /v1.0/me/drive/root/search(q='it''s')"), 'the quote was not doubled');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('FA12: the View menu offers Explorer\'s six views; each draws every item with its tick, and Large icons, Tiles and Content show OneDrive\'s https thumbnail in place of the mark', async () => {
+  const env = await explorerWith({ thumbs: 'https://thumbs.example.test/medium.jpg' });
+  const { context, page, graph, errors } = env;
+  assert.match(graph.find((c) => c.key === 'GET /v1.0/me/drive/root/children').query, /\$expand=thumbnails\(\$select=medium\)/);
+  await page.click('#fx-cmd-view');
+  assert.deepEqual(await page.$$eval('#fd-menu button', (l) => l.map((b) => b.textContent.trim())), ['Large icons', 'Small icons', 'List', '\u2713 Details', 'Tiles', 'Content']);
+  await page.keyboard.press('Escape');
+  for (const [name, cls, thumb] of [['Small icons', 'fx__flow--small', false], ['List', 'fx__flow--list', false], ['Tiles', 'fx__flow--tiles', true], ['Content', 'fx__flow--content', true], ['Large icons', 'fx__grid', true]]) {
+    await page.click('#fx-cmd-view');
+    await page.click('#fd-menu button:has-text("' + name + '")');
+    assert.match(await page.getAttribute('#fd-items', 'class'), new RegExp(cls), name);
+    assert.equal((await shown(page)).length, 3, name + ' does not show every item');
+    assert.equal(await page.$$eval('#fd-items input[data-id]', (l) => l.length), 3, name + ' has no ticks');
+    assert.equal(await page.$('#fd-items [data-item="a1"] img.fx__thumb') !== null, thumb, name + ' thumbnail');
+  }
+  assert.deepEqual(errors, []);
+  await context.close();
+  // a thumbnail that is not https is never drawn; a drive that refuses the thumbnails is read without them
+  const bad = liveDrive({ thumbs: 'http://thumbs.example.test/x.jpg' });
+  const plain = bad.table['GET /v1.0/me/drive/root/children'];
+  bad.table['GET /v1.0/me/drive/root/children'] = (call) => (/expand/.test(call.query) ? { status: 400, body: { error: { message: 'expand not supported' } } } : plain(call));
+  const env2 = await open({ graph: bad.table });
+  // the plain-http picture is served, so a page that drew it would show it rather than wait on it
+  await env2.context.route('http://thumbs.example.test/**', (r) => r.fulfill({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"/>' }));
+  await connect(env2);
+  await listed(env2.page);
+  await env2.page.click('.fx__tool[aria-label="Large icons view"]');
+  assert.equal(await env2.page.$('#fd-items img.fx__thumb') === null, true);
+  assert.equal(env2.graph.filter((c) => c.key === 'GET /v1.0/me/drive/root/children').length, 2);
+  assert.deepEqual(env2.errors, []);
+  await env2.context.close();
+});
+await check('FA13: on a phone the command bar and the explorer stay in the window, and the preview pane covers the list until it is closed', async () => {
+  const env = await explorerWith({ open: { viewport: { width: 390, height: 844 } } });
+  const { context, page, errors } = env;
+  const fits = await page.evaluate(() => { const c = document.querySelector('#tab-folders .fx__cmds').getBoundingClientRect(); return c.right <= innerWidth + 1 && document.documentElement.scrollWidth <= innerWidth + 1; });
+  assert.ok(fits, 'the command bar runs off the side');
+  await page.click('#fx-cmd-pane');
+  assert.equal(await page.isVisible('#fd-preview'), false, 'with nothing chosen the pane covers the list');
+  await selectRow(page, 'a1');
+  await page.waitForSelector('#fd-preview iframe');
+  const cover = await page.evaluate(() => { const p = document.getElementById('fd-preview').getBoundingClientRect(), m = document.getElementById('fd-main').getBoundingClientRect(); return Math.abs(p.left - m.left) < 2 && p.width >= m.width - 2; });
+  assert.ok(cover, 'the preview pane does not cover the list');
+  await page.click('#fd-preview .fx__pvclose');
+  assert.equal(await page.isHidden('#fd-preview'), true, 'the pane\'s own close left it open');
+  // opening a folder closes the pane on a phone, so the folder's list is in reach
+  await selectRow(page, 'f1');
+  await page.click('#fx-cmd-pane');
+  assert.equal(await page.isVisible('#fd-preview'), false, 'a folder\'s preview covers the list');
+  await page.dblclick('#fd-items [data-item="f1"] [data-name]');
+  await page.waitForFunction(() => /one\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
+  assert.equal(await page.isHidden('#fd-preview'), true, 'the pane stayed over the new folder');
+  // the pane was closed, not only emptied: choosing a file in the new folder opens nothing over the list
+  await selectRow(page, 'b1');
+  assert.equal(await page.isHidden('#fd-preview'), true, 'the pane came back over the new folder\'s list');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('FA14: while a folder is read, or after its read fails, nothing of the folder before is drawn or selectable under its address, so Ctrl+A and Delete find nothing to act on', async () => {
+  const live = liveDrive();
+  live.table['GET /v1.0/me/drive/items/f1/children'] = { status: 500, body: { error: { message: 'server down' } } };
+  const env = await open({ graph: live.table });
+  await connect(env);
+  await listed(env.page);
+  const { context, page, graph, errors } = env;
+  await page.dblclick('#fd-items [data-item="f1"] [data-name]');
+  await page.waitForFunction(() => /could not be read/.test(document.getElementById('fd-main').textContent));
+  await page.click('.fx__tool[aria-label="Large icons view"]');
+  assert.equal(await page.$('#fd-items [data-item="a1"]') === null, true, 'the root\'s items were drawn under Papers');
+  await page.focus('#fd-main');
+  await page.keyboard.press('Control+A');
+  await page.keyboard.press('Delete');
+  assert.equal(await page.evaluate(() => document.getElementById('dlg-item').open), false, 'Delete offered the root\'s items under Papers');
+  assert.equal(await page.isDisabled('#fx-cmd-delete'), true);
+  assert.deepEqual(writesOf(graph), []);
+  assert.deepEqual(errors, []);
+  await context.close();
+  // the same after a rename, whose read of the folder again fails: the list it had is dropped too
+  const env2 = await explorerWith();
+  await selectRow(env2.page, 'a1');
+  env2.live.table['GET /v1.0/me/drive/root/children'] = { status: 500, body: { error: { message: 'server down' } } };
+  await env2.page.keyboard.press('F2');
+  await env2.page.keyboard.type('renamed');
+  await env2.page.keyboard.press('Enter');
+  await env2.page.waitForFunction(() => /could not be read/.test(document.getElementById('fd-main').textContent), null, { timeout: 10000 });
+  await env2.page.click('.fx__tool[aria-label="Large icons view"]');
+  assert.equal(await env2.page.$('#fd-items [data-item]') === null, true, 'the list before the rename was drawn after its read failed');
+  await env2.page.focus('#fd-main');
+  await env2.page.keyboard.press('Control+A');
+  await env2.page.keyboard.press('Delete');
+  assert.equal(await env2.page.evaluate(() => document.getElementById('dlg-item').open), false, 'Delete offered the list before the rename');
+  assert.deepEqual(env2.errors, []);
+  await env2.context.close();
+});
+await check('FA15: a key on a column heading or a tick is that control\'s: Enter sorts and opens nothing, Space does not tick the selected row; a second click on a file being previewed keeps its preview coming', async () => {
+  const env = await explorerWith();
+  const { context, page, errors } = env;
+  await recordOpens(page);
+  await selectRow(page, 'a1');
+  await page.focus('#fd-items thead .fx__sort:has-text("Size")');
+  await page.keyboard.press('Enter');
+  assert.deepEqual(await page.evaluate(() => window.__opened), [], 'Enter on a heading opened the selected file');
+  assert.match(await page.textContent('#fd-items thead'), /Size \u25b4/, 'Enter on the heading did not sort');
+  await page.focus('#fd-items thead .fx__sort:has-text("Name")');
+  await page.keyboard.press('Space');
+  assert.equal(await page.isChecked('#fd-items input[data-id="a1"]'), false, 'Space on a heading ticked the selected row');
+  await page.click('#fx-cmd-pane');
+  await selectRow(page, 'h1');
+  await page.waitForTimeout(100);
+  await selectRow(page, 'h1');
+  await page.waitForSelector('#fd-preview iframe', { timeout: 5000 });
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('FA16: a folder is never pasted or dragged into itself or a folder inside it; an item moved by a drag leaves the cut, so a later Paste moves nothing back', async () => {
+  const env = await explorerWith();
+  const { context, page, graph, errors } = env;
+  await selectRow(page, 'f1');
+  await page.keyboard.press('Control+X');
+  await page.dblclick('#fd-items [data-item="f1"] [data-name]');
+  await page.waitForFunction(() => /one\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
+  await page.focus('#fd-main');
+  await page.keyboard.press('Control+V');
+  await page.waitForFunction(() => /cannot go into itself or a folder inside it/.test(document.getElementById('msg').textContent));
+  assert.deepEqual(writesOf(graph), []);
+  await page.click('.fx__tool[aria-label^="Up"]');
+  await page.waitForFunction(() => /notes/.test((document.getElementById('fd-items') || {}).textContent || ''));
+  await page.keyboard.press('Escape');
+  await selectRow(page, 'a1');
+  await page.keyboard.press('Control+X');
+  await page.evaluate(() => {
+    const from = document.querySelector('#fd-items [data-item="a1"]'), to = document.querySelector('#fd-items [data-item="f1"]');
+    const dt = new DataTransfer();
+    from.dispatchEvent(new DragEvent('dragstart', { dataTransfer: dt, bubbles: true }));
+    to.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+  });
+  await page.waitForFunction(() => /Moved 1 item/.test(document.getElementById('msg').textContent));
+  assert.equal(await page.isDisabled('#fx-cmd-paste'), true, 'the dragged item stayed cut');
+  assert.equal(writesOf(graph).length, 1);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('FA17: a name being edited survives the list being read again under it, and its Enter renames to every letter typed', async () => {
+  const env = await explorerWith();
+  const { context, page, graph, errors } = env;
+  await selectRow(page, 'h1');
+  await page.keyboard.press('Control+C');
+  await page.click('#fx-cmd-paste');
+  await page.waitForFunction(() => /OneDrive is copying/.test(document.getElementById('msg').textContent));
+  await selectRow(page, 'a1');
+  await page.keyboard.press('F2');
+  await page.keyboard.type('slow-');
+  // the copy's own read of the folder comes 2.5 s after it
+  await page.waitForTimeout(3200);
+  await page.keyboard.type('name');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => /slow-name\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
+  assert.deepEqual(writesOf(graph).filter((c) => c.key.startsWith('PATCH')).map((c) => c.body), [{ name: 'slow-name.docx' }]);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
 await browser.close();
 console.log('\n' + results.join('\n'));
 if (results.some((r) => r.startsWith('FAIL'))) process.exit(1);

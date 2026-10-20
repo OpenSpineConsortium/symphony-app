@@ -1,0 +1,1 @@
+[["sendFiles(how === 'skip' ? files.filter(function (f) { return clash.indexOf(f) < 0; }) : files,", "sendFiles(files,"]]

@@ -1,0 +1,1 @@
+[["var n = el(it.folder ? 'strong' : 'span', cls || '', String(it.name || ''));", "var n = el(it.folder ? 'strong' : 'span', cls || ''); n.innerHTML = String(it.name || '');"]]

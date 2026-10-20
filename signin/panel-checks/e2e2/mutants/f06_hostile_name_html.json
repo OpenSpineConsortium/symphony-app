@@ -1,1 +1,1 @@
-[["add(row, add(el('td', 'fx__name'), add(el('span', 'fx__namewrap'), kindIcon(it, 18), el(it.folder ? 'strong' : 'span', '', String(it.name || '')))));", "var nameCell = el('td', 'fx__name'); nameCell.innerHTML = String(it.name || ''); add(row, nameCell);"]]
+[["add(row, add(el('td', 'fx__name'), add(el('span', 'fx__namewrap'), kindIcon(it, 18), nameEl(it))));", "var nameCell = el('td', 'fx__name'); nameCell.innerHTML = String(it.name || ''); add(row, nameCell);"]]

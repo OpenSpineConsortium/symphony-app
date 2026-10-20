@@ -1,0 +1,1 @@
+[["if (plain.length) upload(plain, folder);", "if (plain.length) upload(plain, hereFolder());"]]

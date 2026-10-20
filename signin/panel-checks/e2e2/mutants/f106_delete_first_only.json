@@ -1,0 +1,1 @@
+[["    return items.reduce(function (p, it) {\n      return p.then(function () {\n        return graph(itemAddress(String(it.id)), 'DELETE')", "    return items.slice(0, 1).reduce(function (p, it) {\n      return p.then(function () {\n        return graph(itemAddress(String(it.id)), 'DELETE')"]]

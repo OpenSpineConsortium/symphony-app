@@ -1,0 +1,1 @@
+[["box.setSelectionRange(0, dot > 0 ? dot : was.length);", "box.setSelectionRange(0, was.length);"]]

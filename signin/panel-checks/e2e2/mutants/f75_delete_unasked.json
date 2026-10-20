@@ -1,0 +1,1 @@
+[["  function askDelete(items) {\n    if (!items.length) return;", "  function askDelete(items) {\n    if (!items.length) return;\n    return remove(items);"]]

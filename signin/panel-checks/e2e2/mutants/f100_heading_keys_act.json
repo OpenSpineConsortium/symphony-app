@@ -1,0 +1,1 @@
+[["if (ev.target.tagName === 'INPUT' || ev.target.tagName === 'BUTTON') return;", "if (ev.target.tagName === 'INPUT') return;"]]

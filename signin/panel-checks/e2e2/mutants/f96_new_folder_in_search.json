@@ -1,0 +1,1 @@
+[["function () { return hereFolder() !== null; }, function () { newFolder(); }", "function () { return true; }, function () { newFolder(); }"]]

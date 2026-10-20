@@ -1,0 +1,1 @@
+[["    make.id = 'fx-share-make';", "    make.id = 'fx-share-make';\n    setTimeout(function () { make.click(); }, 0);"]]
