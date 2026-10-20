@@ -249,8 +249,8 @@ or refresh token runs to a few thousand characters.
 
 ## Deploying it, by hand, once
 
-Nothing here deploys itself; the owner does these steps, each on the page
-named, and nobody else needs to.
+The owner does these steps once, each on the page
+named, and nobody else needs to; after them, step 6 deploys every change by itself.
 
 1. The Worker. Open https://dash.cloudflare.com/ and sign in; in the left
    menu press "Workers & Pages", then "Create application" (or "Create"),
@@ -304,18 +304,24 @@ named, and nobody else needs to.
    pull request on openspineconsortium.github.io, which a session makes
    once the owner gives the two values (neither is a secret); "Sign in with
    GitHub", already the pages' first button, can then be pressed.
-6. The Worker's new code. A Worker deployed before the drive routes
-   merged runs the old code, which answers 404 on `/drive/config` and
-   refuses the console's address for a drive. Open
-   https://github.com/OpenSpineConsortium/symphony-app/blob/main/signin/worker.js
-   once the pull request that brings the drive routes has merged, and
-   press "Copy raw file" (the copy button above the code). In Cloudflare,
-   on the Worker `symphony-signin`'s page, press "Edit code", replace
-   everything in the editor with what you copied, and press "Deploy". The
-   settings of steps 2 and 4 stay as they are: the editor changes the
-   code alone. This step comes before the Microsoft registration so that
-   nothing is copied between that registration's client secret and the
-   field it goes into.
+6. The Worker's new code, from then on by itself. Every merge to main that
+   changes signin/worker.js runs .github/workflows/deploy-signin.yml, which
+   runs the service's tests and uploads the file to the Worker
+   `symphony-signin` through Cloudflare's API, keeping the Worker's
+   settings, variables and secrets as they are (scripts/deploy_signin.py).
+   It needs one secret, made once: in Cloudflare, open
+   https://dash.cloudflare.com/profile/api-tokens, press "Create Token",
+   press "Use template" beside "Edit Cloudflare Workers", choose your
+   account under Account Resources and "All zones" (or any) under Zone
+   Resources, press "Continue to summary", then "Create Token", and copy the
+   token. Open
+   https://github.com/OpenSpineConsortium/symphony-app/settings/secrets/actions/new,
+   type the name `CLOUDFLARE_API_TOKEN`, paste the token as its value, and
+   press "Add secret". Until it is set the workflow ends green with a
+   notice and deploys nothing. Where the token reaches several Cloudflare
+   accounts, the repository variable `CLOUDFLARE_ACCOUNT_ID` names the one
+   that holds the Worker. To deploy without a merge, press "Run workflow"
+   on https://github.com/OpenSpineConsortium/symphony-app/actions/workflows/deploy-signin.yml.
 7. The Microsoft app registration, for the Folders tab. Sign in with a
    Microsoft account whose own Microsoft Entra tenant you may register
    apps in, never a university or employer account: a registration
@@ -488,7 +494,7 @@ is 429. Without it the service runs the same, with no limit of its own.
 `handle()` with a fake GitHub and a fake Microsoft: the origin check, the
 body limits in bytes, the exchange with its verifier, the refresh, the
 revoke, the rate limit when a binding is there, GitHub refusing or
-unreachable, that nothing but the five fields reaches the page, the
+unreachable, a 429 from GitHub sent again after a wait (a 5xx never), that nothing but the five fields reaches the page, the
 device routes (the code asked with the client id and no secret, GitHub's
 page the only one named, the times bounded, GitHub's waiting words and
 refusals passed through with 400 and anything else 502, a malformed
