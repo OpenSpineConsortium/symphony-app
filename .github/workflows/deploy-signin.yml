@@ -1,0 +1,37 @@
+name: Deploy the sign-in service
+
+# The sign-in service under signin/ goes live by itself on every merge that changes it, so no step
+# of the owner's follows a merge (the owner, 2026-10-20). Its tests run first; then
+# scripts/deploy_signin.py uploads signin/worker.js to the Cloudflare Worker symphony-signin,
+# keeping the Worker's own settings and secrets. It needs one secret, CLOUDFLARE_API_TOKEN, made
+# once (signin/README.md); until it is set the run says so in a notice and ends green. One run at a
+# time, the newest winning, so an older upload never lands after a newer one.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - signin/worker.js
+      - scripts/deploy_signin.py
+      - .github/workflows/deploy-signin.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-signin
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test the service
+        run: node --test signin/test_worker.mjs
+      - name: Deploy it
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: python3 scripts/deploy_signin.py
