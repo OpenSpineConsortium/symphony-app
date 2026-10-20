@@ -1,0 +1,1 @@
+[["var read = tk.repo === repo && tk.place, failed = tokenReadFailed === repo;", "var read = tk.repo === repo && tk.place, failed = false;"]]

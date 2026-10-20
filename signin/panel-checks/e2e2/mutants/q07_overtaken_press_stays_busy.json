@@ -1,0 +1,1 @@
+[["      if (tokensRepo() !== repo || consoleTab !== tab || document.querySelector('dialog[open]')) { done(); return; }\n", "      if (tokensRepo() !== repo || consoleTab !== tab || document.querySelector('dialog[open]')) { return; }\n"]]

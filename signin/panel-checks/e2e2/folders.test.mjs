@@ -33,6 +33,13 @@ async function check(name, fn) {
 
 let real = fs.readFileSync(SITE + '/assets/js/symphony-panel.js', 'utf8');
 if (process.env.MUTANT) for (const [a, b] of JSON.parse(fs.readFileSync(process.env.MUTANT, 'utf8'))) { assert.ok(real.includes(a), 'mutant text not found: ' + a.slice(0, 60)); real = real.replace(a, b); }
+// a stylesheet mutant (css-mutants/, CSS_MUTANT), as signin.test.mjs serves one, for a rule of
+// control.css that only this suite's checks hold
+let controlCss = null;
+if (process.env.CSS_MUTANT) {
+  controlCss = fs.readFileSync(SITE + '/assets/css/control.css', 'utf8');
+  for (const [a, b] of JSON.parse(fs.readFileSync(process.env.CSS_MUTANT, 'utf8'))) { assert.ok(controlCss.includes(a), 'mutant text not found: ' + a.slice(0, 60)); controlCss = controlCss.replace(a, () => b); }
+}
 const SERVICE_LINE = /var SIGNIN_SERVICE = '[^']*';/;
 const CLIENT_LINE = /var CLIENT_ID = '[^']*';/;
 assert.ok(SERVICE_LINE.test(real) && CLIENT_LINE.test(real), 'the two constants were not found in the script');
@@ -225,6 +232,7 @@ async function open(opts) {
     if (r === null) return route.fulfill({ status: 204, headers, body: '' });
     return route.fulfill({ status: 200, contentType: 'application/json', headers, body: JSON.stringify(r) });
   });
+  if (controlCss !== null) await context.route('**/assets/css/control.css*', (route) => route.fulfill({ status: 200, contentType: 'text/css', body: controlCss }));
   await context.route('**/assets/js/symphony-panel.js*', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: o.script || configured }));
   // Microsoft's consent page: straight back with a code and the state it was given
   await context.route('https://login.microsoftonline.com/**', (route) => {
