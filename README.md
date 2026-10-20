@@ -97,10 +97,13 @@ By hand, at `https://github.com/organizations/<org>/settings/apps/new`:
 - Webhook: untick Active (stage 2 turns it on).
 - Repository permissions: Contents read and write, Issues read and write,
   Pull requests read and write, Checks read and write, Workflows read and
-  write, Actions read and write, Administration read and write, Secrets
-  read and write (the control panel's Folders tab, and the Tokens tab on a
-  personal account's repository); Metadata read-only comes with them.
-- Organization permissions: Secrets read and write, Variables read and
+  write, Actions read and write, Administration read and write, Pages
+  read and write, Secrets read and write (the control panel's Folders tab,
+  and the Tokens tab on a personal account's repository); Metadata
+  read-only comes with them.
+- Organization permissions: Administration read and write, for the box
+  "Allow GitHub Actions to create and approve pull requests" a new
+  organization holds off; Secrets read and write, Variables read and
   write, for the control panel's Tokens page.
 - Events: Issues, Issue comment, Pull request, Push, Check suite. GitHub
   delivers them only once the webhook is active; if the form hides them
@@ -188,10 +191,16 @@ adopts the template into a repository in one run of its workflow
 the template's scripts/setup-repo.sh applies by hand: the default
 branch's ruleset, delete-branch-on-merge, auto-merge, and secret scanning
 with push protection. Those take the Administration permission, which
-the main App, installed for good on every repository it serves, uses for
-one thing only since 2026-10-18: the control panel's Share tab invites a
-person as a collaborator, as the person signed in (the owner's choice;
-the Apps' privacy statement, version 17). No adoption run uses it there,
+the main App, installed for good on every repository it serves, uses
+for the control panel's Share tab, which invites a person as a
+collaborator, as the person signed in (the owner's choice of 2026-10-18),
+and, since the owner's rule of 2026-10-20 that the App he built applies
+the settings itself and Symphony Setup is only the fallback, for the
+settings of every repository made from the template: the template's
+.github/workflows/settings.yml runs scripts/setup-repo.sh with the main
+App's token (symphony-template#287), with Pages and the organization's
+Administration added for the documentation site and the Actions box. The
+front door's adoption run still applies them with the setup App,
 so the setup App holds Administration (write) and Metadata
 (read) and, on an organization, the organization's Administration
 (write), for the one box "Allow GitHub Actions to create and approve

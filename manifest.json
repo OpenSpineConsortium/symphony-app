@@ -16,9 +16,11 @@
     "workflows": "write",
     "actions": "write",
     "administration": "write",
+    "pages": "write",
     "secrets": "write",
     "actions_variables": "write",
     "metadata": "read",
+    "organization_administration": "write",
     "organization_secrets": "write",
     "organization_actions_variables": "write"
   },
