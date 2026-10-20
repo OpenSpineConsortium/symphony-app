@@ -685,7 +685,7 @@ await check('D2: two presses of Track in a row make one secret, one file and one
   await page.$eval('#fd-track', (b) => { b.click(); b.click(); });
   await page.waitForFunction(() => /acme\/demo tracks 1 item of OneDrive/.test(document.getElementById('msg').textContent));
   const writes = calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key);
-  assert.deepEqual(writes, ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
+  assert.deepEqual(writes, ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/variables', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -703,7 +703,7 @@ await check('E3: a 403 on the first run still leaves the secret and the file wri
   assertShort(text);
   assert.equal(text, 'acme/demo tracks 1 item of OneDrive in papers/, and the drive\'s tokens are dropped from this page. The sync could not be started from here (403: no Actions permission); press "Run workflow" at the runs link in Track in a repository.');
   const writes = calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key);
-  assert.deepEqual(writes, ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
+  assert.deepEqual(writes, ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/variables', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
   const file = JSON.parse(Buffer.from(calls.find((c) => c.key === 'PUT /repos/acme/demo/contents/.github/symphony/drive.json').body.content, 'base64').toString('utf8'));
   assert.deepEqual(file.items, [{ id: 'h1', name: HOSTILE, drive: 'drive1' }], 'the name goes to the file as the drive gave it; the run cleans it');
   // the runs link the words point at is in the tab, once it has read the repository again
@@ -833,7 +833,7 @@ await check('E5: a drive.json that cannot be written leaves the secret saved and
   calls.length = 0;
   await page.click('#fd-track');
   await page.waitForFunction(() => /acme\/demo tracks 1 item of OneDrive/.test(document.getElementById('msg').textContent), null, { timeout: 15000 });
-  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
+  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/variables', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -881,7 +881,7 @@ await check('P: a public repository is said beside Track with a box never ticked
   await page.check('#fd-public');
   await page.click('#fd-track');
   await page.waitForFunction(() => /acme\/demo tracks 1 item of OneDrive/.test(document.getElementById('msg').textContent), null, { timeout: 15000 });
-  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
+  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/variables', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
   await page.waitForFunction(() => /tracks 1 item/.test(document.getElementById('fd-tracked').textContent));
   assert.deepEqual(await box(), { shown: true, ticked: false }, 'after Track the box stays ticked for the next Track');
   assert.deepEqual(errors, []);
@@ -1355,7 +1355,7 @@ await check('N4: choosing another repository in the bar reads that repository\'s
   await page.click('#fd-track');
   await page.waitForFunction(() => /acme\/other tracks 1 item of OneDrive/.test(document.getElementById('msg').textContent));
   const writes = calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key);
-  assert.deepEqual(writes, ['PUT /repos/acme/other/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/other/contents/.github/symphony/drive.json', 'POST /repos/acme/other/actions/workflows/drive-sync.yml/dispatches']);
+  assert.deepEqual(writes, ['PUT /repos/acme/other/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/other/contents/.github/symphony/drive.json', 'POST /repos/acme/other/actions/variables', 'POST /repos/acme/other/actions/workflows/drive-sync.yml/dispatches']);
   assert.ok(!calls.some((c) => /acme\/demo/.test(c.key)), 'Track touched acme/demo');
   assert.deepEqual(errors, []);
   await context.close();
@@ -1465,7 +1465,7 @@ await check('N8: with no repository listed yet, the tab connects a drive, finds 
   calls.length = 0;
   await page.click('#fd-track');
   await page.waitForFunction(() => /acme\/fresh tracks 1 item of OneDrive in papers\//.test(document.getElementById('msg').textContent), null, { timeout: 15000 });
-  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), ['PUT /repos/acme/fresh/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/fresh/contents/.github/symphony/drive.json', 'POST /repos/acme/fresh/actions/workflows/drive-sync.yml/dispatches']);
+  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), ['PUT /repos/acme/fresh/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/fresh/contents/.github/symphony/drive.json', 'POST /repos/acme/fresh/actions/variables', 'POST /repos/acme/fresh/actions/workflows/drive-sync.yml/dispatches']);
   assert.deepEqual(errors, []);
   await context.close();
 });

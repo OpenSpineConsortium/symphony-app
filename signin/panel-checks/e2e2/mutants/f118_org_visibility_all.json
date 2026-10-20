@@ -1,0 +1,1 @@
+[["        body.selected_repository_ids = ids;\n        return gh('PUT', base + '/secrets/' + DRIVE_SECRET", "        body.selected_repository_ids = ids;\n        body.visibility = 'all';\n        return gh('PUT', base + '/secrets/' + DRIVE_SECRET"]]
