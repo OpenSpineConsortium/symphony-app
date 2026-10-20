@@ -1,0 +1,1 @@
+[["      var inst = installs.filter(function (i) { return i.account && String(i.account.login).toLowerCase() === owner; })[0];\n", "      var inst = null;\n"]]

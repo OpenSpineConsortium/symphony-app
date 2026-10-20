@@ -1,7 +1,0 @@
-FAIL NC4: what Track answers is said in its dialog, over which the foot cannot be read, and the head's button counts what is ticked in every folder 
-     Expected values to be strictly equal:
-     + actual - expected
-     
-     + 'Tick at least one file or folder to track, in the list of your OneDrive.'
-
-FAIL NC4: what Track answers is said in its dialog, over which the foot cannot be read, and the head's button counts what is ticked in every folder :: Expected values to be strictly equal:

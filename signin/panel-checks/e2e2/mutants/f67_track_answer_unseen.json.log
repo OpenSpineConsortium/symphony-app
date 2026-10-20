@@ -1,4 +1,0 @@
-FAIL NC4: what Track answers is said in its dialog, over which the foot cannot be read, and the head's button counts what is ticked in every folder 
-     page.waitForFunction: Timeout 30000ms exceeded.
-
-FAIL NC4: what Track answers is said in its dialog, over which the foot cannot be read, and the head's button counts what is ticked in every folder :: page.waitForFunction: Timeout 30000ms exceeded.
