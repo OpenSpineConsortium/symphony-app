@@ -130,11 +130,12 @@ function folderRoutes(repo, o) {
     ['POST ' + r + '/actions/variables']: o.noVariables ? refused403 : { status: 201, body: {} },
     ['PATCH ' + r + '/actions/variables/SYMPHONY_DRIVE']: o.noVariables ? refused403 : { status: 204, body: {} },
     // the organization's secret and the record of which drive it holds, where the owner is one
+    ['GET /orgs/acme']: { login: 'acme', plan: o.orgPlan ? { name: o.orgPlan } : undefined },
     ['GET /orgs/acme/actions/secrets/public-key']: o.orgKeyRefused ? refused403 : { key_id: 'ok1', key: PUBLIC_KEY },
     ['GET /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH']: o.orgDrive ? { name: 'SYMPHONY_DRIVE_REFRESH', visibility: 'selected' } : undefined,
     ['GET /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH/repositories']: { total_count: 1, repositories: [{ id: 555, full_name: 'acme/other' }] },
     ['GET /orgs/acme/actions/variables/SYMPHONY_DRIVE_ID']: o.orgDrive ? { name: 'SYMPHONY_DRIVE_ID', value: o.orgDrive } : undefined,
-    ['PUT /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH']: { status: 201, body: {} },
+    ['PUT /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH']: o.orgPutRefused ? refused403 : { status: 201, body: {} },
     ['POST /orgs/acme/actions/variables']: { status: 201, body: {} },
     ['PATCH /orgs/acme/actions/variables/SYMPHONY_DRIVE_ID']: { status: 204, body: {} },
   };
@@ -412,6 +413,8 @@ await check('A: with no provider set up, Connect cannot be pressed and one line 
   await page.click('#rail-folders');
   await page.waitForFunction(() => /has not set OneDrive up/.test(document.getElementById('fd-connect-note').textContent));
   assert.equal(await page.isDisabled('#fd-connect'), true);
+  // the drives' dialog says it too, since the head is behind it
+  assert.match(await page.textContent('#fd-cloud-note'), /has not set OneDrive up/);
   // the Track dialog's two steps, in the order they are taken, the second naming the repository
   await page.waitForFunction(() => document.getElementById('fd-track-head').textContent === 'Track in acme/demo');
   assert.deepEqual(await page.$$eval('#dlg-track .folders__step h3', (l) => l.map((h) => h.textContent)), ['Track in acme/demo']);
@@ -2440,7 +2443,7 @@ async function trackOn(o) {
 }
 const writesIn = (calls) => calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key);
 await check('FS4: in an organization whose secret no drive holds yet, Track keeps the token as the organization\'s secret, shared only with this repository and those already listed, records which drive it holds, and writes no repository secret', async () => {
-  const env = await trackOn({ org: true });
+  const env = await trackOn({ org: true, orgPlan: 'team' });
   const { context, page, calls, errors } = env;
   const writes = writesIn(calls);
   assert.ok(writes.indexOf('PUT /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH') >= 0, 'the organization\'s secret was not written');
@@ -2456,7 +2459,7 @@ await check('FS4: in an organization whose secret no drive holds yet, Track keep
   assert.deepEqual(errors, []);
   await context.close();
   // the same drive tracked again elsewhere joins the list the secret already has
-  const again = await trackOn({ org: true, orgDrive: 'drive1' });
+  const again = await trackOn({ org: true, orgPlan: 'team', orgDrive: 'drive1' });
   const put2 = again.calls.find((c) => c.key === 'PUT /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH').body;
   assert.deepEqual(put2.selected_repository_ids, [555, 123]);
   assert.ok(writesIn(again.calls).indexOf('PATCH /orgs/acme/actions/variables/SYMPHONY_DRIVE_ID') >= 0);
@@ -2464,11 +2467,12 @@ await check('FS4: in an organization whose secret no drive holds yet, Track keep
   await again.context.close();
 });
 await check('FS5: an organization secret another drive holds, a repository with its own secret, or an organization the person may not set secrets in, keeps the token in the repository\'s own secret and writes nothing of the organization\'s', async () => {
-  for (const o of [{ org: true, orgDrive: 'drive9' }, { org: true, secret: true }, { org: true, orgKeyRefused: true }]) {
+  // the last two: a private repository on GitHub Free, which reads no organization secret, and a token that may read the organization's secrets and not write them
+  for (const o of [{ org: true, orgPlan: 'team', orgDrive: 'drive9' }, { org: true, orgPlan: 'team', secret: true }, { org: true, orgPlan: 'team', orgKeyRefused: true }, { org: true, orgPlan: 'free' }, { org: true, orgPlan: 'team', orgPutRefused: true }]) {
     const env = await trackOn(o);
     const writes = writesIn(env.calls);
     assert.ok(writes.indexOf('PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH') >= 0, JSON.stringify(o) + ': the repository secret was not written');
-    assert.deepEqual(writes.filter((k) => k.indexOf('/orgs/') >= 0), [], JSON.stringify(o) + ': the organization was written');
+    assert.deepEqual(writes.filter((k) => k.indexOf('/orgs/') >= 0 && !(o.orgPutRefused && k === 'PUT /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH')), [], JSON.stringify(o) + ': the organization was written');
     assert.deepEqual(env.errors, []);
     await env.context.close();
   }
@@ -2482,7 +2486,7 @@ await check('FS6: a switch already on is left as it is, one off is turned on, an
   await off.context.close();
   const env = await trackOn({ noVariables: true });
   const { context, page, errors } = env;
-  assert.match(await msg(page), /The repository variable SYMPHONY_DRIVE could not be set to on \(.*\), so the half-hourly sync waits for it\. The first sync is queued\./);
+  assert.match(await msg(page), /The repository variable SYMPHONY_DRIVE could not be set to on \(.*\), so a drive-sync\.yml that waits for it does not run each half hour\. The first sync is queued\./);
   assert.equal(await page.evaluate(() => document.getElementById('dlg-track').open), true, 'the steps closed over a switch left off');
   assert.deepEqual(errors, []);
   await context.close();
@@ -2499,8 +2503,9 @@ await check('FS1: with no drive the tab is one dashed "+ Add a cloud drive" tile
   assert.equal(await page.isHidden('#fd-add'), true, 'two + Add buttons stand on the empty tab');
   await page.click('#fd-add-tile');
   assert.equal(await page.evaluate(() => document.getElementById('dlg-cloud').open), true);
-  assert.deepEqual(await page.$$eval('#dlg-cloud .clouds__tile', (l) => l.map((t) => [t.textContent.trim(), t.tagName === 'BUTTON', t.getAttribute('aria-disabled')])),
-    [['Connect OneDrive', true, null], ['Google Drive', false, 'true'], ['Dropbox', false, 'true']]);
+  assert.deepEqual(await page.$$eval('#dlg-cloud .clouds__tile', (l) => l.map((t) => [(t.querySelector('.clouds__name') || t).textContent.trim(), t.tagName === 'BUTTON', t.getAttribute('aria-label')])),
+    [['Connect OneDrive', true, null], ['Google Drive', false, 'Google Drive, coming later'], ['Dropbox', false, 'Dropbox, coming later']]);
+  assert.equal(await page.textContent('#fd-cloud-note'), '', 'the dialog gives a reason for a button that can be pressed');
   await page.waitForFunction(() => !document.getElementById('fd-connect').disabled, null, { timeout: 15000 });
   assert.equal(authorize.length, 0, 'Microsoft was asked before the press');
   assert.equal(graph.length, 0);
