@@ -406,7 +406,7 @@ ghu_TEST or github_pat_X.
   (NC2); and Track in a repository opens the dialog that holds what is ticked and the two steps,
   Escape closing it with the explorer as it was (NC3). CAT1 to CAT9, the saved catalog drawn when no
   drive was connected (claude/folders-catalog, 2026-10-18), were retired with that route.
-- `e2e2/explore.test.mjs`: 10 checks of the console's Explore tab, /symphony/control/#explore
+- `e2e2/explore.test.mjs`: 19 checks of the console's Explore tab, /symphony/control/#explore
   (site branch claude/explore-tab, 2026-10-18), against a mocked GitHub: a goal over an epic over
   three tasks, a draft pull request on one task's claim branch, one run with one job of four steps,
   a skipped one among them, and a log whose lines test the edges of each step by time. XP1 to XP7:
@@ -418,8 +418,27 @@ ghu_TEST or github_pat_X.
   and the reserve. XP8 serves the log as GitHub does, a redirect to its storage on another origin
   (a local server of the check's own, so Chromium's checks on private addresses are off for this
   suite alone), and holds that the storage is asked one plain read with no token and no header of
-  GitHub's. XP9 switches the repository while the tab is open, and XP10 holds that an epic whose
-  sub-issues could not be read says so.
+  GitHub's. XP9 switches the repository while the tab is open, the folded side column pressed to
+  bring the repository's box back, and XP10 holds that an epic whose sub-issues could not be read
+  says so. Since the tab's modern look (site branch claude/explore-modern, 2026-10-20, after the
+  owner's "the explorer looks janky so work on modernizing it and making it take up most of the
+  panel when using it"), a level is cards on the zoom stage the Dependencies tab uses: XP5 holds
+  that the wheel over a card zooms and goes into nothing, a glide outward comes out one level and
+  no more, Enter, Escape, Backspace and the arrows among the cards; XP11 that at 1440 x 900, on a
+  phone upright and sideways the level is whole with no box that scrolls and no card outside the
+  stage, the side column and the Ask Claude bar folded on a computer, the tab the whole screen on a
+  phone with the site bar's handle over none of its controls; XP12 that Panel, a press on the
+  folded foot or on the folded side column's grip (which drags nothing) brings them back, another
+  tab shows the console as it was, and on a phone Panel gives the page back; XP13 that +, Whole,
+  a double click and - past the whole level work, and the right and left arrows on the stage and a
+  swipe step to the level beside; XP14 that a log of 400 lines opens at its own size on its error
+  and the wheel moves along it without leaving it; XP15 that one card grows to fill the stage and
+  forty-three take six columns or more. After the modern look's adversarial review, XP16 holds that
+  a short log keeps the wheel and its lines copy whole without the log's markers; XP17 that a double
+  click goes one level, the arrows move between cards while zoomed in, and a held arrow steps
+  sideways once; XP18 that a log rewraps when Panel narrows its stage; XP19 that a phone signed out
+  at #explore scrolls and nothing of the fold applies. `VIEW=WxH` runs the checks in another window and `SHOTS=<folder>`
+  keeps a picture of each level a check passes through.
 - `e2e2/notebooks.test.mjs`: 36 checks of the console's Notebooks tab, /symphony/control/#notebooks
   (site pull request #82, 2026-10-19), against a mocked GitHub that keeps notebooks.json and
   catalog.json on the branch drive-catalog as GitHub does: read as objects with their sha, a file
@@ -722,7 +741,9 @@ ghu_TEST or github_pat_X.
   names were caught against site branch claude/folders-native that day (NC3 is held by the check
   alone, since the dialog is markup no line of the script carries).
   The 24 of the Explore tab (`x*`, each naming explore.test.mjs) were caught against site branch
-  claude/explore-tab on 2026-10-18, after its adversarial review. The 33 of the foot and the phone
+  claude/explore-tab on 2026-10-18, after its adversarial review; x25 to x40 (no x27, which became
+  equivalent once the unfold moved the grip from under the pointer, so a press on the folded grip
+  drags nothing with or without the line it removed) against claude/explore-modern on 2026-10-20. The 33 of the foot and the phone
   (`p*`, for P1 to P21; P22 and P23 are the stylesheet's, which no mutant of the script reaches, and
   were seen to fail with the old rules) were caught against site branch claude/panel-feedback at
   f025b08 on 2026-10-19, where every other suite passes too; p34 to p40, for P24 (the list written

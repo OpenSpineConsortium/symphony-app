@@ -1,0 +1,1 @@
+[["var at = explore.keying ? tiles.indexOf(document.activeElement) : -1;", "var at = -1;"]]
