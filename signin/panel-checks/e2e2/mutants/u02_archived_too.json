@@ -1,0 +1,1 @@
+[["if (r.archived || !(r.topics && r.topics.indexOf(TOPIC) >= 0)) return;", "if (!(r.topics && r.topics.indexOf(TOPIC) >= 0)) return;"]]

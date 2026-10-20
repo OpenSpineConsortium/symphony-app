@@ -1,0 +1,1 @@
+[["if (!name) { $('cp-summary').textContent = 'No repository listed yet. Press + Add repository in the side column to pick one.'; openDialog('dlg-repos'); return; }", "if (!name) { $('cp-summary').textContent = 'No repository listed yet. Press + Add repository in the side column to pick one.'; return; }"]]
