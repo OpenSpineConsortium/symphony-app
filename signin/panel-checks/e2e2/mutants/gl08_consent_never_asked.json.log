@@ -1,0 +1,4 @@
+FAIL GL3: a collection that asks for its own consent sends the page once more to Globus Auth, at once after Connect, with the scopes it named and the collection's HTTPS scope, and the list follows; a kept connection asks with a button instead 
+     page.waitForFunction: Timeout 15000ms exceeded.
+
+FAIL GL3: a collection that asks for its own consent sends the page once more to Globus Auth, at once after Connect, with the scopes it named and the collection's HTTPS scope, and the list follows; a kept connection asks with a button instead :: page.waitForFunction: Timeout 15000ms exceeded.

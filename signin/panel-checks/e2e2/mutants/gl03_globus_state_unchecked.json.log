@@ -1,0 +1,4 @@
+FAIL GL5: a sign-in refused at Globus, or come back with another state, connects nothing, exchanges nothing and says so with the word Globus 
+     page.waitForFunction: Timeout 15000ms exceeded.
+
+FAIL GL5: a sign-in refused at Globus, or come back with another state, connects nothing, exchanges nothing and says so with the word Globus :: page.waitForFunction: Timeout 15000ms exceeded.

@@ -1,0 +1,7 @@
+FAIL GL4: Globus stays connected on this browser through a reload, its access tokens renewed from the kept refresh tokens; with OneDrive connected too each is a root in the tree, a press switches, and Forget Globus leaves OneDrive in place 
+     page.textContent: Timeout 30000ms exceeded.
+     Call log:
+     [2m  - waiting for locator('#fd-other-root')[22m
+     
+
+FAIL GL4: Globus stays connected on this browser through a reload, its access tokens renewed from the kept refresh tokens; with OneDrive connected too each is a root in the tree, a press switches, and Forget Globus leaves OneDrive in place :: page.textContent: Timeout 30000ms exceeded.

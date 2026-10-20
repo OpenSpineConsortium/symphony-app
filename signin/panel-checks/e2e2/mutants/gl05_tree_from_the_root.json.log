@@ -1,0 +1,7 @@
+FAIL GL1: Connect Globus goes to Globus Auth with PKCE, offline access and the console as redirect, exchanges the code in the page with the matching verifier and no service, finds the collection by name, keeps only refresh tokens, and draws the home folder read-only with no ticks 
+     the tree does not show the home folder's folders under the collection
+     + actual - expected
+     
+       [
+
+FAIL GL1: Connect Globus goes to Globus Auth with PKCE, offline access and the console as redirect, exchanges the code in the page with the matching verifier and no service, finds the collection by name, keeps only refresh tokens, and draws the home folder read-only with no ticks :: the tree does not show the home folder's folders under the collection

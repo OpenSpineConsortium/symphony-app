@@ -2937,7 +2937,7 @@ await check('GL1: Connect Globus goes to Globus Auth with PKCE, offline access a
   assert.equal(await page.evaluate(() => window.__hostile), undefined, 'the hostile name ran');
   assert.deepEqual(await page.$$eval('#tab-folders .fx__cmds .fx__tool', (l) => l.filter((b) => b.disabled).map((b) => b.textContent)), ['New folder', 'Upload', 'Cut', 'Copy', 'Paste', 'Rename', 'Share', 'Delete', 'Download', 'Properties']);
   await page.click('#fd-items [data-item="/home/go2432/notes.txt"]');
-  assert.deepEqual(await page.$$eval('#tab-folders .fx__cmds .fx__tool', (l) => l.filter((b) => !b.disabled).map((b) => b.textContent)), ['Download', 'Properties', 'View ▾', 'Preview'], 'a writing verb can be pressed on Globus');
+  assert.deepEqual(await page.$$eval('#tab-folders .fx__cmds .fx__tool', (l) => l.filter((b) => !b.disabled).map((b) => b.textContent)), ['Download', 'Properties', 'View \u25BE', 'Preview'], 'a writing verb can be pressed on Globus');
   assert.match(await page.textContent('#fd-status'), /Read-only\./);
   assert.equal(await page.evaluate(() => document.getElementById('fd-track').classList.contains('console__primary')), false, 'Track is the filled button on a drive it never records');
   assert.deepEqual(await page.$$eval('#fd-tree .fx__nodename', (l) => l.map((n) => n.textContent)), ['wsugrid#globus', 'data'], 'the tree does not show the home folder\'s folders under the collection');
