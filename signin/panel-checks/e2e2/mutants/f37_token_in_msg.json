@@ -1,1 +1,1 @@
-[["say('OneDrive is connected for this page. Tick what to track in the list.');", "say('OneDrive is connected for this page (' + answer.refresh_token + '). Tick what to track in the list.');"]]
+[["say('OneDrive is connected, and stays connected on this browser for your GitHub account until you press Forget OneDrive. Tick what to track in the list.');", "say('OneDrive is connected (' + answer.refresh_token + '), and stays connected on this browser for your GitHub account until you press Forget OneDrive. Tick what to track in the list.');"]]
