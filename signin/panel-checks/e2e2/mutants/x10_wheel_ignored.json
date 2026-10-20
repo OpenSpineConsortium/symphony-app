@@ -1,1 +1,1 @@
-[["    $('ex-stage').addEventListener('wheel', exWheel, { passive: false });", ""]]
+[["    stage.addEventListener('wheel', exWheelBefore, { passive: false });", ""]]

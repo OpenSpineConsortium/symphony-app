@@ -2343,6 +2343,9 @@ await check('P6: on a phone every tab fits the window, the saved text size and i
   const wide = [];
   for (const tab of PHONE_TABS) {
     await page.click('.console__rail [data-tab="' + tab + '"]');
+    // Explore takes the whole phone screen; Panel brings the console back, as a person presses it
+    // to reach the rail again (explore.test.mjs XP11 and XP12 hold the screen it takes)
+    if (tab === 'explore') await page.click('#ex-wide');
     await sleep(350);
     const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
     if (m.sw > m.iw) wide.push(tab + ':' + m.sw + '/' + m.iw);
@@ -4087,6 +4090,7 @@ await check('P43: where the page scrolls, a phone\'s, a narrow window\'s or a ta
     const off = [];
     for (const tab of PHONE_TABS) {
       await page.click('.console__rail [data-tab="' + tab + '"]');
+      if (tab === 'explore') await page.click('#ex-wide');
       await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
       await sleep(250);
       const f = await footOf(page);
