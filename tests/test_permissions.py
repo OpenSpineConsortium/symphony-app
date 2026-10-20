@@ -88,6 +88,13 @@ class PermissionsTest(unittest.TestCase):
         self.assertEqual(permissions.owners_of({"SYMPHONY_OWNER_ACCOUNTS": "OpenSpineConsortium, Someone"}),
                          {"openspineconsortium", "someone"})
 
+    def test_what_no_installation_can_hold_is_not_asked_of_it(self):
+        app = {"administration": "write", "codespaces_user_secrets": "write", "organization_secrets": "write"}
+        personal = installation(9, "someone", {"administration": "write"}, kind="User")
+        organization = installation(7, "OpenSpineConsortium", {"administration": "write"})
+        self.assertEqual(permissions.installation_short_of(app, personal), [])
+        self.assertEqual(permissions.installation_short_of(app, organization), ["organization_secrets"])
+
 
 if __name__ == "__main__":
     unittest.main()

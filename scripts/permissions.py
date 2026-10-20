@@ -34,12 +34,28 @@ OWNERS_VARIABLE = "SYMPHONY_OWNER_ACCOUNTS"
 # the owner's accounts and few enough calls to stay well under the limit.
 PROBE_LIMIT = 50
 LEVELS = {"read": 1, "write": 2, "admin": 3}
+# Account permissions are granted to a person's own sign-in through the App,
+# never to an installation, so no installation lists them, whatever was
+# accepted; GitHub's settings page files them under "Account permissions".
+ACCOUNT_PERMISSIONS = {"blocking", "codespaces_user_secrets", "copilot_editor_context", "copilot_messages",
+                       "email_addresses", "followers", "git_ssh_keys", "gpg_keys", "plan",
+                       "private_repository_invitations", "profile", "ssh_signing_keys", "starring", "watching"}
 
 
 def short_of(wanted, granted):
     """The permissions granted holds below what wanted asks for, by name."""
     return sorted(name for name, level in wanted.items()
                   if LEVELS.get(granted.get(name), 0) < LEVELS.get(level, 0))
+
+
+def installation_short_of(app_permissions, installation):
+    """What the installation has yet to accept of what the App asks for,
+    leaving out what it can never hold: account permissions, and an
+    organization's permissions on a person's own account."""
+    personal = installation["account"].get("type") != "Organization"
+    wanted = {name: level for name, level in app_permissions.items()
+              if name not in ACCOUNT_PERMISSIONS and not (personal and name.startswith("organization_"))}
+    return short_of(wanted, installation.get("permissions") or {})
 
 
 def settings_page(installation):
@@ -69,7 +85,7 @@ def report_installation(installation, app_permissions, tokens, transport, api):
     account = installation["account"]
     lines = [f"installation on {account['login']} ({account.get('type', 'account')}, "
              f"{installation.get('repository_selection', 'some')} repositories)"]
-    missing = short_of(app_permissions, installation.get("permissions") or {})
+    missing = installation_short_of(app_permissions, installation)
     if missing:
         lines.append(f"  not accepted yet: {', '.join(missing)}; accept them at {settings_page(installation)}")
     else:
@@ -99,7 +115,7 @@ def report(app_jwt_source, owners, manifest, transport=urllib_transport, api=API
     for installation in app.get_all("/app/installations"):
         if installation["account"]["login"].lower() not in owners:
             others += 1
-            others_short += bool(short_of(app_permissions, installation.get("permissions") or {}))
+            others_short += bool(installation_short_of(app_permissions, installation))
             continue
         found, falls_short = report_installation(installation, app_permissions, tokens, transport, api)
         lines.extend(found)
