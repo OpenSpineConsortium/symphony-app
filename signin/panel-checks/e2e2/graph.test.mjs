@@ -546,11 +546,11 @@ const nearRead = (page, scope) => page.evaluate((scope) => {
     button: b ? b.textContent : null,
   };
 }, scope || null);
-const waitNear = (page, n, scope) => page.waitForFunction(([n, scope]) => {
+const waitNear = (page, n, scope, timeout) => page.waitForFunction(([n, scope]) => {
   const sec = scope ? document.querySelector(scope) : Array.from(document.querySelectorAll('#cp-graph .graph__section')).find((s) => !s.hidden);
   const num = sec && sec.querySelector('.graph__near:not([hidden]) .graph__nearnum');
   return num && num.textContent === '#' + n && sec.querySelector('.control__chart > svg.graph__nearsvg');
-}, [n, scope || null], { timeout: 8000 });
+}, [n, scope || null], { timeout: timeout || 8000 });
 // two fingers and one, as a touch screen sends them (Chromium's DevTools protocol), on a page opened
 // with opts.mobile; each move a step of its own, so the page sees the gesture as it goes
 const touchesAt = (cdp, type, points) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map((p, i) => ({ x: p.x, y: p.y, id: i })) });
@@ -2266,7 +2266,8 @@ await check('AM: a chart zoomed in is dragged with the mouse like a map, both wa
   await page.mouse.move(node.x + 120, node.y, { steps: 4 });
   await page.mouse.move(node.x, node.y, { steps: 4 });
   await page.mouse.up();
-  await sleep(600);
+  // a press taken from the drag opens its node late on a busy machine, so the read waits for it a while
+  await waitNear(page, 23, null, 2500).catch(() => {});
   const roundTrip = await panState(page);
   const node2 = await nodeAt(page, 23);
   await page.mouse.move(node2.x, node2.y);
