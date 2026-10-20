@@ -1,1 +1,1 @@
-[["function () { return hereFolder() !== null; }, function () { newFolder(); }", "function () { return true; }, function () { newFolder(); }"]]
+[["function () { return canWrite() && hereFolder() !== null; }, function () { newFolder(); }", "function () { return canWrite(); }, function () { newFolder(); }"]]

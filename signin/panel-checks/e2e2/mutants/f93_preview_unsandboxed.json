@@ -1,1 +1,1 @@
-[["          f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups');\n", ""]]
+[["          f.setAttribute('sandbox', p.blob ? '' : 'allow-scripts allow-same-origin allow-popups');\n", ""]]
