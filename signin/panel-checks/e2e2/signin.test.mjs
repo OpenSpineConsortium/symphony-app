@@ -317,6 +317,41 @@ await check('C3: the service refusing the code says so and offers the token', as
   await context.close();
 });
 
+await check('C4: GitHub limiting sign-ins with a 429 sends the code again after a wait, and the sign-in goes through', async () => {
+  let asked = 0;
+  // the service as deployed before it sent a 429 again itself, then GitHub letting it through
+  const serviceFn = (path) => path === '/exchange' && ++asked === 1 ? { status: 502, body: { error: 'github_refused', error_description: 'GitHub answered 429' } } : null;
+  const { context, page, service } = await open({ script: configured, serviceFn, path: '/symphony/control/' });
+  await pressSigninAndReturn(page);
+  await page.waitForFunction(() => /ghu_TOKEN/.test(sessionStorage.getItem('symphony_panel_oauth') || localStorage.getItem('symphony_panel_oauth') || ''), null, { timeout: 15000 });
+  const ex = service.filter((s) => s.path === '/exchange');
+  assert.equal(ex.length, 2, 'the code was not sent again');
+  assert.equal(ex[0].body.code, ex[1].body.code);
+  assert.ok(!/limiting/.test(await page.textContent('#msg')), 'a sign-in that went through still says GitHub refused it');
+  await context.close();
+});
+
+await check('C5: a 429 that lasts is said in plain words after three tries, and a 5xx is not sent again', async () => {
+  const lasting = { '/exchange': { status: 502, body: { error: 'github_unreachable', error_description: 'GitHub is limiting sign-ins for the moment (it answered 429); wait a minute and try again' } } };
+  const one = await open({ script: configured, service: lasting, path: '/symphony/control/' });
+  await pressSigninAndReturn(one.page);
+  await one.page.waitForFunction(() => /limiting sign-ins for the moment, so this one did not finish/.test(document.getElementById('msg').textContent), null, { timeout: 20000 });
+  const msg = await one.page.textContent('#msg');
+  console.log('      message:', msg);
+  assert.ok(!/github_unreachable|502/.test(msg), 'the words of the service reached the person');
+  assert.equal(one.service.filter((s) => s.path === '/exchange').length, 3);
+  const f = await gateFacts(one.page);
+  assert.ok(f.wayOpen && f.tokenVisible);
+  await one.context.close();
+  const down = { '/exchange': { status: 502, body: { error: 'github_unreachable', error_description: 'GitHub answered 503 for the moment; try again' } } };
+  const two = await open({ script: configured, service: down, path: '/symphony/control/' });
+  await pressSigninAndReturn(two.page);
+  await two.page.waitForFunction(() => /answered 503/.test(document.getElementById('msg').textContent));
+  await two.page.waitForTimeout(2500);
+  assert.equal(two.service.filter((s) => s.path === '/exchange').length, 1, 'a code GitHub may have spent was sent again');
+  await two.context.close();
+});
+
 await check('D1: an expired sign-in is renewed before the first call, and the new token is used', async () => {
   const record = JSON.stringify({ access_token: 'ghu_OLD', refresh_token: 'ghr_R', expires_at: Date.now() - 1000, refresh_expires_at: Date.now() + 86400000 });
   const { context, page, calls, service } = await open({ script: configured, path: '/symphony/control/?repo=acme/demo', storage: { session: { symphony_panel_oauth: record } } });
