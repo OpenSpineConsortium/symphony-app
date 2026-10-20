@@ -1,4 +1,0 @@
-FAIL GL2: on Globus a double click opens a file in a new tab at the collection's own HTTPS address, a folder opens and Up comes back, a path typed opens that folder, Enter asks the folder for the names, Download asks the address with ?download, the preview pane fetches a text with the collection's token and plays a video from the address, Properties says the path and the permissions, and the menu offers nothing that writes 
-     page.waitForFunction: Timeout 15000ms exceeded.
-
-FAIL GL2: on Globus a double click opens a file in a new tab at the collection's own HTTPS address, a folder opens and Up comes back, a path typed opens that folder, Enter asks the folder for the names, Download asks the address with ?download, the preview pane fetches a text with the collection's token and plays a video from the address, Properties says the path and the permissions, and the menu offers nothing that writes :: page.waitForFunction: Timeout 15000ms exceeded.
