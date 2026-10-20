@@ -59,6 +59,7 @@
 //                         makes every answer 503, so a mistake shows instead of refusing everyone)
 //   RATE_LIMITER          optional, a Workers rate-limiting binding of that name; when it is
 //                         there, each caller's address gets its limit, and past it the answer is 429
+//   RETRY_WAIT_SCALE      for the tests only: '0' sends a form GitHub answered 429 again at once
 // README.md beside this file gives the clicks.
 
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
@@ -187,7 +188,32 @@ function unreachable() {
 
 /** GitHub reached but answering a 5xx or a 429 for the moment: the same word, with GitHub's status */
 function busy(status) {
-  return { status: 502, body: { error: 'github_unreachable', error_description: 'GitHub answered ' + status + ' for the moment; try again' } };
+  const why = status === 429 ? 'GitHub is limiting sign-ins for the moment (it answered 429); wait a minute and try again' : 'GitHub answered ' + status + ' for the moment; try again';
+  return { status: 502, body: { error: 'github_unreachable', error_description: why } };
+}
+
+/** GitHub's own trouble of the moment, a 5xx or a 429 with no OAuth word of its own */
+function isBusy(r) {
+  return (r.status >= 500 || r.status === 429) && !r.data.error;
+}
+
+// GitHub's login endpoints hold each address to a limit, and a Worker reaches them from addresses
+// Cloudflare shares among many Workers, so a 429 can come from others' calls. A 429 is GitHub
+// declining the request before acting on it, so the code or refresh token is not spent and the
+// same form is sent again, after the wait GitHub's Retry-After names (at most the last wait here)
+// or these waits; the page waits 20 seconds for the whole answer, so the waits stay well within it.
+// A 5xx is not sent again: GitHub may have spent a single-use code or refresh token before failing.
+const RETRY_WAITS_MS = [1000, 3000];
+
+function waitFor(r, step, env) {
+  if (env && env.RETRY_WAIT_SCALE === '0') return 0;
+  const named = Number(r.headers && r.headers.get ? r.headers.get('Retry-After') : NaN);
+  const max = RETRY_WAITS_MS[RETRY_WAITS_MS.length - 1];
+  return Number.isInteger(named) && named >= 0 ? Math.min(named * 1000, max) : RETRY_WAITS_MS[step];
+}
+
+function pause(ms) {
+  return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve();
 }
 
 /** one form POSTed to one of GitHub's login endpoints, with the App's client id and, where asked,
@@ -196,6 +222,14 @@ async function postToGitHub(env, url, form, withSecret, fetchImpl) {
   const body = new URLSearchParams(form);
   body.set('client_id', env.GITHUB_CLIENT_ID);
   if (withSecret) body.set('client_secret', env.GITHUB_CLIENT_SECRET);
+  for (let step = 0; ; step++) {
+    const answer = await postOnce(url, body, fetchImpl);
+    if (!answer || answer.status !== 429 || answer.data.error || step >= RETRY_WAITS_MS.length) return answer;
+    await pause(waitFor(answer.raw, step, env));
+  }
+}
+
+async function postOnce(url, body, fetchImpl) {
   let r;
   try {
     r = await (fetchImpl || fetch)(url, {
@@ -208,7 +242,7 @@ async function postToGitHub(env, url, form, withSecret, fetchImpl) {
   }
   let data;
   try { data = await r.json(); } catch (e) { data = {}; }
-  return { status: r.status, ok: r.ok, data: data && typeof data === 'object' ? data : {} };
+  return { status: r.status, ok: r.ok, data: data && typeof data === 'object' ? data : {}, raw: r };
 }
 
 /** only the fields of a token answer the page needs; whatever else GitHub says stays here and is dropped */
@@ -230,6 +264,7 @@ async function askGitHub(env, form, fetchImpl) {
   const r = await postToGitHub(env, GITHUB_TOKEN_URL, form, true, fetchImpl);
   if (!r) return unreachable();
   const data = r.data;
+  if (isBusy(r)) return busy(r.status);
   if (!r.ok || !data.access_token) {
     return { status: 502, body: { error: data.error || 'github_refused', error_description: data.error_description || ('GitHub answered ' + r.status) } };
   }
@@ -248,6 +283,7 @@ async function askDeviceCode(env, fetchImpl) {
   const data = r.data;
   const device = tokenish(data.device_code, 128);
   const user = typeof data.user_code === 'string' && /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(data.user_code) ? data.user_code : null;
+  if (isBusy(r)) return busy(r.status);
   if (!r.ok || !device || !user) {
     // device_flow_disabled is GitHub's word while the App's "Enable Device Flow" is unticked
     return { status: 502, body: { error: data.error || 'github_refused', error_description: data.error_description || ('GitHub answered ' + r.status) } };
@@ -275,7 +311,7 @@ async function askDeviceToken(env, device, fetchImpl) {
   // GitHub's own trouble of the moment, a 5xx or a 429 with no OAuth word of its own, is no refusal:
   // the person may be typing the code right now, so it goes back as a moment GitHub cannot be
   // reached, which the page asks again at the same pace until the code runs out
-  if ((r.status >= 500 || r.status === 429) && !data.error) return busy(r.status);
+  if (isBusy(r)) return busy(r.status);
   return { status: 502, body: { error: data.error || 'github_refused', error_description: data.error_description || ('GitHub answered ' + r.status) } };
 }
 

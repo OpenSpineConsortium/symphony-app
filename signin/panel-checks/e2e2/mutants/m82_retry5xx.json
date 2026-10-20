@@ -1,0 +1,1 @@
+[["    return !!e && e.code === 'github_unreachable' && !/answered 5\\d\\d\\b/.test(words);\n", "    return !!e && e.code === 'github_unreachable';\n"]]

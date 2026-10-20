@@ -488,7 +488,7 @@ is 429. Without it the service runs the same, with no limit of its own.
 `handle()` with a fake GitHub and a fake Microsoft: the origin check, the
 body limits in bytes, the exchange with its verifier, the refresh, the
 revoke, the rate limit when a binding is there, GitHub refusing or
-unreachable, that nothing but the five fields reaches the page, the
+unreachable, a 429 from GitHub sent again after a wait (a 5xx never), that nothing but the five fields reaches the page, the
 device routes (the code asked with the client id and no secret, GitHub's
 page the only one named, the times bounded, GitHub's waiting words and
 refusals passed through with 400 and anything else 502, a malformed
