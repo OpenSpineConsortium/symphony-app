@@ -78,6 +78,8 @@ function folderRoutes(repo, o) {
   const heads = { main: 'abc123' };
   if (o.branchThere) { heads[DRIVE_BRANCH] = 'old999'; files[DRIVE_BRANCH] = { text: '{"left": "from an earlier Track"}', sha: 'shaBranch' }; }
   let secretSet = !!o.secret;
+  // the organization's secret as GitHub gives it to this repository's workflows, or withholds it
+  let orgShared = !!o.orgShared;
   let written = 0;
   const refOf = (req) => new URL(req.url()).searchParams.get('ref') || 'main';
   const copyOfMain = () => (files.main ? Object.assign({}, files.main) : null);
@@ -135,7 +137,8 @@ function folderRoutes(repo, o) {
     ['GET /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH']: o.orgDrive ? { name: 'SYMPHONY_DRIVE_REFRESH', visibility: 'selected' } : undefined,
     ['GET /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH/repositories']: { total_count: 1, repositories: [{ id: 555, full_name: 'acme/other' }] },
     ['GET /orgs/acme/actions/variables/SYMPHONY_DRIVE_ID']: o.orgDrive ? { name: 'SYMPHONY_DRIVE_ID', value: o.orgDrive } : undefined,
-    ['PUT /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH']: o.orgPutRefused ? refused403 : { status: 201, body: {} },
+    ['PUT /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH']: () => { if (o.orgPutRefused) return refused403; orgShared = true; return { status: 201, body: {} }; },
+    ['GET ' + r + '/actions/organization-secrets']: () => (o.orgListRefused ? refused403 : { total_count: orgShared && !o.orgWithheld ? 1 : 0, secrets: orgShared && !o.orgWithheld ? [{ name: 'SYMPHONY_DRIVE_REFRESH', visibility: 'selected' }] : [] }),
     ['POST /orgs/acme/actions/variables']: { status: 201, body: {} },
     ['PATCH /orgs/acme/actions/variables/SYMPHONY_DRIVE_ID']: { status: 204, body: {} },
   };
@@ -2535,6 +2538,27 @@ await check('FS7: opening the tab on a repository that tracks a drive, its secre
   assert.deepEqual(writesIn(meanwhile.calls), ['POST /repos/acme/demo/actions/variables']);
   assert.equal(/half-hourly sync/.test(await meanwhile.page.textContent('#fd-tracked')), false, 'a switch made meanwhile was said as a failure');
   await meanwhile.context.close();
+});
+await check('FS8: an organization secret GitHub then withholds from the repository, or whose reach cannot be read, is followed by the repository\'s own secret, and a repository that tracks a drive through the organization\'s secret alone shows it set and has its sync switched on', async () => {
+  for (const o of [{ org: true, orgPlan: 'team', orgWithheld: true }, { org: true, orgPlan: 'team', orgListRefused: true }]) {
+    const env = await trackOn(o);
+    const writes = writesIn(env.calls);
+    const org = writes.indexOf('PUT /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH');
+    const own = writes.indexOf('PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH');
+    assert.ok(org >= 0 && own > org, JSON.stringify(o) + ': the repository\'s own secret did not follow the organization\'s: ' + writes.join(', '));
+    assert.equal(writes.indexOf('POST /orgs/acme/actions/variables'), -1, JSON.stringify(o) + ': the drive was recorded for a secret that does not reach');
+    assert.equal(/a secret of acme/.test(await msg(env.page)), false, JSON.stringify(o) + ': the organization\'s secret was said as kept');
+    assert.deepEqual(env.errors, []);
+    await env.context.close();
+  }
+  const env = await open({ tracked: true, orgShared: true });
+  await ready(env.page);
+  await env.page.click('#rail-folders');
+  await env.page.waitForFunction(() => /The secret SYMPHONY_DRIVE_REFRESH is set, as the organization's, which GitHub gives this repository\./.test(document.getElementById('fd-tracked').textContent), null, { timeout: 15000 });
+  await env.page.waitForFunction(() => /is now set to on/.test(document.getElementById('fd-tracked').textContent), null, { timeout: 15000 });
+  assert.deepEqual(writesIn(env.calls), ['POST /repos/acme/demo/actions/variables']);
+  assert.deepEqual(env.errors, []);
+  await env.context.close();
 });
 await check('FS1: with no drive the tab is one dashed "+ Add a cloud drive" tile, as + Add repository is drawn; it and the head\'s own open the drives, OneDrive one press away, Google Drive and Dropbox said as coming later, and nothing is asked of Microsoft before the press', async () => {
   const env = await open({});
