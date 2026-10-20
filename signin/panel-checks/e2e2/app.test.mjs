@@ -77,6 +77,10 @@ function partEdges(parts) {
 }
 // the parts of the page that reach the screen's edges, besides the header and the deck
 const BANDS = [['the section strip', '.subnav__in *'], ['the breadcrumb', '.crumbs *'], ['the footer', '.footer *']];
+// on a phone the console is fixed over the whole screen, one thing at a time (site branch
+// claude/project-thread-6cxgh2, 2026-10-20, the owner's square tab buttons), so the breadcrumb and
+// the footer are not drawn under it and only the strip reaches the screen's edges
+const BANDS_PHONE = BANDS.slice(0, 1);
 function assertInside(edges, left, right) {
   for (const e of edges) {
     assert.ok(e.shown > 0, e.name + ' shows nothing to measure');
@@ -173,7 +177,9 @@ await check('H3: where the screen has no safe areas, a computer\'s or a phone\'s
           status: getComputedStyle(document.querySelector('.console__status')).paddingBottom, nav: [r.left, r.right], width: document.documentElement.clientWidth,
           navPad: pad('#nav'), bands: [pad('.subnav--fly.is-here .subnav__in'), pad('.crumbs'), pad('.footer')] };
       });
-      assert.deepEqual([got.left, got.right, got.bottom], ['14px', '14px', '12px'], 'the deck\'s padding moved at ' + viewport.width + ' px');
+      // on a phone the deck is fixed over the screen with no foot padding of its own: the status
+      // line's own padding holds it off the screen's bottom
+      assert.deepEqual([got.left, got.right, got.bottom], ['14px', '14px', mobile ? '0px' : '12px'], 'the deck\'s padding moved at ' + viewport.width + ' px');
       assert.equal(got.status, mobile ? '6px' : '0px', 'the status line\'s padding moved at ' + viewport.width + ' px');
       assert.deepEqual(got.nav, [0, got.width], 'the header no longer spans the window at ' + viewport.width + ' px');
       assert.deepEqual(got.navPad, [side, side], 'the header\'s own padding moved at ' + viewport.width + ' px');
@@ -215,7 +221,7 @@ await check('H5: on a phone held sideways, installed, the header\'s bar and the 
     assert.ok(foot.shown > 0, 'the status line shows nothing to measure');
     assert.ok(foot.foot <= foot.height - 21 + 0.5, 'the status line reaches ' + (foot.height - foot.foot) + ' px from the foot, under the home bar');
     assert.equal(px(foot.status), 6 + 21);
-    assertInside(await page.evaluate(partEdges, BANDS), 47, W - 47);
+    assertInside(await page.evaluate(partEdges, BANDS_PHONE), 47, W - 47);
     // the answer's drawer, shown as an answer shows it: fixed to the screen in the phone layout
     const drawer = await page.evaluate(() => {
       document.getElementById('cp-app').classList.remove('hidden');
@@ -242,7 +248,7 @@ await check('H6: on a large phone held sideways, wider than 900 px, the header k
       assert.ok(head.toggleShown, 'the header lays its links out in one row at ' + width + ' px, which does not fit inside the notch');
       assert.ok(head.brand[0] >= side && head.toggle[1] <= W - side, 'the brand or the menu button runs under the notch at ' + width + ' px: ' + head.brand[0] + ' and ' + head.toggle[1]);
       assert.ok(head.scrollWidth <= W, 'the page is ' + head.scrollWidth + ' px wide at ' + width + ' px');
-      assertInside(await page.evaluate(partEdges, BANDS), side, W - side);
+      assertInside(await page.evaluate(partEdges, BANDS_PHONE), side, W - side);
       assertInside(await openNavDrawer(page), side, W - side);
     } finally { await context.close(); }
   }
