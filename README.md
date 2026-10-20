@@ -64,7 +64,7 @@ installations may use the App.
 | app/envfile.py | The env file register.py writes and the server reads |
 | app/vendor/ | protocol_check.py and claims.py from symphony-protocol, with its `__init__.py` and vendoring.py, and VENDORED, the record they are held to (vendor/README.md) |
 | manifest.json | The App's manifest: name, permissions, events |
-| manifest-setup.json | The setup App's manifest: Administration and Metadata, the organization's Administration, Secrets and Variables, public, no webhook (The Setup App for the front door) |
+| manifest-setup.json | The setup App's manifest: Administration, Pages, Variables and Metadata, the organization's Administration, Secrets and Variables, public, no webhook (The Setup App for the front door) |
 | scripts/register.py | Registers the App, or with `--setup` the setup App, for an organization by GitHub's manifest flow |
 | scripts/collect.py | Collects the field metrics projects share, daily from .github/workflows/collect.yml (Field metrics) |
 | scripts/check.sh | The checks; CI's job `check` runs it |
