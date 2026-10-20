@@ -1,1 +1,1 @@
-[["state.repo || chosenRepo() || $('dlg-repos').open; }", "state.repo || chosenRepo(); }"]]
+[["|| $('dlg-repos').open || !token; }", "|| !token; }"]]

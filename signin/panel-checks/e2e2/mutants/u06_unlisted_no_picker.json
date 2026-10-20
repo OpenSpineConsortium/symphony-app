@@ -1,1 +1,1 @@
-[["      $('cp-summary').textContent = 'No repository listed yet. Press + Add repository in the side column to pick one.';\n      openDialog('dlg-repos');\n    });", "      $('cp-summary').textContent = 'No repository listed yet. Press + Add repository in the side column to pick one.';\n    });"]]
+[["      if (!chosenMeanwhile()) none();\n", "\n"]]
