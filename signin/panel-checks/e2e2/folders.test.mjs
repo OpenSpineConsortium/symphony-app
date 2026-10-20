@@ -126,8 +126,8 @@ function folderRoutes(repo, o) {
     ['POST ' + r + '/pulls']: { status: 201, body: { number: 9, html_url: 'https://github.com/' + repo + '/pull/9' } },
     ['POST ' + r + '/actions/workflows/drive-sync.yml/dispatches']: o.noActions ? refused403 : null,
     // the switch drive-sync.yml's half-hourly run waits for
-    ['GET ' + r + '/actions/variables/SYMPHONY_DRIVE']: o.switchValue ? { name: 'SYMPHONY_DRIVE', value: o.switchValue } : undefined,
-    ['POST ' + r + '/actions/variables']: o.noVariables ? refused403 : { status: 201, body: {} },
+    ['GET ' + r + '/actions/variables/SYMPHONY_DRIVE']: o.switchReadRefused ? refused403 : o.switchValue ? { name: 'SYMPHONY_DRIVE', value: o.switchValue } : undefined,
+    ['POST ' + r + '/actions/variables']: o.noVariables ? refused403 : o.switchConflict ? { status: 409, body: { message: 'Already exists - Variable already exists' } } : { status: 201, body: {} },
     ['PATCH ' + r + '/actions/variables/SYMPHONY_DRIVE']: o.noVariables ? refused403 : { status: 204, body: {} },
     // the organization's secret and the record of which drive it holds, where the owner is one
     ['GET /orgs/acme']: { login: 'acme', plan: o.orgPlan ? { name: o.orgPlan } : undefined },
@@ -2490,6 +2490,51 @@ await check('FS6: a switch already on is left as it is, one off is turned on, an
   assert.equal(await page.evaluate(() => document.getElementById('dlg-track').open), true, 'the steps closed over a switch left off');
   assert.deepEqual(errors, []);
   await context.close();
+});
+await check('FS7: opening the tab on a repository that tracks a drive, its secret set and its connection not known to have run out, switches the half-hourly sync on where it was never set and says so, writing nothing else; a switch set to off or on, no file, no secret or a lapsed connection writes nothing, a refused switch and an unread one are said apart, and a switch made meanwhile is no failure', async () => {
+  const variableCalls = (calls) => calls.filter((c) => /\/actions\/variables/.test(c.key)).map((c) => c.key);
+  const openTab = async (o) => {
+    const env = await open(o);
+    await ready(env.page);
+    await env.page.click('#rail-folders');
+    await env.page.waitForFunction(() => !/^Reading /.test(document.getElementById('fd-tracked').textContent), null, { timeout: 15000 });
+    return env;
+  };
+  const unset = await openTab({ tracked: true, secret: true });
+  await unset.page.waitForFunction(() => /The half-hourly sync was never switched on in acme\/demo, so the repository variable SYMPHONY_DRIVE is now set to on\./.test(document.getElementById('fd-tracked').textContent), null, { timeout: 15000 });
+  assert.deepEqual(writesIn(unset.calls), ['POST /repos/acme/demo/actions/variables'], 'opening the tab wrote something other than the switch');
+  assert.deepEqual(unset.calls.find((c) => c.key === 'POST /repos/acme/demo/actions/variables').body, { name: 'SYMPHONY_DRIVE', value: 'on' });
+  assert.deepEqual(unset.errors, []);
+  await unset.context.close();
+  for (const value of ['on', 'off']) {
+    const env = await openTab({ tracked: true, secret: true, switchValue: value });
+    await env.page.waitForFunction(() => /tracks 2 items/.test(document.getElementById('fd-tracked').textContent), null, { timeout: 15000 });
+    await env.page.waitForTimeout(400);
+    assert.deepEqual(variableCalls(env.calls), ['GET /repos/acme/demo/actions/variables/SYMPHONY_DRIVE'], 'a switch set to ' + value + ' was written');
+    assert.equal(/half-hourly sync/.test(await env.page.textContent('#fd-tracked')), false, 'a switch set to ' + value + ' was spoken of');
+    await env.context.close();
+  }
+  for (const o of [{}, { secret: true }, { tracked: true }, { tracked: true, secret: true, driveJson: Object.assign({}, driveJson, { connected: dayShift(-100) }) }]) {
+    const env = await openTab(o);
+    await env.page.waitForTimeout(400);
+    assert.deepEqual(variableCalls(env.calls), [], JSON.stringify(Object.keys(o)) + ': the switch was asked about where nothing syncs');
+    assert.deepEqual(env.errors, []);
+    await env.context.close();
+  }
+  const refused = await openTab({ tracked: true, secret: true, noVariables: true });
+  await refused.page.waitForFunction(() => /The half-hourly sync is not switched on in acme\/demo and the repository variable SYMPHONY_DRIVE could not be set to on \(.+\); Sync now still runs it by hand\./.test(document.getElementById('fd-tracked').textContent), null, { timeout: 15000 });
+  assert.deepEqual(refused.errors, []);
+  await refused.context.close();
+  const unread = await openTab({ tracked: true, secret: true, switchReadRefused: true });
+  await unread.page.waitForFunction(() => /Whether the half-hourly sync is switched on in acme\/demo could not be read \(.+\)\./.test(document.getElementById('fd-tracked').textContent), null, { timeout: 15000 });
+  assert.deepEqual(writesIn(unread.calls), [], 'a switch that could not be read was written');
+  await unread.context.close();
+  const meanwhile = await openTab({ tracked: true, secret: true, switchConflict: true });
+  await meanwhile.page.waitForFunction(() => /tracks 2 items/.test(document.getElementById('fd-tracked').textContent), null, { timeout: 15000 });
+  await meanwhile.page.waitForTimeout(400);
+  assert.deepEqual(writesIn(meanwhile.calls), ['POST /repos/acme/demo/actions/variables']);
+  assert.equal(/half-hourly sync/.test(await meanwhile.page.textContent('#fd-tracked')), false, 'a switch made meanwhile was said as a failure');
+  await meanwhile.context.close();
 });
 await check('FS1: with no drive the tab is one dashed "+ Add a cloud drive" tile, as + Add repository is drawn; it and the head\'s own open the drives, OneDrive one press away, Google Drive and Dropbox said as coming later, and nothing is asked of Microsoft before the press', async () => {
   const env = await open({});
