@@ -16,6 +16,7 @@
     "workflows": "write",
     "actions": "write",
     "administration": "write",
+    "pages": "write",
     "secrets": "write",
     "actions_variables": "write",
     "metadata": "read",
