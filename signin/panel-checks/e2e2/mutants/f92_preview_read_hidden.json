@@ -1,0 +1,1 @@
+[["if (!pane || !explorer.preview) return;", "if (!pane) return;"]]

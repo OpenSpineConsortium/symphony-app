@@ -1,1 +1,1 @@
-[["var name = btn('', true, function () { if (folder.id !== here) go(path); });", "var name = btn('', true, function () { });"]]
+[["var name = btn('', true, function () { if (folder.id !== at) go(path); });", "var name = btn('', true, function () { });"]]

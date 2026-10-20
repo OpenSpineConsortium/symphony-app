@@ -1,0 +1,1 @@
+[["if (!clash.length) return sendFiles(files, into, 'fail');", "if (!clash.length) return sendFiles(files, into, 'replace');"]]

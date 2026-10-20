@@ -1,0 +1,1 @@
+[["else if (ev.ctrlKey || ev.metaKey) selectToggle(id);", "else if (ev.ctrlKey || ev.metaKey) select(id);"]]

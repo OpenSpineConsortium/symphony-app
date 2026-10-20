@@ -1,0 +1,1 @@
+[["for (var i = Math.min(a, b); i <= Math.max(a, b); i++)", "for (var i = Math.min(a, b); i < Math.max(a, b); i++)"]]

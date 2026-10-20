@@ -1,0 +1,1 @@
+[["var url = httpsOnly(r['@microsoft.graph.downloadUrl']);", "var url = r['@microsoft.graph.downloadUrl'];"]]

@@ -1,0 +1,1 @@
+[["search.addEventListener('input', function () { explorer.filter = search.value; drawItems(); });", "search.addEventListener('input', function () { explorer.filter = search.value; drawItems(); graph(searchAddress(search.value)).catch(function () {}); });"]]

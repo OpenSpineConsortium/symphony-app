@@ -1,0 +1,1 @@
+[["var url = httpsOnly(r.link && r.link.webUrl);", "var url = r.link && r.link.webUrl;"]]

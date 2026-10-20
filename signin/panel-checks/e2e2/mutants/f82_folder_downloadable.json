@@ -1,0 +1,1 @@
+[["function (n) { return n > 0 && selectedItems().some(function (it) { return !it.folder; }); }", "function (n) { return n > 0; }"]]
