@@ -1,0 +1,1 @@
+[["      var name = chosenRepo();\n      fillRepoSelect($('cp-repo'), name);\n      if (location.hash === '#repos')", "      var name = '';\n      fillRepoSelect($('cp-repo'), name);\n      if (location.hash === '#repos')"]]

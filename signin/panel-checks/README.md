@@ -107,6 +107,14 @@ ghu_TEST or github_pat_X.
   list of pairs for control.css, served in its place, as `MUTANT` names one for the script.
 - `e2e2/panel.test.mjs`: the panel's walkthrough on both pages.
 - `e2e2/hostile.test.mjs`: 13 hostile-input checks.
+- `e2e2/usual.test.mjs`: 6 checks of the repository a browser that keeps none opens, a new one or
+  a guest window (site branch claude/open-usual-repo, 2026-10-20, the owner's ask that a first
+  sign-in in a browser not land on the picker). U1: the repository with Symphony set up that was
+  pushed most recently opens, skipping one without the topic and an archived one, and the browser
+  keeps it; U2: a repository the browser kept comes first, and GitHub is not asked for the list;
+  U3 and U4: the picker opens by itself where none has Symphony or GitHub does not list them; U5: a
+  picker the person opened meanwhile is not overruled; U6: the Folders tab opens neither. Its nine
+  mutants, `u01` to `u09`, were caught against that branch.
 - `e2e2/assistant.test.mjs`: 26 checks of the panel's assistant (site branch claude/assistant-panel,
   2026-10-18): who may ask (write access, and the repository's workflow carrying
   .github/symphony/assistant.md), the label and the issue made once and only on a press, the
@@ -573,7 +581,7 @@ ghu_TEST or github_pat_X.
   (signin/README.md, step 9). GitHub's 5xx and 429 while the person types the code are the
   service's to answer, as github_unreachable, which K5 holds the page asks again at the same
   pace; test_worker.mjs holds the service's side.
-- `e2e2/mutants/`: 537 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/mutants/`: 638 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
