@@ -90,6 +90,14 @@ ghu_TEST or github_pat_X.
   list of pairs for control.css, served in its place, as `MUTANT` names one for the script.
 - `e2e2/panel.test.mjs`: the panel's walkthrough on both pages.
 - `e2e2/hostile.test.mjs`: 13 hostile-input checks.
+- `e2e2/usual.test.mjs`: 6 checks of the repository a browser that keeps none opens, a new one or
+  a guest window (site branch claude/open-usual-repo, 2026-10-20, the owner's ask that a first
+  sign-in in a browser not land on the picker). U1: the repository with Symphony set up that was
+  pushed most recently opens, skipping one without the topic and an archived one, and the browser
+  keeps it; U2: a repository the browser kept comes first, and GitHub is not asked for the list;
+  U3 and U4: the picker opens by itself where none has Symphony or GitHub does not list them; U5: a
+  picker the person opened meanwhile is not overruled; U6: the Folders tab opens neither. Its nine
+  mutants, `u01` to `u09`, were caught against that branch.
 - `e2e2/assistant.test.mjs`: 35 checks of the panel's assistant (site branch claude/assistant-panel,
   2026-10-18): who may ask (write access, and the repository's workflow carrying
   .github/symphony/assistant.md), the label and the issue made once and only on a press, the
@@ -590,7 +598,7 @@ ghu_TEST or github_pat_X.
   (signin/README.md, step 9). GitHub's 5xx and 429 while the person types the code are the
   service's to answer, as github_unreachable, which K5 holds the page asks again at the same
   pace; test_worker.mjs holds the service's side.
-- `e2e2/mutants/`: 627 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/mutants/`: 639 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Claude dialog's button "Ask in claude.ai"
@@ -885,8 +893,13 @@ ghu_TEST or github_pat_X.
   equivalent. s26 came with the floating Claude: the tab not giving up the note's height (BW),
   caught. Their files stay, so a layout that lets the page scroll
   again finds them; the code they reach may go with its owner's next change. Of the Folders
-  tab's, f43 survives on site master at 25159ab as here, and f129 survived one run here and was
-  caught on two runs after it, a timing of the Folders checks' own.
+  tab's, f129 survived one run here and was caught on two runs after it, a timing of the Folders
+  checks' own. f43 survived on site master from 25159ab (#111) on, not for anything the home
+  screen changed: since #111 the connection is kept on the browser and heldDrive() restores it,
+  so the mutant's `drive = null` in Track's catch was undone at the next Track and changed nothing
+  a person could see (it was caught against 5deb848, the commit before). It now drops the drive as
+  the panel holds it since, `forgetKept(account)` beside `drive = null`, and E5 catches it on
+  master at 6816610 (#112), the second Track asking for Connect where it should write again.
   The floating Claude (site branch claude/project-thread-6cxgh2, 2026-10-20: the note over the
   screen's foot and Claude a button at the top right, the foot and the Ask Claude bar gone) took
   the code the foot's and the drawer's mutants changed, so g184 to g187 and p41 to p48, p50, p72,
@@ -909,9 +922,8 @@ ghu_TEST or github_pat_X.
   card, which BO reads on every screen it opens, and a copy of BO run with the push logging found it
   never acts at 844 x 390, 740 x 360, 667 x 375, 640 x 360, 568 x 320, 520 x 300, 1000 x 480,
   900 x 500 or 1366 x 540 at 170 %; the line stays for a layout that makes the stage short again.
-  k40 (the code box not brought into sight, K24) and f43 survive on the site before the floating
-  Claude (db4141a) as here, and k35 and m7 are STALE there as here; none of the four is this
-  change's.
+   k40 (the code box not brought into sight, K24) survives on the site before the floating Claude
+  (db4141a) as here, and k35 and m7 are STALE there as here; none of the three is this change's.
 - `e2e2/css-mutants/`: 23 lists of pairs for the stylesheet control.css, each with its `.json.only`,
   for the part of the foot and the bar that is the stylesheet's, which no mutant of the script
   reaches; `run-mutants.sh` serves a path under css-mutants/ in place of control.css through

@@ -793,7 +793,8 @@ await check('E7: a folder the repository already holds at its top, in any case, 
 
 await check('E8: an item the repository tracked from another OneDrive than the one connected is refused by name before anything is written, and unticked it tracks', async () => {
   const other = Object.assign({}, driveJson, { items: [{ id: 'z9', name: 'elsewhere.docx', drive: 'DRIVE9' }] });
-  const env = await open({ tracked: true, secret: true, driveJson: other });
+  // the sync switched on already, so opening the tab writes nothing that races the count of writes below
+  const env = await open({ tracked: true, secret: true, driveJson: other, switchValue: 'on' });
   const { context, page, calls, errors } = env;
   await connect(env);
   await listed(page);

@@ -179,7 +179,7 @@ test('GitHub answering no JSON, or not answering, is said in words with no token
   const html = github(null, 502, '<html>bad gateway</html>');
   const r = await handle(post('/refresh', { refresh_token: 'ghr' }), env, html.fetchImpl);
   assert.equal(r.status, 502);
-  assert.deepEqual(await r.json(), { error: 'github_refused', error_description: 'GitHub answered 502' });
+  assert.deepEqual(await r.json(), { error: 'github_unreachable', error_description: 'GitHub answered 502 for the moment; try again' });
   const down = async () => { throw new TypeError('fetch failed'); };
   for (const path of ['/exchange', '/refresh', '/revoke']) {
     const body = { code: 'abc', code_verifier: VERIFIER, redirect_uri: ORIGIN + '/', refresh_token: 'ghr', access_token: 'ghu' };
@@ -271,11 +271,11 @@ test('/device/token: GitHub answering a 5xx or a 429 for the moment is github_un
     [github(undefined, 503, '<html>down</html>'), 503], [github(undefined, 502, '<html>bad gateway</html>'), 502],
     [github(null, 500), 500], [github({ message: 'You have exceeded a secondary rate limit.' }, 429), 429],
   ]) {
-    const r = await handle(post('/device/token', { device_code: DEVICE }), env, gh.fetchImpl);
+    const r = await handle(post('/device/token', { device_code: DEVICE }), Object.assign({}, env, { RETRY_WAIT_SCALE: '0' }), gh.fetchImpl);
     assert.equal(r.status, 502, String(status));
     const body = await r.json();
     assert.equal(body.error, 'github_unreachable', 'GitHub\'s ' + status + ' ended the sign-in as a refusal');
-    assert.equal(body.error_description, 'GitHub answered ' + status + ' for the moment; try again');
+    assert.equal(body.error_description, status === 429 ? 'GitHub is limiting sign-ins for the moment (it answered 429); wait a minute and try again' : 'GitHub answered ' + status + ' for the moment; try again');
     assert.equal(body.access_token, undefined);
   }
   for (const [answer, status, word] of [[{ error: 'incorrect_client_credentials' }, 401, 'incorrect_client_credentials'], [{ error: 'unsupported_grant_type' }, 503, 'unsupported_grant_type'], [{ message: 'Not Found' }, 404, 'github_refused']]) {
@@ -551,4 +551,68 @@ test('the GitHub routes are as they were beside the drive ones: a GitHub exchang
   const r = await handle(post('/exchange', { code: 'abc', code_verifier: VERIFIER, redirect_uri: PAGE }), { ALLOWED_ORIGIN: ORIGIN, MICROSOFT_CLIENT_ID: 'id', MICROSOFT_CLIENT_SECRET: 's' }, gh.fetchImpl);
   assert.equal(r.status, 503);
   assert.equal(gh.calls.length, 0);
+});
+
+/** a fake GitHub that gives the answers listed, one per call, the last one again after them */
+function githubInTurn(answers) {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init });
+    const [answer, status, headers] = answers[Math.min(calls.length - 1, answers.length - 1)];
+    return new Response(answer === null ? null : JSON.stringify(answer), { status, headers: Object.assign({ 'Content-Type': 'application/json' }, headers || {}) });
+  };
+  return { calls, fetchImpl };
+}
+
+const quick = Object.assign({}, env, { RETRY_WAIT_SCALE: '0' });
+
+test('GitHub limiting the service with a 429 is asked again, and the sign-in goes through', async () => {
+  for (const [path, body] of [['/exchange', { code: 'abc', code_verifier: VERIFIER, redirect_uri: ORIGIN + '/' }], ['/refresh', { refresh_token: 'ghr' }]]) {
+    const gh = githubInTurn([[{ message: 'rate limited' }, 429], [granted, 200]]);
+    const r = await handle(post(path, body), quick, gh.fetchImpl);
+    assert.equal(r.status, 200, path);
+    assert.equal((await r.json()).access_token, 'ghu_token', path);
+    assert.equal(gh.calls.length, 2, path);
+    assert.equal(gh.calls[0].init.body, gh.calls[1].init.body, 'the same form both times');
+  }
+});
+
+test('a 429 that lasts is said as GitHub limiting sign-ins, after three tries', async () => {
+  const gh = githubInTurn([[null, 429]]);
+  const r = await handle(post('/exchange', { code: 'abc', code_verifier: VERIFIER, redirect_uri: ORIGIN + '/' }), quick, gh.fetchImpl);
+  assert.equal(r.status, 502);
+  const body = await r.json();
+  assert.equal(body.error, 'github_unreachable');
+  assert.match(body.error_description, /limiting sign-ins for the moment \(it answered 429\); wait a minute/);
+  assert.equal(gh.calls.length, 3);
+});
+
+test('a 5xx is not sent again, since GitHub may have spent the code or refresh token', async () => {
+  const gh = githubInTurn([[null, 503], [granted, 200]]);
+  const r = await handle(post('/refresh', { refresh_token: 'ghr' }), quick, gh.fetchImpl);
+  assert.equal(r.status, 502);
+  assert.equal((await r.json()).error, 'github_unreachable');
+  assert.equal(gh.calls.length, 1);
+});
+
+test('a 429 with an OAuth word of its own is GitHub\'s answer and is not sent again', async () => {
+  const gh = githubInTurn([[{ error: 'slow_down', interval: 10 }, 429], [granted, 200]]);
+  const r = await handle(post('/exchange', { code: 'abc', code_verifier: VERIFIER, redirect_uri: ORIGIN + '/' }), quick, gh.fetchImpl);
+  assert.equal(r.status, 502);
+  assert.equal((await r.json()).error, 'slow_down');
+  assert.equal(gh.calls.length, 1);
+});
+
+test('the wait before asking again follows Retry-After, bounded so the page\'s 20 seconds hold', async () => {
+  const gh = githubInTurn([[null, 429, { 'Retry-After': '1' }], [granted, 200]]);
+  const began = Date.now();
+  const r = await handle(post('/refresh', { refresh_token: 'ghr' }), env, gh.fetchImpl);
+  assert.equal(r.status, 200);
+  const took = Date.now() - began;
+  assert.ok(took >= 900 && took < 2500, 'waited ' + took + ' ms');
+  const long = githubInTurn([[null, 429, { 'Retry-After': '3600' }]]);
+  const start = Date.now();
+  await handle(post('/refresh', { refresh_token: 'ghr' }), env, long.fetchImpl);
+  assert.ok(Date.now() - start < 8000, 'bounded');
+  assert.equal(long.calls.length, 3);
 });

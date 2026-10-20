@@ -1,0 +1,1 @@
+[["      if (tries >= SIGNIN_RETRY_MS.length || !githubLimiting(e)) throw e;\n", "      throw e;\n"]]

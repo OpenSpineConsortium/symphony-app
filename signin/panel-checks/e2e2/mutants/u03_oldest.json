@@ -1,0 +1,1 @@
+[["if (!best || String(r.pushed_at || '') > String(best.pushed_at || '')) best = r;", "if (!best || String(r.pushed_at || '') < String(best.pushed_at || '')) best = r;"]]

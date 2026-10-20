@@ -64,7 +64,7 @@ installations may use the App.
 | app/envfile.py | The env file register.py writes and the server reads |
 | app/vendor/ | protocol_check.py and claims.py from symphony-protocol, with its `__init__.py` and vendoring.py, and VENDORED, the record they are held to (vendor/README.md) |
 | manifest.json | The App's manifest: name, permissions, events |
-| manifest-setup.json | The setup App's manifest: Administration and Metadata, the organization's Administration, Secrets and Variables, public, no webhook (The Setup App for the front door) |
+| manifest-setup.json | The setup App's manifest: Administration, Pages, Variables and Metadata, the organization's Administration, Secrets and Variables, public, no webhook (The Setup App for the front door) |
 | scripts/register.py | Registers the App, or with `--setup` the setup App, for an organization by GitHub's manifest flow |
 | scripts/collect.py | Collects the field metrics projects share, daily from .github/workflows/collect.yml (Field metrics) |
 | scripts/check.sh | The checks; CI's job `check` runs it |
@@ -97,9 +97,10 @@ By hand, at `https://github.com/organizations/<org>/settings/apps/new`:
 - Webhook: untick Active (stage 2 turns it on).
 - Repository permissions: Contents read and write, Issues read and write,
   Pull requests read and write, Checks read and write, Workflows read and
-  write, Actions read and write, Administration read and write, Secrets
-  read and write (the control panel's Folders tab, and the Tokens tab on a
-  personal account's repository); Metadata read-only comes with them.
+  write, Actions read and write, Administration read and write, Pages
+  read and write, Secrets read and write (the control panel's Folders tab,
+  and the Tokens tab on a personal account's repository); Metadata
+  read-only comes with them.
 - Organization permissions: Secrets read and write, Variables read and
   write, for the control panel's Tokens page.
 - Events: Issues, Issue comment, Pull request, Push, Check suite. GitHub
@@ -188,10 +189,16 @@ adopts the template into a repository in one run of its workflow
 the template's scripts/setup-repo.sh applies by hand: the default
 branch's ruleset, delete-branch-on-merge, auto-merge, and secret scanning
 with push protection. Those take the Administration permission, which
-the main App, installed for good on every repository it serves, uses for
-one thing only since 2026-10-18: the control panel's Share tab invites a
-person as a collaborator, as the person signed in (the owner's choice;
-the Apps' privacy statement, version 17). No adoption run uses it there,
+the main App, installed for good on every repository it serves, uses
+for the control panel's Share tab, which invites a person as a
+collaborator, as the person signed in (the owner's choice of 2026-10-18),
+and, since the owner's rule of 2026-10-20 that the App he built applies
+the settings itself and Symphony Setup is only the fallback, for the
+settings of every repository made from the template: the template's
+.github/workflows/settings.yml runs scripts/setup-repo.sh with the main
+App's token (symphony-template#287), with Pages added for the
+documentation site. The
+front door's adoption run still applies them with the setup App,
 so the setup App holds Administration (write) and Metadata
 (read) and, on an organization, the organization's Administration
 (write), for the one box "Allow GitHub Actions to create and approve
@@ -200,8 +207,12 @@ pull requests" that a new organization holds off for its repositories
 14), and the organization's Secrets and Variables (write), to add the
 repository adopted to the lists of repositories that read the requester's
 own token slots of the organization's pool and the pool's two variables
-(symphony-start#72; the Apps' privacy statement, version 32), and nothing
-else, no webhook and no events, and an adopter
+(symphony-start#72; the Apps' privacy statement, version 32), and, on
+the repository, Pages and Variables (write), with which the run turns on
+GitHub Pages built by GitHub Actions and sets the variable SYMPHONY_DOCS
+for the whole template's documentation site, on a token of its own so an
+installation that has not accepted them still adopts (symphony-start#89),
+and nothing else, no webhook and no events, and an adopter
 installs it on the one repository for that one run and uninstalls it
 afterwards; the run mints its token for that repository alone, and the
 repository's settings need no step by hand.
