@@ -4360,6 +4360,64 @@ await check('P48: each grip says its part\'s size and the bounds it is held to, 
   }
 });
 
+// Share: the invitation itself, as the person signed in through SymphonyBoard sends it, and each
+// refusal named by its cause, since GitHub answers 403 alike to a person who does not administer the
+// repository and to an installation that has not accepted Administration
+function shareRoutes(admin, installed, put) {
+  const routes = repoRoutes('acme/demo');
+  routes['GET /repos/acme/demo'] = { full_name: 'acme/demo', default_branch: 'main', private: false, topics: ['symphony'], id: 123, owner: { id: 77, login: 'acme', type: 'User' }, permissions: { admin, push: true, pull: true } };
+  routes['GET /repos/acme/demo/collaborators'] = [{ login: 'acme', role_name: 'admin' }];
+  routes['GET /repos/acme/demo/invitations'] = [];
+  routes['GET /user/installations'] = { total_count: installed === undefined ? 0 : 1, installations: installed === undefined ? [] : [{ id: 4242, account: { login: 'acme', type: 'User' }, permissions: installed }] };
+  routes['PUT /repos/acme/demo/collaborators/newbie'] = put;
+  return routes;
+}
+async function inviteNewbie(routes) {
+  const opened = await open({ script: configured, routes, path: '/symphony/control/?repo=acme/demo', storage: { local: { symphony_panel_oauth: rec('ghu_TOKEN', 'ghr_R', 8 * HOUR), symphony_panel_repos: JSON.stringify(['acme/demo']) } } });
+  const { page } = opened;
+  await page.waitForSelector('#cp-app:not(.hidden)', { timeout: 10000 });
+  await page.click('.console__rail [data-tab="share"]');
+  await page.click('#sh-new');
+  await page.fill('#sh-who', 'newbie');
+  await page.click('#sh-invite');
+  await page.waitForFunction(() => /Invited|already has access|refused/.test(document.getElementById('sh-answer').textContent), null, { timeout: 10000 });
+  opened.answer = await page.textContent('#sh-answer');
+  return opened;
+}
+
+await check('S1: an administrator signed in through the App invites by username: one PUT with their token, and the answer says the invitation went out', async () => {
+  const { context, calls, answer, errors } = await inviteNewbie(shareRoutes(true, { administration: 'write', metadata: 'read' }, { status: 201, body: { id: 9 } }));
+  const puts = calls.filter((c) => c.key === 'PUT /repos/acme/demo/collaborators/newbie');
+  assert.equal(puts.length, 1, 'the invitation was sent ' + puts.length + ' times');
+  assert.equal(puts[0].auth, 'Bearer ghu_TOKEN');
+  assert.match(answer, /^Invited newbie with write access\. They accept at https:\/\/github\.com\/acme\/demo\/invitations/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('S2: a refusal where the installation has not accepted Administration names that, with the installation\'s own page to accept it on', async () => {
+  const { context, answer, errors } = await inviteNewbie(shareRoutes(true, { contents: 'write', metadata: 'read' }, { status: 403, body: { message: 'Resource not accessible by integration' } }));
+  assert.match(answer, /has not accepted the Administration permission yet\. Accept it once at https:\/\/github\.com\/settings\/installations\/4242 \(Review request, then Accept\)\./);
+  assert.doesNotMatch(answer, /only an administrator/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('S3: a refusal to someone who does not administer the repository says so, and sends them to no installation page', async () => {
+  const { context, answer, errors } = await inviteNewbie(shareRoutes(false, { administration: 'write', metadata: 'read' }, { status: 403, body: { message: 'Must have admin rights to Repository.' } }));
+  assert.match(answer, /only an administrator of acme\/demo may do it, and you have Write there/);
+  assert.doesNotMatch(answer, /installations/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('S4: a refusal when both hold passes GitHub\'s own words on, and blames neither the role nor the installation', async () => {
+  const { context, answer, errors } = await inviteNewbie(shareRoutes(true, { administration: 'write', metadata: 'read' }, { status: 403, body: { message: 'Organization policy forbids outside collaborators' } }));
+  assert.match(answer, /\(403\) although you administer acme\/demo and SymphonyBoard holds Administration there: .*Organization policy forbids outside collaborators/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 await browser.close();
 console.log('\n' + results.join('\n'));
 if (results.some((r) => r.startsWith('FAIL'))) process.exit(1);

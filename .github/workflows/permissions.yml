@@ -42,7 +42,8 @@ jobs:
         env:
           SDLC_APP_ID: ${{ vars.SDLC_APP_ID }}
           SDLC_APP_PRIVATE_KEY: ${{ secrets.SDLC_APP_PRIVATE_KEY }}
-          SYMPHONY_OWNER_ACCOUNTS: ${{ github.repository_owner }} ${{ vars.SYMPHONY_OWNER_ACCOUNTS }}
+          # the organization and its owner's own account, where an installation lends tokens too
+          SYMPHONY_OWNER_ACCOUNTS: ${{ github.repository_owner }} Gregory-Schwing-MD-PhD ${{ vars.SYMPHONY_OWNER_ACCOUNTS }}
         run: |
           status=0
           python3 scripts/permissions.py > "$RUNNER_TEMP/report.txt" || status=$?
