@@ -344,7 +344,7 @@ ghu_TEST or github_pat_X.
   page.evaluate,
   which opens nothing, so the page and not console-tabs.mjs is seen opening the tab. A check that
   wants the drawing recorded instead of made serves a stand-in for the library on its route.
-- `e2e2/folders.test.mjs`: 76 checks of the console's Folders tab, /symphony/control/#folders
+- `e2e2/folders.test.mjs`: 82 checks of the console's Folders tab, /symphony/control/#folders
   (site branch claude/folders-page, 2026-10-18; the tab took the place of the page folders.html
   before that page shipped), against a mocked Microsoft consent page, a mocked Microsoft Graph,
   the mocked service's three `/drive` routes and a mocked GitHub that keeps what Track writes as
@@ -392,7 +392,7 @@ ghu_TEST or github_pat_X.
   the tab. B, C, D, E3, I and L scan every request, the console, #msg, the markup, the fields, the
   address and the storage for the drive's tokens, which go only to Graph's Authorization header,
   to /drive/token and, sealed, into the secret. Its mutants
-  are `e2e2/mutants/f*.json`, 99, run as the section below says. X1 to X4 hold the list drawn
+  are `e2e2/mutants/f*.json`, 110, run as the section below says. X1 to X4 hold the list drawn
   as a file explorer (site branch claude/folders-explorer, 2026-10-18): the folder tree, Back,
   Forward, Up and the keyboard, Details' four columns and the status bar; a Word file opened for
   editing in Word at its d.docs.live.net address on a personal drive and at the address OneDrive
@@ -735,7 +735,7 @@ ghu_TEST or github_pat_X.
   tab, AV), whose stage now fits its chart either way, and s05 (BA), aimed now at both rules that
   keep a finger's touch for the stage, its own and the tab's, since the tab's, from the zoom's
   review, holds every stage in it alone and the Board's stage sets its own.
-  The 99 of the Folders tab (`f*`, each with a `.json.suite` naming
+  The 110 of the Folders tab (`f*`, each with a `.json.suite` naming
   folders.test.mjs) were caught against site branch claude/folders-explorer on 2026-10-18, the first
   48 also against the site's script at commit 044b8b3, f06 rewritten for the explorer's name cell;
   f56 to f63, the saved catalog's, were retired with it on 2026-10-20, and f64 to f66 (the catalog
@@ -746,6 +746,11 @@ ghu_TEST or github_pat_X.
   properties, preview, search, six views, multi-select), and their mutants f70 to f108 were caught
   against site branch claude/folders-actions on 2026-10-20, with f06, f51 and f54 aimed again at
   the name cell, the tile's label and the tree as that branch draws them.
+  FS1 to FS6, the start drawn as cloud tiles (the dashed Add a cloud drive tile, the dialog
+  that connects OneDrive with the others coming later, Track closing its dialog, the switch
+  SYMPHONY_DRIVE, one organization secret for selected repositories, and a walk-only repository
+  saving the secret alone), and their mutants f109 to f119 were caught against site branch
+  claude/folders-start on 2026-10-20.
   The 24 of the Explore tab (`x*`, each naming explore.test.mjs) were caught against site branch
   claude/explore-tab on 2026-10-18, after its adversarial review; x25 to x40 (no x27, which became
   equivalent once the unfold moved the grip from under the pointer, so a press on the folded grip

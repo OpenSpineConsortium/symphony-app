@@ -86,6 +86,8 @@ function folderRoutes(repo, o) {
     // the repository's top, as a copy of the template holds it, with the folder it tracks once synced
     ['GET ' + r + '/contents']: [{ name: '.github', type: 'dir' }, { name: 'scripts', type: 'dir' }, { name: 'tools', type: 'dir' }, { name: 'README.md', type: 'file' }].concat(o.tracked ? [{ name: 'papers', type: 'dir' }] : []),
     ['GET ' + r + '/contents/.github/workflows/drive-sync.yml']: o.noWorkflow ? undefined : { name: 'drive-sync.yml', sha: 'w1', type: 'file' },
+    // the walk-only workflow a drive-organizing repository carries in place of the sync
+    ['GET ' + r + '/contents/.github/workflows/drive-catalog.yml']: o.catalog ? { name: 'drive-catalog.yml', sha: 'c1', type: 'file' } : undefined,
     ['GET ' + r + '/contents/.github/symphony/drive.json']: (req) => {
       const f = files[refOf(req)];
       return f ? { raw: f.text, json: { sha: f.sha, content: Buffer.from(f.text).toString('base64'), encoding: 'base64' } } : undefined;
@@ -123,6 +125,19 @@ function folderRoutes(repo, o) {
     ['GET ' + r + '/pulls']: (req) => (new URL(req.url()).searchParams.get('head') && o.openPull ? [{ number: 7, html_url: 'https://github.com/' + repo + '/pull/7' }] : []),
     ['POST ' + r + '/pulls']: { status: 201, body: { number: 9, html_url: 'https://github.com/' + repo + '/pull/9' } },
     ['POST ' + r + '/actions/workflows/drive-sync.yml/dispatches']: o.noActions ? refused403 : null,
+    // the switch drive-sync.yml's half-hourly run waits for
+    ['GET ' + r + '/actions/variables/SYMPHONY_DRIVE']: o.switchValue ? { name: 'SYMPHONY_DRIVE', value: o.switchValue } : undefined,
+    ['POST ' + r + '/actions/variables']: o.noVariables ? refused403 : { status: 201, body: {} },
+    ['PATCH ' + r + '/actions/variables/SYMPHONY_DRIVE']: o.noVariables ? refused403 : { status: 204, body: {} },
+    // the organization's secret and the record of which drive it holds, where the owner is one
+    ['GET /orgs/acme']: { login: 'acme', plan: o.orgPlan ? { name: o.orgPlan } : undefined },
+    ['GET /orgs/acme/actions/secrets/public-key']: o.orgKeyRefused ? refused403 : { key_id: 'ok1', key: PUBLIC_KEY },
+    ['GET /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH']: o.orgDrive ? { name: 'SYMPHONY_DRIVE_REFRESH', visibility: 'selected' } : undefined,
+    ['GET /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH/repositories']: { total_count: 1, repositories: [{ id: 555, full_name: 'acme/other' }] },
+    ['GET /orgs/acme/actions/variables/SYMPHONY_DRIVE_ID']: o.orgDrive ? { name: 'SYMPHONY_DRIVE_ID', value: o.orgDrive } : undefined,
+    ['PUT /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH']: o.orgPutRefused ? refused403 : { status: 201, body: {} },
+    ['POST /orgs/acme/actions/variables']: { status: 201, body: {} },
+    ['PATCH /orgs/acme/actions/variables/SYMPHONY_DRIVE_ID']: { status: 204, body: {} },
   };
 }
 // GitHub names the account by the token a call carries: github_pat_OTHER is someone else's
@@ -322,6 +337,7 @@ async function pressConnect(env, o) {
   await page.click('#rail-folders');
   await page.waitForFunction(() => !document.getElementById('fd-connect').disabled, null, { timeout: 15000 });
   if (o && o.before) await o.before();
+  await openClouds(page);
   await page.click('#fd-connect');
 }
 // a whole connection: pressed, come back, exchanged, and the tab open on the drive by itself; every
@@ -397,9 +413,14 @@ await check('A: with no provider set up, Connect cannot be pressed and one line 
   await page.click('#rail-folders');
   await page.waitForFunction(() => /has not set OneDrive up/.test(document.getElementById('fd-connect-note').textContent));
   assert.equal(await page.isDisabled('#fd-connect'), true);
+  // the drives' dialog says it too, since the head is behind it
+  assert.match(await page.textContent('#fd-cloud-note'), /has not set OneDrive up/);
   // the Track dialog's two steps, in the order they are taken, the second naming the repository
   await page.waitForFunction(() => document.getElementById('fd-track-head').textContent === 'Track in acme/demo');
-  assert.deepEqual(await page.$$eval('#dlg-track .folders__step h3', (l) => l.map((h) => h.textContent)), ['Make the repository', 'Track in acme/demo']);
+  assert.deepEqual(await page.$$eval('#dlg-track .folders__step h3', (l) => l.map((h) => h.textContent)), ['Track in acme/demo']);
+  // a new repository is a fold under Track, closed, so the one in the bar is the way Track goes
+  assert.equal(await page.textContent('#fd-new > summary'), 'Need a new repository?');
+  assert.equal(await page.evaluate(() => document.getElementById('fd-new').open), false);
   assert.equal(await page.textContent('#fd-track'), 'Track');
   // the next step's button is the filled one: Connect, while no drive is held
   assert.deepEqual(await page.evaluate(() => [document.getElementById('fd-connect').classList.contains('console__primary'), document.getElementById('fd-track').classList.contains('console__primary')]), [true, false]);
@@ -407,7 +428,7 @@ await check('A: with no provider set up, Connect cannot be pressed and one line 
   assert.equal(service.filter((s) => s.path === '/drive/config').length, 1);
   assert.equal(service.filter((s) => s.path !== '/drive/config').length, 0);
   assert.equal(authorize.length, 0);
-  await page.waitForFunction(() => /Connect OneDrive first/.test(document.getElementById('fd-browser').textContent), null, { timeout: 8000 });
+  await page.waitForFunction(() => /Add a cloud drive/.test(document.getElementById('fd-browser').textContent), null, { timeout: 8000 });
   await tabRead(page);
   assert.match(await page.textContent('#fd-tracked'), /acme\/demo tracks no drive yet/);
   assert.match(await page.textContent('body'), /Google Drive comes later/);
@@ -549,10 +570,12 @@ await check('D: Track seals the refresh token for the public key, writes drive.j
   assert.equal(await page.textContent('#fd-track'), 'Track');
   assert.equal(await page.textContent('#fd-track-head'), 'Track in acme/demo');
   calls.length = 0;
+  await page.click('#fd-track-open');
   // the day the page records is read on either side of the press, so a run across midnight holds
   const dayBefore = new Date().toISOString().slice(0, 10);
   await page.click('#fd-track');
   await page.waitForFunction(() => /acme\/demo tracks 2 items of OneDrive in papers\//.test(document.getElementById('msg').textContent));
+  assert.equal(await page.evaluate(() => document.getElementById('dlg-track').open), false, 'the steps stayed open after Track was done');
   const dayAfter = new Date().toISOString().slice(0, 10);
   const text = await msg(page);
   console.log('     ', text);
@@ -574,6 +597,11 @@ await check('D: Track seals the refresh token for the public key, writes drive.j
   assert.ok(day === dayBefore || day === dayAfter, 'the connection is dated ' + day + ', not the day Track was pressed');
   assert.equal(written, JSON.stringify({ provider: 'microsoft', folder: 'papers', items: [{ id: 'f1', name: 'Papers', drive: 'drive1' }, { id: 'a1', name: 'notes.docx', drive: 'drive1' }], connected: day }, null, 2) + '\n');
   assert.deepEqual(calls.find((c) => c.key === order[3]).body, { ref: 'main' });
+  // the half-hourly run's switch is set on, after the file and before the first run
+  const sw = keys.indexOf('POST /repos/acme/demo/actions/variables');
+  assert.ok(sw > keys.indexOf(order[2]) && sw < keys.indexOf(order[3]), 'the switch was not set between the file and the run');
+  assert.deepEqual(calls[sw].body, { name: 'SYMPHONY_DRIVE', value: 'on' });
+  assert.equal(keys.filter((k) => k.indexOf('/orgs/') >= 0).length, 0, 'a personal account\'s repository touched an organization');
   assert.match(text, /tokens are dropped from this page\. The first sync is queued\.$/);
   // the runs link is the tab's own, drawn once the repository is read again
   await page.waitForFunction(() => /tracks 2 items/.test(document.getElementById('fd-tracked').textContent));
@@ -657,7 +685,7 @@ await check('D2: two presses of Track in a row make one secret, one file and one
   await page.$eval('#fd-track', (b) => { b.click(); b.click(); });
   await page.waitForFunction(() => /acme\/demo tracks 1 item of OneDrive/.test(document.getElementById('msg').textContent));
   const writes = calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key);
-  assert.deepEqual(writes, ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
+  assert.deepEqual(writes, ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/variables', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -675,7 +703,7 @@ await check('E3: a 403 on the first run still leaves the secret and the file wri
   assertShort(text);
   assert.equal(text, 'acme/demo tracks 1 item of OneDrive in papers/, and the drive\'s tokens are dropped from this page. The sync could not be started from here (403: no Actions permission); press "Run workflow" at the runs link in Track in a repository.');
   const writes = calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key);
-  assert.deepEqual(writes, ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
+  assert.deepEqual(writes, ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/variables', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
   const file = JSON.parse(Buffer.from(calls.find((c) => c.key === 'PUT /repos/acme/demo/contents/.github/symphony/drive.json').body.content, 'base64').toString('utf8'));
   assert.deepEqual(file.items, [{ id: 'h1', name: HOSTILE, drive: 'drive1' }], 'the name goes to the file as the drive gave it; the run cleans it');
   // the runs link the words point at is in the tab, once it has read the repository again
@@ -805,7 +833,7 @@ await check('E5: a drive.json that cannot be written leaves the secret saved and
   calls.length = 0;
   await page.click('#fd-track');
   await page.waitForFunction(() => /acme\/demo tracks 1 item of OneDrive/.test(document.getElementById('msg').textContent), null, { timeout: 15000 });
-  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
+  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/variables', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -820,7 +848,7 @@ await check('E6: a connection Microsoft gave no refresh token is no connection: 
   assert.deepEqual(said1, ['Microsoft gave no refresh token, so the sync could not run: the consent did not include keeping access when you are away. Press Connect OneDrive to try again.']);
   assert.equal(await page.textContent('#fd-connect'), 'Connect OneDrive');
   // the explorer asks for the drive, and never for a saved catalog
-  await page.waitForFunction(() => /Connect OneDrive first/.test(document.getElementById('fd-browser').textContent), null, { timeout: 8000 });
+  await page.waitForFunction(() => /Add a cloud drive/.test(document.getElementById('fd-browser').textContent), null, { timeout: 8000 });
   assert.equal(await storageHolds(page, ACCESS), false);
   calls.length = 0;
   await page.click('#fd-track');
@@ -853,7 +881,7 @@ await check('P: a public repository is said beside Track with a box never ticked
   await page.check('#fd-public');
   await page.click('#fd-track');
   await page.waitForFunction(() => /acme\/demo tracks 1 item of OneDrive/.test(document.getElementById('msg').textContent), null, { timeout: 15000 });
-  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
+  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/variables', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
   await page.waitForFunction(() => /tracks 1 item/.test(document.getElementById('fd-tracked').textContent));
   assert.deepEqual(await box(), { shown: true, ticked: false }, 'after Track the box stays ticked for the next Track');
   assert.deepEqual(errors, []);
@@ -1120,6 +1148,7 @@ await check('J: "Find the repository I just made" asks GitHub about each new one
   assert.equal(await page.getAttribute('#fd-create', 'href'), 'https://github.com/new?template_owner=OpenSpineConsortium&template_name=symphony-template');
   assert.equal(await page.getAttribute('#fd-create', 'target'), '_blank');
   assert.match(await page.getAttribute('#fd-create', 'rel'), /noopener/);
+  await openNew(page);
   await page.click('#fd-reload');
   await page.waitForFunction(() => /Added to the list: acme\/fresh\. acme\/fresh is chosen\./.test(document.getElementById('msg').textContent));
   const list = calls.find((c) => c.key === 'GET /user/repos');
@@ -1228,7 +1257,7 @@ await check('N3: Forget the token drops the drive and what was ticked in it, so 
   assert.equal(await page.textContent('#fd-connect'), 'Connect OneDrive');
   assert.doesNotMatch(await page.textContent('#fd-connect-note'), /Connected/);
   assert.deepEqual(await page.$$eval('#fd-picked li', (l) => l.length), 0, 'what was ticked under the last sign-in is still ticked');
-  await page.waitForFunction(() => /Connect OneDrive first/.test(document.getElementById('fd-browser').textContent), null, { timeout: 8000 });
+  await page.waitForFunction(() => /Add a cloud drive/.test(document.getElementById('fd-browser').textContent), null, { timeout: 8000 });
   calls.length = 0;
   await page.click('#fd-track');
   await page.waitForFunction(() => /Connect OneDrive first/.test(document.getElementById('msg').textContent));
@@ -1326,7 +1355,7 @@ await check('N4: choosing another repository in the bar reads that repository\'s
   await page.click('#fd-track');
   await page.waitForFunction(() => /acme\/other tracks 1 item of OneDrive/.test(document.getElementById('msg').textContent));
   const writes = calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key);
-  assert.deepEqual(writes, ['PUT /repos/acme/other/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/other/contents/.github/symphony/drive.json', 'POST /repos/acme/other/actions/workflows/drive-sync.yml/dispatches']);
+  assert.deepEqual(writes, ['PUT /repos/acme/other/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/other/contents/.github/symphony/drive.json', 'POST /repos/acme/other/actions/variables', 'POST /repos/acme/other/actions/workflows/drive-sync.yml/dispatches']);
   assert.ok(!calls.some((c) => /acme\/demo/.test(c.key)), 'Track touched acme/demo');
   assert.deepEqual(errors, []);
   await context.close();
@@ -1389,6 +1418,7 @@ await check('N5: a hostile name in the drive, in the repository\'s file and in G
   await page.waitForFunction(() => /tracks 1 item/.test(document.getElementById('fd-tracked').textContent));
   assert.ok((await page.textContent('#fd-tracked')).indexOf(HOSTILE) >= 0, 'the file\'s name is not shown as text');
   assert.deepEqual(await page.$$eval('#fd-picked li code', (l) => l.map((c) => c.textContent)), [HOSTILE]);
+  await openNew(page);
   await page.click('#fd-reload');
   await page.waitForFunction(() => /None of the 10 newest repositories/.test(document.getElementById('msg').textContent));
   assert.deepEqual(await page.$$eval('#cp-repo option', (l) => l.map((o) => o.value)), ['acme/demo'], 'a name no repository can have was listed');
@@ -1411,10 +1441,11 @@ await check('N8: with no repository listed yet, the tab connects a drive, finds 
   await page.waitForSelector('#cp-app:not(.hidden)', { timeout: 15000 });
   await page.waitForFunction(() => /No repository listed yet/.test(document.getElementById('cp-summary').textContent), null, { timeout: 15000 });
   await page.click('#rail-folders');
-  await page.waitForFunction(() => /No repository is chosen: choose one in the bar, or make one under Make the repository\./.test(document.getElementById('fd-tracked').textContent));
+  await page.waitForFunction(() => /No repository is chosen: choose one in the bar, or make one under Need a new repository\? below\./.test(document.getElementById('fd-tracked').textContent));
   assert.equal(await page.textContent('#fd-track-head'), 'Track');
   assert.equal(await page.isDisabled('#fd-track'), true);
   await page.waitForFunction(() => !document.getElementById('fd-connect').disabled, null, { timeout: 15000 });
+  await openClouds(page);
   await page.click('#fd-connect');
   await page.waitForFunction(() => (window.__msgs || []).some((t) => /OneDrive is connected for this page/.test(t)), null, { timeout: 15000 });
   await page.waitForFunction(() => location.hash === '#folders' && /Connected to OneDrive/.test(document.getElementById('fd-connect-note').textContent), null, { timeout: 15000 });
@@ -1422,6 +1453,7 @@ await check('N8: with no repository listed yet, the tab connects a drive, finds 
   await page.check('#fd-items input[data-id="a1"]');
   assert.equal(await page.isDisabled('#fd-track'), true, 'Track can be pressed with no repository');
   assert.equal(calls.filter((c) => !c.key.startsWith('GET ')).length, 0);
+  await openNew(page);
   await page.click('#fd-reload');
   await page.waitForFunction(() => /Added to the list: acme\/fresh\. acme\/fresh is chosen\./.test(document.getElementById('msg').textContent), null, { timeout: 15000 });
   await ready(page, 'acme/fresh');
@@ -1433,7 +1465,7 @@ await check('N8: with no repository listed yet, the tab connects a drive, finds 
   calls.length = 0;
   await page.click('#fd-track');
   await page.waitForFunction(() => /acme\/fresh tracks 1 item of OneDrive in papers\//.test(document.getElementById('msg').textContent), null, { timeout: 15000 });
-  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), ['PUT /repos/acme/fresh/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/fresh/contents/.github/symphony/drive.json', 'POST /repos/acme/fresh/actions/workflows/drive-sync.yml/dispatches']);
+  assert.deepEqual(calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key), ['PUT /repos/acme/fresh/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/fresh/contents/.github/symphony/drive.json', 'POST /repos/acme/fresh/actions/variables', 'POST /repos/acme/fresh/actions/workflows/drive-sync.yml/dispatches']);
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -1698,7 +1730,7 @@ await check('NC1: with no drive connected, a private repository that holds a sav
   await ready(page);
   await page.click('#rail-folders');
   await tabRead(page);
-  await page.waitForFunction(() => /Connect OneDrive first/.test(document.getElementById('fd-browser').textContent), null, { timeout: 15000 });
+  await page.waitForFunction(() => /Add a cloud drive/.test(document.getElementById('fd-browser').textContent), null, { timeout: 15000 });
   await sleep(500);
   assert.equal(calls.some((c) => c.key === 'GET /repos/acme/demo/contents/catalog.json'), false, 'the Folders tab read catalog.json');
   assert.equal(await page.$('#fd-items') === null, true, 'a list was drawn without a drive');
@@ -1874,6 +1906,14 @@ async function explorerWith(o) {
   await connect(env);
   await listed(env.page);
   return Object.assign(env, { live });
+}
+// the fold that makes a new repository, opened by its summary as a person opens it
+// the drives to add, opened by whichever + Add the tab shows: its tile with no drive, the head's with one
+async function openClouds(page) {
+  await page.click((await page.$('#fd-add-tile')) ? '#fd-add-tile' : '#fd-add');
+}
+async function openNew(page) {
+  if (!(await page.evaluate(() => document.getElementById('fd-new').open))) await page.click('#fd-new > summary');
 }
 async function selectRow(page, id, mods) {
   await page.click('#fd-items [data-item="' + id + '"] [data-name]', { modifiers: mods || [] });
@@ -2386,6 +2426,147 @@ await check('FA17: a name being edited survives the list being read again under 
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => /slow-name\.docx/.test((document.getElementById('fd-items') || {}).textContent || ''));
   assert.deepEqual(writesOf(graph).filter((c) => c.key.startsWith('PATCH')).map((c) => c.body), [{ name: 'slow-name.docx' }]);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+async function trackOn(o) {
+  const env = await open(o);
+  await connect(env);
+  await listed(env.page);
+  await env.page.check('#fd-items input[data-id="a1"]');
+  await env.page.click('#fd-track-open');
+  await env.page.waitForFunction(() => /acme\/demo/.test(document.getElementById('fd-tracked').textContent) && !/Reading/.test(document.getElementById('fd-tracked').textContent));
+  env.calls.length = 0;
+  await env.page.click('#fd-track');
+  await env.page.waitForFunction(() => /tracks 1 item of OneDrive/.test(document.getElementById('msg').textContent), null, { timeout: 15000 });
+  return env;
+}
+const writesIn = (calls) => calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key);
+await check('FS4: in an organization whose secret no drive holds yet, Track keeps the token as the organization\'s secret, shared only with this repository and those already listed, records which drive it holds, and writes no repository secret', async () => {
+  const env = await trackOn({ org: true, orgPlan: 'team' });
+  const { context, page, calls, errors } = env;
+  const writes = writesIn(calls);
+  assert.ok(writes.indexOf('PUT /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH') >= 0, 'the organization\'s secret was not written');
+  assert.equal(writes.indexOf('PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH'), -1, 'a repository secret would shadow the organization\'s');
+  const put = calls.find((c) => c.key === 'PUT /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH').body;
+  assert.equal(put.visibility, 'selected');
+  assert.deepEqual(put.selected_repository_ids, [123]);
+  assert.equal(put.key_id, 'ok1');
+  assert.ok(!Buffer.from(put.encrypted_value, 'base64').toString('latin1').includes(REFRESH), 'the token went in the clear');
+  assert.deepEqual(calls.find((c) => c.key === 'POST /orgs/acme/actions/variables').body, { name: 'SYMPHONY_DRIVE_ID', value: 'drive1', visibility: 'selected', selected_repository_ids: [123] });
+  assert.match(await msg(page), /a secret of acme, shared only with the repositories that track this drive/);
+  assert.equal(await page.evaluate(() => document.getElementById('dlg-track').open), false);
+  assert.deepEqual(errors, []);
+  await context.close();
+  // the same drive tracked again elsewhere joins the list the secret already has
+  const again = await trackOn({ org: true, orgPlan: 'team', orgDrive: 'drive1' });
+  const put2 = again.calls.find((c) => c.key === 'PUT /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH').body;
+  assert.deepEqual(put2.selected_repository_ids, [555, 123]);
+  assert.ok(writesIn(again.calls).indexOf('PATCH /orgs/acme/actions/variables/SYMPHONY_DRIVE_ID') >= 0);
+  assert.deepEqual(again.errors, []);
+  await again.context.close();
+});
+await check('FS5: an organization secret another drive holds, a repository with its own secret, or an organization the person may not set secrets in, keeps the token in the repository\'s own secret and writes nothing of the organization\'s', async () => {
+  // the last two: a private repository on GitHub Free, which reads no organization secret, and a token that may read the organization's secrets and not write them
+  for (const o of [{ org: true, orgPlan: 'team', orgDrive: 'drive9' }, { org: true, orgPlan: 'team', secret: true }, { org: true, orgPlan: 'team', orgKeyRefused: true }, { org: true, orgPlan: 'free' }, { org: true, orgPlan: 'team', orgPutRefused: true }]) {
+    const env = await trackOn(o);
+    const writes = writesIn(env.calls);
+    assert.ok(writes.indexOf('PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH') >= 0, JSON.stringify(o) + ': the repository secret was not written');
+    assert.deepEqual(writes.filter((k) => k.indexOf('/orgs/') >= 0 && !(o.orgPutRefused && k === 'PUT /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH')), [], JSON.stringify(o) + ': the organization was written');
+    assert.deepEqual(env.errors, []);
+    await env.context.close();
+  }
+});
+await check('FS6: a switch already on is left as it is, one off is turned on, and one that cannot be set is said, with the steps kept open', async () => {
+  const on = await trackOn({ switchValue: 'on' });
+  assert.deepEqual(writesIn(on.calls).filter((k) => /variables/.test(k)), []);
+  await on.context.close();
+  const off = await trackOn({ switchValue: 'off' });
+  assert.deepEqual(off.calls.find((c) => c.key === 'PATCH /repos/acme/demo/actions/variables/SYMPHONY_DRIVE').body, { name: 'SYMPHONY_DRIVE', value: 'on' });
+  await off.context.close();
+  const env = await trackOn({ noVariables: true });
+  const { context, page, errors } = env;
+  assert.match(await msg(page), /The repository variable SYMPHONY_DRIVE could not be set to on \(.*\), so a drive-sync\.yml that waits for it does not run each half hour\. The first sync is queued\./);
+  assert.equal(await page.evaluate(() => document.getElementById('dlg-track').open), true, 'the steps closed over a switch left off');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('FS1: with no drive the tab is one dashed "+ Add a cloud drive" tile, as + Add repository is drawn; it and the head\'s own open the drives, OneDrive one press away, Google Drive and Dropbox said as coming later, and nothing is asked of Microsoft before the press', async () => {
+  const env = await open({});
+  const { context, page, authorize, graph, errors } = env;
+  await ready(page);
+  await page.click('#rail-folders');
+  await page.waitForSelector('#fd-add-tile');
+  assert.equal((await page.textContent('#fd-add-tile')).trim(), '+ Add a cloud drive');
+  assert.match(await page.evaluate(() => getComputedStyle(document.getElementById('fd-add-tile')).borderTopStyle), /dashed/);
+  assert.equal(await page.evaluate(() => document.getElementById('dlg-cloud').open), false, 'the drives are offered before + Add is pressed');
+  assert.equal(await page.isHidden('#fd-add'), true, 'two + Add buttons stand on the empty tab');
+  await page.click('#fd-add-tile');
+  assert.equal(await page.evaluate(() => document.getElementById('dlg-cloud').open), true);
+  assert.deepEqual(await page.$$eval('#dlg-cloud .clouds__tile', (l) => l.map((t) => [(t.querySelector('.clouds__name') || t).textContent.trim(), t.tagName === 'BUTTON', t.getAttribute('aria-label')])),
+    [['Connect OneDrive', true, null], ['Google Drive', false, 'Google Drive, coming later'], ['Dropbox', false, 'Dropbox, coming later']]);
+  assert.equal(await page.textContent('#fd-cloud-note'), '', 'the dialog gives a reason for a button that can be pressed');
+  await page.waitForFunction(() => !document.getElementById('fd-connect').disabled, null, { timeout: 15000 });
+  assert.equal(authorize.length, 0, 'Microsoft was asked before the press');
+  assert.equal(graph.length, 0);
+  await page.click('#fd-connect');
+  await page.waitForFunction(() => /Connected to OneDrive/.test((document.getElementById('fd-connect-note') || {}).textContent || ''), null, { timeout: 15000 });
+  assert.equal(authorize.length, 1, 'one press is not one trip to Microsoft');
+  assert.equal(await page.evaluate(() => document.getElementById('fd-connect-note').classList.contains('folders__who--on')), true, 'the connected drive is not drawn with its cloud');
+  assert.equal(await page.$('#fd-add-tile') === null, true, 'the start tile stayed over the drive');
+  // once a drive is connected the head carries + Add, for connecting it again
+  await page.click('#fd-add');
+  assert.equal(await page.evaluate(() => document.getElementById('dlg-cloud').open), true, 'the head\'s + Add does not open the drives');
+  assert.equal(await page.textContent('#fd-connect'), 'Connect OneDrive again');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('FS2: a repository that walks the drive (drive-catalog.yml) and has no sync is tracked as it is: Track saves the sealed refresh token alone, with nothing ticked, writes no file and starts no run, and the steps close', async () => {
+  const env = await open({ noWorkflow: true, catalog: true });
+  const { context, page, calls, errors } = env;
+  await connect(env);
+  await listed(page);
+  await page.click('#fd-track-open');
+  await page.waitForFunction(() => /walks the whole drive with \.github\/workflows\/drive-catalog\.yml and has no sync/.test(document.getElementById('fd-tracked').textContent));
+  assert.equal(await page.isDisabled('#fd-track'), false, 'Track is held back on the walk-only repository');
+  calls.length = 0;
+  await page.click('#fd-track');
+  await page.waitForFunction(() => /acme\/demo keeps the drive's refresh token as SYMPHONY_DRIVE_REFRESH for drive-catalog\.yml/.test(document.getElementById('msg').textContent));
+  const writes = calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key);
+  assert.deepEqual(writes, ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH'], 'more than the secret was written');
+  const secret = calls.find((c) => c.key === writes[0]).body;
+  assert.equal(secret.key_id, 'k1');
+  assert.ok(!Buffer.from(secret.encrypted_value, 'base64').toString('latin1').includes(REFRESH), 'the token went in the clear');
+  assert.equal(await page.evaluate(() => document.getElementById('dlg-track').open), false, 'the steps stayed open after Track was done');
+  assert.equal(await page.textContent('#fd-connect'), 'Connect OneDrive', 'the connection outlived Track');
+  assert.equal(await storageHolds(page, REFRESH), false);
+  assert.deepEqual(errors, []);
+  await context.close();
+  // a repository with neither workflow still has Track held back, with the fold for a new one
+  const env2 = await open({ noWorkflow: true });
+  await connect(env2);
+  await listed(env2.page);
+  await env2.page.click('#fd-track-open');
+  await env2.page.waitForFunction(() => /has no \.github\/workflows\/drive-sync\.yml/.test(document.getElementById('fd-tracked').textContent));
+  assert.equal(await env2.page.isDisabled('#fd-track'), true);
+  assert.match(await env2.page.textContent('#fd-tracked'), /Need a new repository\? below/);
+  assert.deepEqual(env2.errors, []);
+  await env2.context.close();
+});
+await check('FS3: a walk-only repository that is public is tracked into only once its box is ticked', async () => {
+  const env = await open({ noWorkflow: true, catalog: true, public: true });
+  const { context, page, calls, errors } = env;
+  await connect(env);
+  await listed(page);
+  await page.click('#fd-track-open');
+  await page.waitForFunction(() => /walks the whole drive/.test(document.getElementById('fd-tracked').textContent));
+  await page.click('#fd-track');
+  await page.waitForFunction(() => /is public, so what its walk writes of your drive/.test(document.getElementById('msg').textContent));
+  assert.equal(calls.filter((c) => c.key.startsWith('PUT ')).length, 0, 'a public repository was written before its box was ticked');
+  await page.check('#fd-public');
+  await page.click('#fd-track');
+  await page.waitForFunction(() => /keeps the drive's refresh token/.test(document.getElementById('msg').textContent));
+  assert.equal(calls.filter((c) => c.key.startsWith('PUT ')).length, 1);
   assert.deepEqual(errors, []);
   await context.close();
 });
