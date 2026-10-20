@@ -1,1 +1,1 @@
-[["      var reaches = isPublic(meta) || (!!plan && plan !== 'free');", "      var reaches = true;"]]
+[["      var reaches = !isPublic(meta) && !!plan && plan !== 'free';", "      var reaches = true;"]]

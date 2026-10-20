@@ -349,7 +349,7 @@ async function connect(env, o) {
   const { page, authorize, service } = env;
   const before = authorize.length;
   await pressConnect(env, o);
-  await page.waitForFunction(() => (window.__msgs || []).some((t) => /OneDrive is connected for this page/.test(t)), null, { timeout: 15000 });
+  await page.waitForFunction(() => (window.__msgs || []).some((t) => /OneDrive is connected, and stays connected on this browser/.test(t)), null, { timeout: 15000 });
   await page.waitForFunction(() => location.hash === '#folders' && /Connected to OneDrive/.test(document.getElementById('fd-connect-note').textContent), null, { timeout: 15000 });
   const sent = authorize[before];
   assert.equal(sent.origin + sent.pathname, MS_AUTHORIZE);
@@ -357,19 +357,26 @@ async function connect(env, o) {
   const exchanges = service.filter((s) => s.path === '/drive/connect');
   assert.equal(exchanges[exchanges.length - 1].body.redirect_uri, CONSOLE, '/drive/connect was sent another address than the console\'s');
 }
+// The connection the page keeps on this browser by GitHub account: the refresh token and the
+// drive's name, never an access token. storageHolds looks everywhere else.
+const KEPT = 'symphony_panel_drive_kept';
+function keptDrive(page, login) {
+  return page.evaluate(([k, l]) => { const m = JSON.parse(localStorage.getItem(k) || '{}'); return m[l] || null; }, [KEPT, login || 'tester']);
+}
 function storageHolds(page, text) {
-  return page.evaluate((t) => {
+  return page.evaluate(([t, kept]) => {
     const all = [];
-    for (let i = 0; i < localStorage.length; i++) all.push(localStorage.getItem(localStorage.key(i)));
+    for (let i = 0; i < localStorage.length; i++) if (localStorage.key(i) !== kept) all.push(localStorage.getItem(localStorage.key(i)));
     for (let i = 0; i < sessionStorage.length; i++) all.push(sessionStorage.getItem(sessionStorage.key(i)));
     return all.some((v) => v && v.indexOf(t) >= 0);
-  }, text);
+  }, [text, KEPT]);
 }
 // The drive's tokens go to three places alone: the access token to Microsoft Graph in the
 // Authorization header, the refresh token to the service's /drive/token, and the refresh token
 // sealed into the secret, which no request carries in the clear. Anything else that holds one of
 // them is a leak: a request to GitHub, Graph's addresses, any other request to the service, a line
-// of the console, a word of #msg, the page's markup, a field's value, the address or the storage.
+// of the console, a word of #msg, the page's markup, a field's value, the address or the storage,
+// but for the refresh token in the connection kept on this browser, which holds no access token.
 // And GitHub's token never goes to Graph.
 async function assertNoTokenOutside(env, when) {
   const { page, calls, graph, service, logs } = env;
@@ -388,15 +395,16 @@ async function assertNoTokenOutside(env, when) {
   for (const l of logs) if (holds(l)) where.push('the console: ' + l.slice(0, 60));
   const inPage = await page.evaluate(() => {
     const kept = [];
-    for (let i = 0; i < localStorage.length; i++) kept.push(localStorage.getItem(localStorage.key(i)));
+    for (let i = 0; i < localStorage.length; i++) if (localStorage.key(i) !== 'symphony_panel_drive_kept') kept.push(localStorage.getItem(localStorage.key(i)));
     for (let i = 0; i < sessionStorage.length; i++) kept.push(sessionStorage.getItem(sessionStorage.key(i)));
-    return { msgs: window.__msgs || [], markup: document.documentElement.outerHTML, values: Array.prototype.map.call(document.querySelectorAll('input, textarea, select'), (i) => i.value), address: location.href, kept };
+    return { connection: localStorage.getItem('symphony_panel_drive_kept') || '', msgs: window.__msgs || [], markup: document.documentElement.outerHTML, values: Array.prototype.map.call(document.querySelectorAll('input, textarea, select'), (i) => i.value), address: location.href, kept };
   });
   inPage.msgs.forEach((t) => { if (holds(t)) where.push('#msg: ' + t.slice(0, 60)); });
   if (holds(inPage.markup)) where.push('the page\'s markup');
   if (inPage.values.some(holds)) where.push('a field\'s value');
   if (holds(inPage.address)) where.push('the address');
   if (inPage.kept.some(holds)) where.push('the storage');
+  if (DRIVE_TOKENS.some((t) => t !== REFRESH && inPage.connection.indexOf(t) >= 0)) where.push('the kept connection, an access token');
   assert.deepEqual(where, [], when + ': a drive token reached ' + where.join('; '));
 }
 // what #msg says after a press is one short paragraph; the links are drawn in the tab
@@ -472,6 +480,9 @@ await check('B: Connect goes to Microsoft with PKCE and the console as redirect,
   assert.equal(await storageHolds(page, REFRESH), false, 'the refresh token is in storage');
   assert.equal(await page.evaluate(() => sessionStorage.getItem('symphony_panel_drive_state')), null, 'the pending state was not cleared');
   assert.match(await page.textContent('#fd-connect-note'), /Connected to OneDrive as Greg \(personal\)/);
+  assert.match(await page.textContent('#fd-connect-note'), /kept on this browser for tester\./);
+  assert.deepEqual(await keptDrive(page), { provider: 'microsoft', refresh: REFRESH, connected: today, owner: 'Greg (personal)', id: 'drive1', type: 'personal' }, 'the connection is not kept on this browser for the account');
+  assert.equal(await page.isHidden('#fd-forget'), false, 'Forget OneDrive is not offered');
   assert.ok(graph.find((g) => g.key === 'GET /v1.0/me/drive' && g.auth === 'Bearer ' + ACCESS), 'the drive was named with the access token');
   assert.equal(await page.textContent('#cp-who') !== '', true, 'still signed in to GitHub');
   // with a drive held, the filled button moves on to Track
@@ -562,7 +573,7 @@ await check('C: the drive is drawn from Graph with $select and $top, a folder op
   await context.close();
 });
 
-await check('D: Track seals the refresh token for the public key, writes drive.json exactly, starts the sync, and drops the tokens', async () => {
+await check('D: Track seals the refresh token for the public key, writes drive.json exactly, starts the sync, and keeps the connection on this browser', async () => {
   const env = await open({});
   const { context, page, calls, service, errors } = env;
   await connect(env);
@@ -605,17 +616,21 @@ await check('D: Track seals the refresh token for the public key, writes drive.j
   assert.ok(sw > keys.indexOf(order[2]) && sw < keys.indexOf(order[3]), 'the switch was not set between the file and the run');
   assert.deepEqual(calls[sw].body, { name: 'SYMPHONY_DRIVE', value: 'on' });
   assert.equal(keys.filter((k) => k.indexOf('/orgs/') >= 0).length, 0, 'a personal account\'s repository touched an organization');
-  assert.match(text, /tokens are dropped from this page\. The first sync is queued\.$/);
+  assert.match(text, /OneDrive stays connected on this browser\. The first sync is queued\.$/);
   // the runs link is the tab's own, drawn once the repository is read again
   await page.waitForFunction(() => /tracks 2 items/.test(document.getElementById('fd-tracked').textContent));
   assert.equal(await page.$$eval('#fd-tracked a[href="https://github.com/acme/demo/actions/workflows/drive-sync.yml"]', (l) => l.length), 1, 'the tab does not link the runs');
   assert.equal(await storageHolds(page, REFRESH), false);
   assert.equal(service.filter((s) => s.path === '/drive/token').length, 0, 'no renewal was needed');
-  assert.equal(await page.textContent('#fd-connect'), 'Connect OneDrive', 'the connection is gone after Track');
+  assert.equal(await page.textContent('#fd-connect'), 'Connect OneDrive again', 'the connection did not outlive Track');
+  assert.equal((await keptDrive(page)).refresh, REFRESH, 'the connection kept on this browser is gone after Track');
   await assertNoTokenOutside(env, 'after Track');
+  // the kept connection serves the next Track with no Connect, which seals the secret once more
+  await page.click('#fd-track-open');
   await page.click('#fd-track');
-  await page.waitForFunction(() => /Connect OneDrive first/.test(document.getElementById('msg').textContent));
-  assert.equal(calls.filter((c) => c.key === order[1]).length, 1, 'a second Track sealed again without a connection');
+  for (let i = 0; i < 150 && calls.filter((c) => c.key === order[3]).length < 2; i++) await sleep(100);
+  await page.waitForFunction(() => document.getElementById('dlg-track').open === false);
+  assert.equal(calls.filter((c) => c.key === order[1]).length, 2, 'a second Track did not seal again with the kept connection');
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -704,7 +719,7 @@ await check('E3: a 403 on the first run still leaves the secret and the file wri
   await page.waitForFunction(() => /could not be started from here \(403/.test(document.getElementById('msg').textContent));
   const text = await msg(page);
   assertShort(text);
-  assert.equal(text, 'acme/demo tracks 1 item of OneDrive in papers/, and the drive\'s tokens are dropped from this page. The sync could not be started from here (403: no Actions permission); press "Run workflow" at the runs link in Track in a repository.');
+  assert.equal(text, 'acme/demo tracks 1 item of OneDrive in papers/, and OneDrive stays connected on this browser. The sync could not be started from here (403: no Actions permission); press "Run workflow" at the runs link in Track in a repository.');
   const writes = calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key);
   assert.deepEqual(writes, ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/variables', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
   const file = JSON.parse(Buffer.from(calls.find((c) => c.key === 'PUT /repos/acme/demo/contents/.github/symphony/drive.json').body.content, 'base64').toString('utf8'));
@@ -808,7 +823,7 @@ await check('D3: Track again on a repository that tracks a drive finds what it t
   assert.equal(await page.inputValue('#fd-folder'), 'papers');
   calls.length = 0;
   await page.click('#fd-track');
-  await page.waitForFunction(() => /^acme\/demo tracks 2 items of OneDrive in papers\/, and the drive's tokens are dropped from this page\. The first sync is queued\.$/.test(document.getElementById('msg').textContent), null, { timeout: 15000 });
+  await page.waitForFunction(() => /^acme\/demo tracks 2 items of OneDrive in papers\/, and OneDrive stays connected on this browser\. The first sync is queued\.$/.test(document.getElementById('msg').textContent), null, { timeout: 15000 });
   const write = calls.find((c) => c.key === 'PUT /repos/acme/demo/contents/.github/symphony/drive.json');
   assert.equal(write.body.sha, 'd1', 'the write over the file carried no sha, or another');
   assert.equal(shaReadBefore(calls, write), 'main', 'the sha was not read from the branch written');
@@ -1061,7 +1076,7 @@ await check('H4: a return whose state matches neither pending one is exchanged n
   await context.close();
 });
 
-const PULL_WORDS = 'acme/demo tracks 1 item of OneDrive in papers/, and the drive\'s tokens are dropped from this page. Its default branch takes only pull requests: merge the one linked in Track in a repository, then press Sync now there.';
+const PULL_WORDS = 'acme/demo tracks 1 item of OneDrive in papers/, and OneDrive stays connected on this browser. Its default branch takes only pull requests: merge the one linked in Track in a repository, then press Sync now there.';
 await check('I: a default branch that takes only pull requests gets the file on symphony/drive, made from its head, with a pull request that points at the tab and is linked in it, and no run is started', async () => {
   const env = await open({ protectedMain: true });
   const { context, page, calls, errors } = env;
@@ -1201,7 +1216,7 @@ await check('N1: a drive return opens the Folders tab by itself, with the addres
   const { context, page, errors } = env;
   await pressConnect(env);
   // from here on nothing presses or reads through the tab wrapper, which would open the tab itself
-  await page.waitForFunction(() => (window.__msgs || []).some((t) => /OneDrive is connected for this page/.test(t)), null, { timeout: 15000 });
+  await page.waitForFunction(() => (window.__msgs || []).some((t) => /OneDrive is connected, and stays connected on this browser/.test(t)), null, { timeout: 15000 });
   await page.waitForFunction(() => /^acme\/demo, default/.test(document.getElementById('cp-summary').textContent), null, { timeout: 15000 });
   await page.waitForFunction(() => location.hash === '#folders', null, { timeout: 10000 }).catch(() => {});
   const facts = await tabFacts(page);
@@ -1266,6 +1281,7 @@ await check('N3: Forget the token drops the drive and what was ticked in it, so 
   await page.waitForFunction(() => /Connect OneDrive first/.test(document.getElementById('msg').textContent));
   assert.equal(calls.filter((c) => !c.key.startsWith('GET ')).length, 0, 'Track wrote after Forget the token');
   assert.equal(await storageHolds(page, REFRESH), false);
+  assert.equal(await page.evaluate((k) => localStorage.getItem(k), KEPT), null, 'Forget the token left the connection kept on this browser');
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -1289,7 +1305,7 @@ await check('N3b: another tab keeping another account\'s token makes this tab dr
   await context.close();
 });
 
-await check('N3c: a pasted token GitHub stops taking signs the page out, and the drive with it, so a new token, even for the same account, finds no connection and Track seals nothing', async () => {
+await check('N3c: a pasted token GitHub stops taking signs the page out and drops the drive from its memory, and a new token for the same account finds the connection kept on this browser, with nothing ticked', async () => {
   let dead = false;
   const env = await open({ intercept: (req) => (dead && req.headers()['authorization'] === 'Bearer github_pat_TEST' ? { status: 401, body: { message: 'Bad credentials' } } : undefined) });
   const { context, page, calls, errors } = env;
@@ -1306,12 +1322,13 @@ await check('N3c: a pasted token GitHub stops taking signs the page out, and the
   await ready(page);
   await page.click('#rail-folders');
   await tabRead(page);
-  assert.equal(await page.textContent('#fd-connect'), 'Connect OneDrive', 'the drive outlived the sign-in GitHub ended');
+  assert.equal(await page.textContent('#fd-connect'), 'Connect OneDrive again', 'the connection kept for the account was not found again');
   assert.deepEqual(await page.$$eval('#fd-picked li', (l) => l.length), 0, 'what was ticked under the ended sign-in is still ticked');
+  await listed(page);
   calls.length = 0;
   await page.click('#fd-track');
-  await page.waitForFunction(() => /Connect OneDrive first/.test(document.getElementById('msg').textContent));
-  assert.equal(calls.filter((c) => !c.key.startsWith('GET ')).length, 0, 'Track wrote after the sign-in ended');
+  await page.waitForFunction(() => /Tick at least one file or folder/.test(document.getElementById('msg').textContent));
+  assert.equal(calls.filter((c) => !c.key.startsWith('GET ')).length, 0, 'Track wrote with nothing ticked');
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -1450,7 +1467,7 @@ await check('N8: with no repository listed yet, the tab connects a drive, finds 
   await page.waitForFunction(() => !document.getElementById('fd-connect').disabled, null, { timeout: 15000 });
   await openClouds(page);
   await page.click('#fd-connect');
-  await page.waitForFunction(() => (window.__msgs || []).some((t) => /OneDrive is connected for this page/.test(t)), null, { timeout: 15000 });
+  await page.waitForFunction(() => (window.__msgs || []).some((t) => /OneDrive is connected, and stays connected on this browser/.test(t)), null, { timeout: 15000 });
   await page.waitForFunction(() => location.hash === '#folders' && /Connected to OneDrive/.test(document.getElementById('fd-connect-note').textContent), null, { timeout: 15000 });
   await listed(page);
   await page.check('#fd-items input[data-id="a1"]');
@@ -2445,26 +2462,28 @@ async function trackOn(o) {
   return env;
 }
 const writesIn = (calls) => calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key);
-await check('FS4: in an organization whose secret no drive holds yet, Track keeps the token as the organization\'s secret, shared only with this repository and those already listed, records which drive it holds, and writes no repository secret', async () => {
+await check('FS4: in an organization whose secret no drive holds yet, Track keeps the token as the organization\'s secret, which every private repository of the organization reads, records which drive it holds, and writes no repository secret', async () => {
   const env = await trackOn({ org: true, orgPlan: 'team' });
   const { context, page, calls, errors } = env;
   const writes = writesIn(calls);
   assert.ok(writes.indexOf('PUT /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH') >= 0, 'the organization\'s secret was not written');
   assert.equal(writes.indexOf('PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH'), -1, 'a repository secret would shadow the organization\'s');
   const put = calls.find((c) => c.key === 'PUT /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH').body;
-  assert.equal(put.visibility, 'selected');
-  assert.deepEqual(put.selected_repository_ids, [123]);
+  assert.equal(put.visibility, 'private');
+  assert.equal(put.selected_repository_ids, undefined, 'the organization\'s secret was kept to a list');
   assert.equal(put.key_id, 'ok1');
   assert.ok(!Buffer.from(put.encrypted_value, 'base64').toString('latin1').includes(REFRESH), 'the token went in the clear');
-  assert.deepEqual(calls.find((c) => c.key === 'POST /orgs/acme/actions/variables').body, { name: 'SYMPHONY_DRIVE_ID', value: 'drive1', visibility: 'selected', selected_repository_ids: [123] });
-  assert.match(await msg(page), /a secret of acme, shared only with the repositories that track this drive/);
+  assert.deepEqual(calls.find((c) => c.key === 'POST /orgs/acme/actions/variables').body, { name: 'SYMPHONY_DRIVE_ID', value: 'drive1', visibility: 'private' });
+  assert.match(await msg(page), /a secret of acme, which every private repository of acme reads, so Track in any of them needs no other secret/);
+  assert.equal(calls.filter((c) => c.key === 'GET /user/repos').length, 0, 'an organization\'s Track looked for repositories to renew');
   assert.equal(await page.evaluate(() => document.getElementById('dlg-track').open), false);
   assert.deepEqual(errors, []);
   await context.close();
-  // the same drive tracked again elsewhere joins the list the secret already has
+  // the same drive tracked again widens a secret an earlier Track kept to a list
   const again = await trackOn({ org: true, orgPlan: 'team', orgDrive: 'drive1' });
   const put2 = again.calls.find((c) => c.key === 'PUT /orgs/acme/actions/secrets/SYMPHONY_DRIVE_REFRESH').body;
-  assert.deepEqual(put2.selected_repository_ids, [555, 123]);
+  assert.equal(put2.visibility, 'private');
+  assert.equal(put2.selected_repository_ids, undefined);
   assert.ok(writesIn(again.calls).indexOf('PATCH /orgs/acme/actions/variables/SYMPHONY_DRIVE_ID') >= 0);
   assert.deepEqual(again.errors, []);
   await again.context.close();
@@ -2539,6 +2558,117 @@ await check('FS7: opening the tab on a repository that tracks a drive, its secre
   assert.equal(/half-hourly sync/.test(await meanwhile.page.textContent('#fd-tracked')), false, 'a switch made meanwhile was said as a failure');
   await meanwhile.context.close();
 });
+// A connection kept on this browser for the account, as the page writes it
+function keptStorage(entry, login) {
+  return { local: Object.assign({}, signedIn().local, { [KEPT]: JSON.stringify({ [login || 'tester']: Object.assign({ provider: 'microsoft', refresh: REFRESH, connected: dayShift(-5), owner: 'Greg (personal)', id: 'drive1', type: 'personal' }, entry || {}) }) }) };
+}
+async function openFoldersTab(env) {
+  await ready(env.page);
+  await env.page.click('#rail-folders');
+  await tabRead(env.page);
+}
+await check('R1: a reload finds the drive connected again for the same account, renews its access token with the kept refresh token, and Forget OneDrive forgets it on this browser and in the page, writing nothing to GitHub', async () => {
+  const env = await open({});
+  const { context, page, calls, service, errors } = env;
+  await connect(env);
+  await listed(page);
+  // the address keeps #folders, so the reload opens the tab by itself
+  service.length = 0;
+  await page.reload();
+  await openFoldersTab(env);
+  await page.waitForFunction(() => document.getElementById('fd-connect').textContent === 'Connect OneDrive again', null, { timeout: 15000 });
+  await listed(page);
+  const renewals = service.filter((s) => s.path === '/drive/token');
+  assert.equal(renewals.length, 1, 'the access token was not renewed once with the kept refresh token');
+  assert.equal(renewals[0].body.refresh_token, REFRESH);
+  assert.match(await page.textContent('#fd-connect-note'), /Connected to OneDrive as Greg \(personal\), kept on this browser for tester/);
+  await assertNoTokenOutside(env, 'after the reload');
+  calls.length = 0;
+  await page.click('#fd-forget');
+  await page.waitForFunction(() => /OneDrive is forgotten on this browser/.test(document.getElementById('msg').textContent));
+  assert.equal(await page.evaluate((k) => localStorage.getItem(k), KEPT), null, 'Forget OneDrive left the connection on this browser');
+  assert.equal(await page.textContent('#fd-connect'), 'Connect OneDrive');
+  assert.equal(await page.isHidden('#fd-forget'), true, 'Forget OneDrive is offered with nothing to forget');
+  assert.equal(calls.filter((c) => !c.key.startsWith('GET ')).length, 0, 'Forget OneDrive wrote to GitHub');
+  await page.reload();
+  await openFoldersTab(env);
+  await page.waitForTimeout(400);
+  assert.equal(await page.textContent('#fd-connect'), 'Connect OneDrive', 'a forgotten connection came back on a reload');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('R2: a kept connection Microsoft no longer takes is forgotten on this browser and said, and one past its 90 days or kept for another account is never sent', async () => {
+  const dead = await open({ storage: keptStorage(), service: { '/drive/token': { status: 400, body: { error: 'invalid_grant', error_description: 'AADSTS70008: the refresh token has expired' } } } });
+  await openFoldersTab(dead);
+  await dead.page.waitForFunction(() => /Microsoft no longer takes the OneDrive connection kept on this browser/.test(document.getElementById('msg').textContent), null, { timeout: 15000 });
+  assert.equal(await dead.page.evaluate((k) => localStorage.getItem(k), KEPT), null, 'the refused connection is still kept');
+  assert.equal(await dead.page.textContent('#fd-connect'), 'Connect OneDrive');
+  assert.deepEqual(dead.errors, []);
+  await dead.context.close();
+  for (const storage of [keptStorage({ connected: dayShift(-91) }), keptStorage({}, 'other')]) {
+    const env = await open({ storage });
+    await openFoldersTab(env);
+    await env.page.waitForTimeout(400);
+    assert.equal(env.service.filter((s) => s.path === '/drive/token').length, 0, 'a connection that is not this account\'s, or past its days, was sent');
+    assert.equal(await env.page.textContent('#fd-connect'), 'Connect OneDrive');
+    assert.deepEqual(env.errors, []);
+    await env.context.close();
+  }
+});
+await check('R3: on a personal account Track renews the secret in each other repository of the account that holds one and tracks the same drive with an older connection, leaves the rest, and says a repository it could not renew, with the steps kept open', async () => {
+  const names = ['acme/demo', 'acme/same', 'acme/elsewhere', 'acme/bare', 'acme/refused', 'acme/newer'];
+  const other = Object.assign({}, driveJson, { items: [{ id: 'z1', name: 'Z', drive: 'drive9' }] });
+  const per = { 'acme/demo': {}, 'acme/same': { tracked: true, secret: true }, 'acme/elsewhere': { tracked: true, secret: true, driveJson: other }, 'acme/bare': { tracked: true }, 'acme/refused': { tracked: true, secret: true, noSecrets: true }, 'acme/newer': { tracked: true, secret: true, driveJson: Object.assign({}, driveJson, { connected: today }) } };
+  const listing = names.concat(['acme/old']).map((n) => ({ full_name: n, owner: { login: 'acme' }, private: true, archived: n === 'acme/old' }));
+  const env = await trackOn({ routes: repoRoutes({ per, newRepos: listing }, names), repos: ['acme/demo'] });
+  const { context, page, calls, errors } = env;
+  const puts = writesIn(calls).filter((k) => /\/actions\/secrets\/SYMPHONY_DRIVE_REFRESH$/.test(k));
+  assert.deepEqual(puts.sort(), ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/refused/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/same/actions/secrets/SYMPHONY_DRIVE_REFRESH']);
+  for (const k of puts) assert.ok(!Buffer.from(calls.find((c) => c.key === k).body.encrypted_value, 'base64').toString('latin1').includes(REFRESH), 'the token went in the clear to ' + k);
+  assert.equal(calls.filter((c) => /acme\/old/.test(c.key)).length, 0, 'an archived repository was asked about');
+  const text = await msg(page);
+  assert.match(text, /The secret is renewed too in acme\/same, which tracks the same drive\. It could not be renewed in acme\/refused; press Track there\./);
+  assert.equal(await page.evaluate(() => document.getElementById('dlg-track').open), true, 'the steps closed over a repository left unrenewed');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('R4: Track with a connection kept from an earlier day dates drive.json by that day, so the tab says when it truly runs out', async () => {
+  const env = await open({ storage: keptStorage({ connected: dayShift(-30) }) });
+  const { context, page, calls, errors } = env;
+  await openFoldersTab(env);
+  await listed(page);
+  await page.check('#fd-items input[data-id="a1"]');
+  await page.click('#fd-track-open');
+  await page.click('#fd-track');
+  await page.waitForFunction(() => /acme\/demo tracks 1 item of OneDrive/.test(document.getElementById('msg').textContent), null, { timeout: 15000 });
+  const file = calls.find((c) => c.key === 'PUT /repos/acme/demo/contents/.github/symphony/drive.json').body;
+  assert.equal(JSON.parse(Buffer.from(file.content, 'base64').toString('utf8')).connected, dayShift(-30));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('R5: a connection another tab made meanwhile is neither written over by this page\'s older one nor forgotten when Microsoft refuses the older one', async () => {
+  const newer = { provider: 'microsoft', refresh: 'M.NEWER-stand-in', connected: today, owner: 'Greg (personal)', id: 'drive1', type: 'personal' };
+  for (const refused of [false, true]) {
+    const env = await open({ storage: keptStorage({ connected: dayShift(-5) }) });
+    const { context, page, errors } = env;
+    // the other tab connects again while this page renews its older token
+    await page.route(SERVICE + '/drive/token', async (route) => {
+      if (route.request().method() === 'OPTIONS') return route.fallback();
+      await page.evaluate(([k, e]) => localStorage.setItem(k, JSON.stringify({ tester: e })), [KEPT, newer]);
+      const cors = { 'Access-Control-Allow-Origin': new URL(BASE).origin };
+      return route.fulfill(refused
+        ? { status: 400, contentType: 'application/json', headers: cors, body: JSON.stringify({ error: 'invalid_grant', error_description: 'expired' }) }
+        : { status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify({ access_token: 'EwB-NEW', expires_in: 3599 }) });
+    });
+    await openFoldersTab(env);
+    if (refused) await page.waitForFunction(() => /Microsoft no longer takes/.test(document.getElementById('msg').textContent), null, { timeout: 15000 });
+    else { await listed(page); await page.waitForFunction(() => /as Greg/.test(document.getElementById('fd-connect-note').textContent), null, { timeout: 15000 }); }
+    await page.waitForTimeout(300);
+    assert.deepEqual(await keptDrive(page), newer, (refused ? 'a refusal of the older token' : 'the older token') + ' took the newer connection');
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+});
 await check('FS8: an organization secret GitHub then withholds from the repository, or whose reach cannot be read, is followed by the repository\'s own secret, and a repository that tracks a drive through the organization\'s secret alone shows it set and has its sync switched on', async () => {
   for (const o of [{ org: true, orgPlan: 'team', orgWithheld: true }, { org: true, orgPlan: 'team', orgListRefused: true }]) {
     const env = await trackOn(o);
@@ -2607,7 +2737,7 @@ await check('FS2: a repository that walks the drive (drive-catalog.yml) and has 
   assert.equal(secret.key_id, 'k1');
   assert.ok(!Buffer.from(secret.encrypted_value, 'base64').toString('latin1').includes(REFRESH), 'the token went in the clear');
   assert.equal(await page.evaluate(() => document.getElementById('dlg-track').open), false, 'the steps stayed open after Track was done');
-  assert.equal(await page.textContent('#fd-connect'), 'Connect OneDrive', 'the connection outlived Track');
+  assert.equal(await page.textContent('#fd-connect'), 'Connect OneDrive again', 'the connection did not outlive Track');
   assert.equal(await storageHolds(page, REFRESH), false);
   assert.deepEqual(errors, []);
   await context.close();

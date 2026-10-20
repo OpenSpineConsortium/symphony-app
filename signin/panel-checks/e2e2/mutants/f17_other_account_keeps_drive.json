@@ -1,1 +1,1 @@
-[["    else if (shownLogin && drive.login !== shownLogin) dropDrive();\n", ""]]
+[["    else if (shownLogin && drive.login !== shownLogin) { dropDrive(); return restoreDrive(); }\n", ""]]

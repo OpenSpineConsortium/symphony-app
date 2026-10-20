@@ -1,0 +1,1 @@
+[["        return r && typeof r.full_name === 'string' && !r.archived && ", "        return r && typeof r.full_name === 'string' && "]]

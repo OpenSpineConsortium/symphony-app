@@ -1,0 +1,1 @@
+[["    var k = login ? keptDrives()[login.toLowerCase()] : null;", "    var k = login ? (function (m) { return m[Object.keys(m)[0]]; })(keptDrives()) : null;"]]
