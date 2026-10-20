@@ -655,7 +655,7 @@ await check('E3: a 403 on the first run still leaves the secret and the file wri
   await page.waitForFunction(() => /could not be started from here \(403/.test(document.getElementById('msg').textContent));
   const text = await msg(page);
   assertShort(text);
-  assert.equal(text, 'acme/demo tracks 1 item of OneDrive in papers/, and the drive\'s tokens are dropped from this page. The sync could not be started from here (403: no Actions permission); press "Run workflow" at the runs link in this tab.');
+  assert.equal(text, 'acme/demo tracks 1 item of OneDrive in papers/, and the drive\'s tokens are dropped from this page. The sync could not be started from here (403: no Actions permission); press "Run workflow" at the runs link in Track in a repository.');
   const writes = calls.filter((c) => !c.key.startsWith('GET ')).map((c) => c.key);
   assert.deepEqual(writes, ['PUT /repos/acme/demo/actions/secrets/SYMPHONY_DRIVE_REFRESH', 'PUT /repos/acme/demo/contents/.github/symphony/drive.json', 'POST /repos/acme/demo/actions/workflows/drive-sync.yml/dispatches']);
   const file = JSON.parse(Buffer.from(calls.find((c) => c.key === 'PUT /repos/acme/demo/contents/.github/symphony/drive.json').body.content, 'base64').toString('utf8'));
@@ -872,7 +872,7 @@ await check('F2: without the secret, or with Actions refused, the page says so i
   assert.match(await page.textContent('#fd-tracked'), /The secret SYMPHONY_DRIVE_REFRESH is not set, so the sync ends at once: press Connect OneDrive, then Track/);
   await page.click('#fd-tracked button');
   await page.waitForFunction(() => /could not be started from here \(403/.test(document.getElementById('msg').textContent));
-  assert.equal(await msg(page), 'The sync could not be started from here (403: no Actions permission); press "Run workflow" at the runs link in this tab.');
+  assert.equal(await msg(page), 'The sync could not be started from here (403: no Actions permission); press "Run workflow" at the runs link in Track in a repository.');
   assert.equal(await page.$$eval('#fd-tracked a[href="https://github.com/acme/demo/actions/workflows/drive-sync.yml"]', (l) => l.length), 1, 'the runs link the words point at is not in the tab');
   assert.deepEqual(errors, []);
   await context.close();
@@ -1012,7 +1012,7 @@ await check('H4: a return whose state matches neither pending one is exchanged n
   await context.close();
 });
 
-const PULL_WORDS = 'acme/demo tracks 1 item of OneDrive in papers/, and the drive\'s tokens are dropped from this page. Its default branch takes only pull requests: merge the one linked in this tab, then press Sync now.';
+const PULL_WORDS = 'acme/demo tracks 1 item of OneDrive in papers/, and the drive\'s tokens are dropped from this page. Its default branch takes only pull requests: merge the one linked in Track in a repository, then press Sync now there.';
 await check('I: a default branch that takes only pull requests gets the file on symphony/drive, made from its head, with a pull request that points at the tab and is linked in it, and no run is started', async () => {
   const env = await open({ protectedMain: true });
   const { context, page, calls, errors } = env;
@@ -1732,6 +1732,45 @@ await check('NC3: Track in a repository opens a dialog holding what is ticked an
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.getElementById('dlg-track').open);
   assert.equal(await page.isChecked('#fd-items input[data-id="a1"]'), true);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('NC4: what Track answers is said in its dialog, over which the foot cannot be read, and the head\'s button counts what is ticked in every folder', async () => {
+  const env = await open({});
+  const { context, page, errors } = env;
+  await connect(env);
+  await listed(page);
+  assert.equal(await page.textContent('#fd-track-open'), 'Track in a repository');
+  await page.click('#fd-track-open');
+  await page.waitForFunction(() => document.getElementById('dlg-track').open);
+  assert.equal(await page.textContent('#fd-say'), '');
+  await page.click('#fd-track');
+  await page.waitForFunction(() => /Tick at least one file or folder/.test(document.getElementById('fd-say').textContent));
+  assert.equal(await page.getAttribute('#fd-say', 'role'), 'status');
+  assert.ok(await page.evaluate(() => document.getElementById('fd-say').classList.contains('admin__warn')));
+  await page.keyboard.press('Escape');
+  await page.click('#fd-items input[data-id="a1"]');
+  assert.equal(await page.textContent('#fd-track-open'), 'Track in a repository (1 ticked)');
+  // a new opening starts with no old answer
+  await page.click('#fd-track-open');
+  await page.waitForFunction(() => document.getElementById('dlg-track').open);
+  assert.equal(await page.textContent('#fd-say'), '');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('NC5: on a phone a folder of many items scrolls inside the explorer, which keeps a height under the window\'s, so its status bar stays in reach', async () => {
+  const graph = graphRoutes();
+  const many = Array.from({ length: 80 }, (_, i) => ({ id: 'p' + i, name: 'paper-' + i + '.docx', file: { mimeType: 'x' }, size: 1000 + i, parentReference: { driveId: 'drive1' }, lastModifiedDateTime: now }));
+  graph['GET /v1.0/me/drive/root/children'] = { value: graph['GET /v1.0/me/drive/root/children'].value.concat(many) };
+  const env = await open({ viewport: { width: 390, height: 844 }, graph });
+  const { context, page, errors } = env;
+  await connect(env);
+  await listed(page);
+  const m = await page.evaluate(() => { const fx = document.querySelector('#tab-folders .fx'), main = document.getElementById('fd-main') || fx.querySelector('.fx__main'); return { fx: fx.getBoundingClientRect().height, winH: innerHeight, scrolls: main.scrollHeight > main.clientHeight + 10 }; });
+  console.log('      ' + JSON.stringify(m));
+  assert.ok(m.fx < m.winH, 'the explorer is ' + m.fx + 'px on a window of ' + m.winH);
+  assert.ok(m.scrolls, 'the list does not scroll in its pane');
   assert.deepEqual(errors, []);
   await context.close();
 });
