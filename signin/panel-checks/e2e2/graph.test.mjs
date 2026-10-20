@@ -364,8 +364,13 @@ async function signIn(page, tab) {
   await page.waitForSelector('#cp-app:not(.hidden)', { timeout: 8000 });
   if (tab !== null) await toTab(page, tab || 'dependencies');
 }
-// a tab opened as a person opens it, by its rail button
+// a tab opened as a person opens it, by its rail button; on a phone the buttons are the home
+// screen's (site branch claude/project-thread-6cxgh2), so a tab shown is left by its back button first
 async function toTab(page, name) {
+  if (await page.isVisible('#cp-back')) {
+    await page.click('#cp-back');
+    await page.waitForFunction(() => document.getElementById('console').classList.contains('console--home'), null, { timeout: 8000 });
+  }
   await page.click('#rail-' + name);
   await page.waitForFunction((n) => !document.getElementById('tab-' + n).hidden && location.hash === '#' + n, name, { timeout: 8000 });
 }
@@ -2093,6 +2098,7 @@ await check('AJ: each tile carries a bar of its chart\'s own issues by state, an
     // the mouse a click left over a tile lifts it a pixel (its hover), which is no second row: the
     // window the tab brings to the rail now scrolls a tile under where the rail's button was pressed
     return { scrolls: s.scrollWidth > s.clientWidth + 1 || s.scrollHeight > s.clientHeight + 1, shown: shown.length, oneRow: tops.every((t) => Math.abs(t - tops[0]) <= 1),
+      rows: tops.filter((t, i) => tops.findIndex((u) => Math.abs(u - t) <= 1) === i).length,
       inside: shown.every((b) => { const x = b.getBoundingClientRect(); return x.left >= sr.left - 1 && x.right <= sr.right + 1; }),
       pressed: on.getAttribute('data-focus'), inView: !on.hidden && r.width > 0 && r.left >= sr.left - 1 && r.right <= sr.right + 1, paged: Array.from(s.querySelectorAll('.graph__page')).some((b) => !b.hidden), page: document.documentElement.scrollWidth };
   });
@@ -2114,17 +2120,21 @@ await check('AJ: each tile carries a bar of its chart\'s own issues by state, an
   for (let i = 0; i < 3; i++) { await phone.page.click('#cp-graph .graph__section:not([hidden]) .graph__next'); await sleep(150); }
   const stepped = await stripOf(phone.page);
   console.log('     seven tiles on a phone:', JSON.stringify(start), '| after Next three times:', JSON.stringify(stepped));
-  assert.deepEqual([start.scrolls, start.paged, start.oneRow, start.inside, start.inView], [false, true, true, true, true], 'the phone\'s seven tiles are not a page at a time in a row that never scrolls');
-  assert.ok(start.shown < 7, 'every tile shows at once on a phone, so this says nothing');
+  // since the phone's console holds the screen as a laptop's does (site branch
+  // claude/project-thread-6cxgh2, 2026-10-20), the tab sizes its tiles as on a laptop: a page at a
+  // time in one row, or all of them in two rows where the screen is tall enough to spare one (AW)
+  assert.deepEqual([start.scrolls, start.inside, start.inView], [false, true, true], 'the phone\'s seven tiles scroll or run out of their row');
+  assert.ok((start.paged && start.oneRow && start.shown < 7) || (!start.paged && start.shown === 7 && start.rows <= 2), 'the phone\'s seven tiles are neither a page at a time in one row nor all in two rows: ' + JSON.stringify(start));
   assert.deepEqual([stepped.pressed, stepped.scrolls, stepped.inView, stepped.inside], ['epic-300', false, true, true], 'the chosen tile\'s page was not brought into view');
   assert.ok(stepped.page <= 390, 'the tiles widen the page past the phone: ' + stepped.page);
   assert.deepEqual(phone.errors, []);
   await phone.context.close();
   // the last tile kept as the choice and the charts drawn while the console stands on another tab,
-  // where the strip has no width: its tile's page is brought into view once the tab opens
-  const later = await open(manyRoutes(5), { extraRoutes: [stubRoute], viewport: { width: 390, height: 844 }, mobile: true, storage: { symphony_panel_graph_focus: JSON.stringify({ 'acme/demo': 'epic-500' }) } });
+  // where the strip has no width: its tile's page is brought into view once the tab opens; twelve
+  // epics, since a phone's tab may lay seven tiles out in two rows with no pages (above)
+  const later = await open(manyRoutes(12), { extraRoutes: [stubRoute], viewport: { width: 390, height: 844 }, mobile: true, storage: { symphony_panel_graph_focus: JSON.stringify({ 'acme/demo': 'epic-1200' }) } });
   await signIn(later.page, null);
-  await waitGraph(later.page, /^Drawn from 6 reads/, 15000);
+  await waitGraph(later.page, /^Drawn from 13 reads/, 15000);
   const hiddenWhileDrawn = await later.page.evaluate(() => document.getElementById('tab-dependencies').hidden);
   await toTab(later.page, 'dependencies');
   await later.page.waitForFunction(() => document.getElementById('cp-graph-focus').clientWidth > 0, null, { timeout: 5000 });
@@ -2133,7 +2143,7 @@ await check('AJ: each tile carries a bar of its chart\'s own issues by state, an
   console.log('     drawn on another tab:', hiddenWhileDrawn, '| the kept tile once the tab opened:', JSON.stringify(kept));
   assert.equal(hiddenWhileDrawn, true, 'the charts were not drawn while the tab was hidden');
   assert.equal(kept.paged, true, 'the tiles are not in pages, so this says nothing');
-  assert.deepEqual([kept.pressed, kept.inView, kept.scrolls], ['epic-500', true, false], 'the kept tile is not in view once the tab opened after the draw');
+  assert.deepEqual([kept.pressed, kept.inView, kept.scrolls], ['epic-1200', true, false], 'the kept tile is not in view once the tab opened after the draw');
   assert.deepEqual(later.errors, []);
   await later.context.close();
 });
@@ -2285,8 +2295,8 @@ await check('AM: a chart zoomed in is dragged with the mouse like a map, both wa
   assert.deepEqual([shaken.tab, shaken.near], ['#dependencies', true], 'a press that shook a little did not open its node in focus');
   assert.deepEqual(errors, []);
   await context.close();
-  // a window 800 px wide, where the page scrolls as a whole: the drag still moves the chart, and
-  // the page stays where it was
+  // a window 800 px wide, a phone's layout, where the console holds the screen (site branch
+  // claude/project-thread-6cxgh2): the drag still moves the chart, and the page stays where it was
   const narrow = await open(fixtureRoutes(fixture()), { viewport: { width: 800, height: 700 } });
   await signIn(narrow.page);
   await narrow.page.waitForSelector('#cp-graph svg', { state: 'attached', timeout: 15000 });
@@ -2296,8 +2306,8 @@ await check('AM: a chart zoomed in is dragged with the mouse like a map, both wa
   const start = await panState(narrow.page);
   await drag(narrow.page, p, { x: p.x - 50, y: p.y - 30 });
   const end = await panState(narrow.page);
-  console.log('     where the page scrolls: before', JSON.stringify(start), '| after the drag', JSON.stringify(end));
-  assert.equal(scrolls, true, 'the page does not scroll as a whole at 800 px, so this says nothing');
+  console.log('     at 800 px: before', JSON.stringify(start), '| after the drag', JSON.stringify(end));
+  assert.equal(scrolls, false, 'the console does not hold the screen at 800 px');
   assert.ok(Math.abs(end.x - start.x + 50) <= 2 && Math.abs(end.y - start.y + 30) <= 2, 'the chart did not move with the drag: ' + JSON.stringify([start, end]));
   assert.equal(end.win, start.win, 'the drag moved the page');
   assert.deepEqual(narrow.errors, []);
@@ -2512,8 +2522,9 @@ await check('AR: on a laptop the tiles never scroll however many epics there are
   assert.deepEqual([last.pressed, last.shown.indexOf('epic-1200') >= 0, last.arrows], ['epic-1200', true, ['on', 'off']], 'End did not turn to the last page');
   assert.deepEqual(errors, []);
   await context.close();
-  // 800 px wide, where the console is one long page: the tab holds it still, so the wheel over the
-  // strip moves nothing, though the window was placed by the check first
+  // 800 px wide, a phone's layout, where the console holds the screen (site branch
+  // claude/project-thread-6cxgh2): the page has nothing to scroll, and the wheel over the strip
+  // turns nothing and moves nothing
   const narrow = await open(manyRoutes(12), { extraRoutes: [stubRoute], viewport: { width: 800, height: 700 } });
   await signIn(narrow.page);
   await waitGraph(narrow.page, /^Drawn from 13 reads/, 15000);
@@ -2527,10 +2538,8 @@ await check('AR: on a laptop the tiles never scroll however many epics there are
   await sleep(300);
   const after = await spot();
   console.log('     in the one long page: before the wheel', JSON.stringify(at), '| after', JSON.stringify(after));
-  assert.equal(at.paged, true, 'the tiles are not in pages at 800 px, so this says nothing');
-  assert.equal(after.shown, at.shown, 'the wheel turned the tiles where the console is one long page');
-  assert.ok(at.y > 0, 'the window could not be placed, so the page\'s stillness says nothing');
-  assert.equal(after.y, at.y, 'the wheel over the strip moved the page the tab holds');
+  assert.equal(after.shown, at.shown, 'the wheel turned the tiles at 800 px');
+  assert.deepEqual([at.y, after.y], [0, 0], 'the page scrolled at 800 px, where the console holds the screen');
   assert.deepEqual(narrow.errors, []);
   await narrow.context.close();
 });
@@ -3705,7 +3714,9 @@ await check('BL: on a phone held either way the tab holds the page still while i
   // from the page as it did before it hid itself, so the handle can bring it back sideways too
   for (const [what, held] of [['upright', upright], ['turned sideways', sideways], ['upright again', back]]) assert.ok(held.header <= 0, what + ' the site\'s header still takes the screen\'s top: ' + JSON.stringify(held));
   assert.ok(stage.height >= 0.4 * 390, 'held sideways the stage takes less than two fifths of the screen: ' + stage.height + ' px');
-  assert.deepEqual([free.held, free.overflow !== 'hidden'], [false, true], 'another tab still holds the page');
+  // the tab lets go of the page, which the console itself holds still on a phone on every tab
+  // (site branch claude/project-thread-6cxgh2), so nothing scrolls it either way
+  assert.equal(free.held, false, 'another tab still holds the page');
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -4333,7 +4344,9 @@ const barOver = (page) => page.evaluate(() => {
   return {
     shown: document.body.classList.contains('console-bar-shown'), nav: r(nav),
     seen: !!nav && nav.getClientRects().length > 0 && getComputedStyle(nav).visibility !== 'hidden' && nav.getBoundingClientRect().bottom > 0,
-    handle: r(document.querySelector('.console__barhandle')), rail: r(document.querySelector('.console__rail')), tab: r(document.getElementById('tab-dependencies')),
+    // on a phone the tab fills the screen under its back bar, the rail being the home screen's
+    // (site branch claude/project-thread-6cxgh2), so the bar stands where the rail stood
+    handle: r(document.querySelector('.console__barhandle')), rail: r(document.querySelector('.console__phonebar')), back: r(document.getElementById('cp-back')), tab: r(document.getElementById('tab-dependencies')),
     y: Math.round(scrollY), picture: svg ? svg.style.transform : null, pressed: pressed ? pressed.getAttribute('data-focus') : null,
   };
 });
@@ -4365,8 +4378,9 @@ await check('BV: on a phone held either way the site\'s bar, hidden above the he
     assert.equal(rest.shown, false, what + ': the bar shows over the held tab before anyone asks for it');
     assert.ok(rest.nav && rest.nav.b <= 0, what + ': the bar takes the screen\'s top: ' + JSON.stringify(rest.nav));
     assert.ok(rest.handle && rest.handle.t === 0 && Math.abs((rest.handle.l + rest.handle.r) / 2 - width / 2) <= 1, what + ': no handle at the top centre: ' + JSON.stringify(rest.handle));
-    assert.ok(rest.rail && rest.rail.t === 0, what + ': the held tab does not bring the rail to the window\'s top: ' + JSON.stringify(rest.rail));
-    assert.ok(under.length > 0 && under.every((t) => t.endsWith('*')), what + ': the handle lies over a button of the rail other than the shown tab\'s: ' + JSON.stringify(under));
+    assert.ok(rest.rail && rest.rail.t >= 0 && rest.rail.t < 48, what + ': the tab\'s back bar is not at the screen\'s top: ' + JSON.stringify(rest.rail));
+    assert.ok(under.every((t) => t.endsWith('*')), what + ': the handle lies over a button of the rail other than the shown tab\'s: ' + JSON.stringify(under));
+    assert.ok(rest.back && (rest.back.r <= rest.handle.l || rest.back.t >= rest.handle.b), what + ': the handle lies over the back button: ' + JSON.stringify([rest.back, rest.handle]));
     const same = (b, why) => assert.deepEqual([b.y, b.tab, b.rail, b.picture, b.pressed], [rest.y, rest.tab, rest.rail, rest.picture, rest.pressed], what + ': ' + why + ' moved the page, the tab, its chart or its tiles');
     const mid = { x: (rest.handle.l + rest.handle.r) / 2, y: (rest.handle.t + rest.handle.b) / 2 };
     await page.touchscreen.tap(mid.x, mid.y);
@@ -4401,7 +4415,7 @@ await check('BV: on a phone held either way the site\'s bar, hidden above the he
     seen[what] = { nav: rest.nav, handle: rest.handle, under, tapped: tapped.nav, swiped: swiped.nav, turned: [turned.shown, turned.rail, turned.tab], after: [after.shown, after.rail, after.tab] };
     assert.equal(turned.shown, true, what + ': the bar went before the phone was turned back, so the turn says nothing');
     for (const [when, b] of [['turned while the bar showed', turned], ['once the bar went', after]]) {
-      assert.equal(b.rail.t, 0, what + ', ' + when + ': the rail is not at the window\'s top: ' + JSON.stringify(b.rail));
+      assert.deepEqual(b.rail, rest.rail, what + ', ' + when + ': the back bar is not where it was: ' + JSON.stringify(b.rail));
       assert.deepEqual(b.tab, rest.tab, what + ', ' + when + ': the tab did not take back its whole height');
     }
     assert.deepEqual(errors, [], what);
@@ -4418,7 +4432,7 @@ const footTab = (page) => page.evaluate(() => {
   const tab = document.getElementById('tab-dependencies'), sec = Array.from(document.querySelectorAll('#cp-graph .graph__section')).find((s) => !s.hidden);
   return {
     foot: r(document.querySelector('.console__status')), given: getComputedStyle(document.getElementById('console')).getPropertyValue('--foot-h').trim(),
-    msg: r(document.getElementById('msg')), clear: r(document.getElementById('cp-msg-close')),
+    msg: r(document.getElementById('msg')), clear: r(document.getElementById('cp-msg-close')), deckStage: r(document.querySelector('.console__stage')),
     tab: tab.hidden ? null : r(tab), own: tab.hidden ? 0 : tab.clientHeight, stage: sec && !tab.hidden ? r(sec.querySelector('.control__chart')) : null, y: Math.round(scrollY),
   };
 });
@@ -4444,7 +4458,9 @@ await check('BW: a foot the person sized leaves the Dependencies tab its least w
     await toTab(page, 'board');
     await sleep(400);
     const board = await footTab(page);
-    assert.equal(board.foot.h, 844 - 180, what + ': another tab did not give the foot back the size it was given, as far as the window holds it');
+    // as far as the window holds it: the stage keeps its least of 180 (on a phone the console's own
+    // top and the tab's back bar take their share of the window too, site branch claude/project-thread-6cxgh2)
+    assert.ok(board.foot.h > 300 && Math.abs(board.deckStage.h - 180) <= 2, what + ': another tab did not give the foot back the size it was given, as far as the window holds it: ' + JSON.stringify([board.foot, board.deckStage]));
     await toTab(page, 'dependencies');
     await sleep(600);
     const back = await footTab(page);
@@ -4462,8 +4478,9 @@ await check('BW: a foot the person sized leaves the Dependencies tab its least w
   }
   {
     // a short screen, a window 900 x 500 that takes the phone's layout, the foot kept 400 px tall:
-    // held to what leaves the tab its least, and laid out as on every other tab, the message over
-    // Clear and the buttons, filling the row they leave it
+    // held to what leaves the tab its least, and laid out as a tab's foot is on a short screen, the
+    // message beside Clear in one row, filling the foot's height (site branch
+    // claude/project-thread-6cxgh2, the phone's home screen of 2026-10-20)
     const what = '900 x 500, a foot kept 400 px tall';
     const { context, page, errors } = await open(fixtureRoutes(fixture()), { viewport: { width: 900, height: 500 }, storage: { symphony_panel_layout: JSON.stringify({ foot: 400 }) } });
     await signIn(page);
@@ -4474,7 +4491,7 @@ await check('BW: a foot the person sized leaves the Dependencies tab its least w
     seen[what] = f;
     assertAboveFoot(f, what, 0);
     assert.ok(f.foot.h > 100, what + ': the foot is not sized, so its rows say nothing: ' + JSON.stringify(f.foot));
-    assert.ok(f.msg.b <= f.clear.t && f.clear.t - f.msg.b <= 12, what + ': the message does not fill the row over Clear and the buttons: ' + JSON.stringify([f.msg, f.clear]));
+    assert.ok(f.clear.t >= f.msg.t - 0.5 && f.clear.b <= f.msg.b + 0.5 && f.msg.h > f.foot.h - 40, what + ': the message does not stand beside Clear filling the foot: ' + JSON.stringify([f.foot, f.msg, f.clear]));
     await everyChart(page, what);
     assert.deepEqual(errors, [], what);
     await context.close();

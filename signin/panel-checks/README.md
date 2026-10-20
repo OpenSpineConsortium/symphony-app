@@ -855,6 +855,18 @@ ghu_TEST or github_pat_X.
   but not the words, and each of its three cases of GitHub's return catches it alone), and the
   site shipping the switch on (K29); k33, whose line in storeSignin that fix rewrote, was aimed
   at it as it now reads and caught again (K18).
+  The phone's home screen (site branch claude/project-thread-6cxgh2, 2026-10-20, the owner's
+  square tab buttons) fixes the console over the whole screen wherever the phone layout applies,
+  a window up to 900 px wide or up to 520 px tall, so no layout lets the page scroll any more.
+  Against it, at the same commit as the suites' rewrite, 18 mutants survive as equivalent, since
+  what they change is reached by no layout now or changes nothing a person can see: the
+  Dependencies tab's fit to a scrolling phone page (g139, g156, g157, g183, g185, g187 in the
+  script; s11, s19, s23, s24, s25 in its stylesheet), Refresh's hold of a scrolling page (p04,
+  p20), the foot's grip followed by a scroll of the page (p76, p83), and the bar and the deck on
+  a page that scrolls (c04, c20, c26). Their files stay, so a layout that lets the page scroll
+  again finds them; the code they reach may go with its owner's next change. Of the Folders
+  tab's, f43 survives on site master at 25159ab as here, and f129 survived one run here and was
+  caught on two runs after it, a timing of the Folders checks' own.
 - `e2e2/css-mutants/`: 28 lists of pairs for the stylesheet control.css, each with its `.json.only`,
   for the part of the foot and the bar that is the stylesheet's, which no mutant of the script
   reaches; `run-mutants.sh` serves a path under css-mutants/ in place of control.css through

@@ -462,7 +462,7 @@ const overflow = (page) => page.evaluate(() => {
 });
 const settle = () => sleep(450);
 
-await check('XP11: at 1440 x 900, on a phone upright and on one sideways, the level is drawn whole with no box that scrolls, the tab taking most of the panel on a computer and the whole screen on a phone', async () => {
+await check('XP11: at 1440 x 900, on a phone upright and on one sideways, the level is drawn whole with no box that scrolls, the tab taking most of the panel on a computer and the screen under the back bar on a phone', async () => {
   for (const [name, view] of [['wide', WIDE], ['phone', PHONE], ['sideways', SIDEWAYS]]) {
     const { context, page, errors } = await open(routes(), null, view);
     try {
@@ -481,8 +481,15 @@ await check('XP11: at 1440 x 900, on a phone upright and on one sideways, the le
         assert.equal(m.ask, 0, 'the Ask Claude bar did not fold');
         assert.ok(m.tab[2] - m.tab[0] > 0.9 * m.w && m.stage > 0.6 * m.h, 'the tab takes too little of the window: ' + JSON.stringify(m));
       } else {
-        assert.ok(Math.abs(m.tab[0]) <= 1 && Math.abs(m.tab[1]) <= 1 && Math.abs(m.tab[2] - m.w) <= 1 && Math.abs(m.tab[3] - m.h) <= 1, name + ': the tab does not take the whole screen: ' + JSON.stringify(m));
-        assert.ok(m.stage > 0.5 * m.h, name + ': the stage is small: ' + JSON.stringify(m));
+        // on a phone every tab fills the screen under the back bar (site branch
+        // claude/project-thread-6cxgh2, the owner's square tab buttons): the console covers the
+        // screen, the side column is not drawn and the tab takes the stage's whole width
+        const deck = await page.evaluate(() => { const r = document.getElementById('console').getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; });
+        assert.ok(Math.abs(deck[0]) <= 1 && Math.abs(deck[1]) <= 1 && Math.abs(deck[2] - m.w) <= 1 && Math.abs(deck[3] - m.h) <= 1, name + ': the console does not take the whole screen: ' + JSON.stringify(deck));
+        assert.ok(m.side === 0 && m.ask === 0 && m.tab[2] - m.tab[0] > 0.85 * m.w, name + ': the tab does not take the screen: ' + JSON.stringify(m));
+        // held sideways the back bar and the foot share the little height, so two fifths there, as
+        // the Dependencies tab keeps its stage (graph.test.mjs, BL)
+        assert.ok(m.stage > (name === 'sideways' ? 0.4 : 0.5) * m.h, name + ': the stage is small: ' + JSON.stringify(m));
         // the site bar's handle is over no control of the tab
         const under = await page.evaluate(() => {
           const h = document.querySelector('.console__barhandle');
@@ -536,9 +543,11 @@ await check('XP12: Panel, or a press on the folded side column or foot, brings t
   const p = await open(routes(), null, PHONE);
   try {
     await toExplore(p.page);
-    assert.equal(await p.page.$eval('#tab-explore', (n) => getComputedStyle(n).position), 'fixed');
+    // on a phone the tab already fills the screen under the back bar, folded or not, so it stays in
+    // the stage either way and Panel changes nothing there
+    assert.equal(await p.page.$eval('#tab-explore', (n) => getComputedStyle(n).position), 'static', 'the folded tab left the stage on a phone');
     await p.page.click('#ex-wide');
-    assert.equal(await p.page.$eval('#tab-explore', (n) => getComputedStyle(n).position), 'static', 'Panel did not give the phone its page back');
+    assert.equal(await p.page.$eval('#tab-explore', (n) => getComputedStyle(n).position), 'static', 'Panel moved the tab out of the stage on a phone');
     assert.deepEqual(await overflow(p.page), []);
     assert.deepEqual(p.errors, []);
   } finally { await p.context.close(); }
@@ -711,7 +720,7 @@ await check('XP18: a log follows its box when Panel brings the side column back,
   } finally { await context.close(); }
 });
 
-await check('XP19: signed out, a phone at the address #explore scrolls as the sign-in page always does, and nothing of the fold applies', async () => {
+await check('XP19: signed out, a phone at the address #explore scrolls the sign-in card as it always does, and nothing of the fold applies', async () => {
   const context = await browser.newContext({ viewport: PHONE, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
   try {
     const page = await context.newPage();
@@ -720,9 +729,10 @@ await check('XP19: signed out, a phone at the address #explore scrolls as the si
     await page.route('**/assets/js/symphony-panel.js*', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: script }));
     await page.goto(BASE + '/symphony/control/#explore');
     await sleep(500);
-    const m = await page.evaluate(() => ({ body: getComputedStyle(document.body).overflow, fixed: getComputedStyle(document.getElementById('tab-explore')).position, gate: !document.getElementById('cp-app').classList.contains('hidden') }));
+    // the console is fixed over a phone's screen, so the sign-in card scrolls inside itself
+    const m = await page.evaluate(() => ({ body: getComputedStyle(document.getElementById('cp-gate')).overflowY, fixed: getComputedStyle(document.getElementById('tab-explore')).position, gate: !document.getElementById('cp-app').classList.contains('hidden') }));
     assert.equal(m.gate, false);
-    assert.notEqual(m.body, 'hidden', 'the sign-in page cannot scroll');
+    assert.ok(m.body === 'auto' || m.body === 'scroll', 'the sign-in card cannot scroll');
     assert.notEqual(m.fixed, 'fixed');
     assert.deepEqual(errors, []);
   } finally { await context.close(); }

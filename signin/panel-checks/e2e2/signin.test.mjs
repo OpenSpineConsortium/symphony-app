@@ -2333,8 +2333,14 @@ function phoneRoutes() {
 }
 const PHONE_TABS = ['command', 'board', 'tasks', 'dependencies', 'explore', 'pulls', 'runs', 'workers', 'agents', 'tokens', 'leaders', 'share', 'folders', 'about'];
 const scrollYOf = (p) => p.evaluate(() => Math.round(window.scrollY));
+// on a phone a tab is opened from the home screen's square buttons, the back button first where a
+// tab is open (site branch claude/project-thread-6cxgh2, the owner's ask of 2026-10-20)
+async function phoneTab(page, tab) {
+  if (await page.locator('#cp-back').isVisible()) await page.click('#cp-back');
+  await page.click('.console__rail [data-tab="' + tab + '"]');
+}
 
-await check('P6: on a phone every tab fits the window, the saved text size and its buttons are left to the desktop, the status line sticks to the window\'s foot, and Refresh holds the page where it was', async () => {
+await check('P6: on a phone every tab fits the window, the saved text size and its buttons are left to the desktop, the status line rests on the window\'s foot, and Refresh leaves the page where it was, which never scrolls', async () => {
   const routes = phoneRoutes();
   const storage = { local: Object.assign({ symphony_panel_layout: JSON.stringify({ zoom: 1.5 }) }, asTester.local) };
   const { context, page, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo', storage, viewport: { width: 390, height: 844 }, mobile: true });
@@ -2342,10 +2348,7 @@ await check('P6: on a phone every tab fits the window, the saved text size and i
   await sleep(500);
   const wide = [];
   for (const tab of PHONE_TABS) {
-    await page.click('.console__rail [data-tab="' + tab + '"]');
-    // Explore takes the whole phone screen; Panel brings the console back, as a person presses it
-    // to reach the rail again (explore.test.mjs XP11 and XP12 hold the screen it takes)
-    if (tab === 'explore') await page.click('#ex-wide');
+    await phoneTab(page, tab);
     await sleep(350);
     const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
     if (m.sw > m.iw) wide.push(tab + ':' + m.sw + '/' + m.iw);
@@ -2356,14 +2359,15 @@ await check('P6: on a phone every tab fits the window, the saved text size and i
     const down = document.getElementById('cp-zoom-down');
     return { clip: getComputedStyle(c).overflowX, zoom: String(zoom), zoomButtons: !!(down && down.checkVisibility()) };
   });
-  await page.click('.console__rail [data-tab="tasks"]');
+  await phoneTab(page, 'tasks');
   await sleep(300);
-  await page.evaluate(() => window.scrollTo(0, 1e6));
+  // the tab scrolls inside the screen, and the page under it not at all
+  await page.evaluate(() => { window.scrollTo(0, 1e6); document.getElementById('tab-tasks').scrollTop = 1e6; });
   await sleep(300);
   const status = await page.evaluate(() => { const st = document.querySelector('.console__status'); const r = st.getBoundingClientRect(); return { pos: getComputedStyle(st).position, top: Math.round(r.top), bottom: Math.round(r.bottom), ih: window.innerHeight, scrollY: Math.round(window.scrollY) }; });
   // the phone's own rules win over the desktop's: a run's card puts its name and its time on the
   // first line and the rest under them, the tiles stand three to a row, and the foot's buttons spread
-  await page.click('.console__rail [data-tab="runs"]');
+  await phoneTab(page, 'runs');
   await sleep(300);
   const card = await page.evaluate(() => {
     const tr = document.querySelector('#cp-runs tbody tr');
@@ -2371,12 +2375,12 @@ await check('P6: on a phone every tab fits the window, the saved text size and i
     const cs = getComputedStyle(name);
     return { grow: cs.flexGrow, max: cs.maxWidth, nameTop: Math.round(name.getBoundingClientRect().top), whenTop: Math.round(when.getBoundingClientRect().top), eventTop: Math.round(event.getBoundingClientRect().top), rowWidth: Math.round(tr.getBoundingClientRect().width), tableScroll: tr.parentElement.scrollWidth };
   });
-  await page.click('.console__rail [data-tab="tokens"]');
+  await phoneTab(page, 'tokens');
   await sleep(300);
   const tiles = await page.evaluate(() => ({ columns: getComputedStyle(document.getElementById('tk-tiles')).gridTemplateColumns.split(' ').length, width: document.getElementById('tk-tiles').clientWidth, me: getComputedStyle(document.querySelector('.console__me')).justifyContent }));
   // the Command tab's readouts and buttons several to a row, as the token tiles are (the owner,
   // 2026-10-19: "should scale to the screen size so multiple fit on the page")
-  await page.click('.console__rail [data-tab="command"]');
+  await phoneTab(page, 'command');
   await sleep(300);
   const command = await page.evaluate(() => ({ readouts: getComputedStyle(document.querySelector('.deck__readouts')).gridTemplateColumns.split(' ').length, launch: getComputedStyle(document.querySelector('.deck__launch')).gridTemplateColumns.split(' ').length }));
   console.log('      wider than the window:', wide.length ? wide.join(' ') : 'no tab', '| deck:', JSON.stringify(deck), '| status:', JSON.stringify(status), '| run card:', JSON.stringify(card), '| tiles:', JSON.stringify(tiles), '| command:', JSON.stringify(command));
@@ -2389,13 +2393,14 @@ await check('P6: on a phone every tab fits the window, the saved text size and i
   assert.deepEqual(command, { readouts: 3, launch: 2 }, 'the Command tab\'s readouts and buttons do not stand three and two to a row');
   assert.ok(tiles.width > 300, 'the tiles fill the row');
   assert.equal(tiles.me, 'space-between');
-  assert.equal(deck.clip, 'clip');
+  // the deck clips what is wider than it; on a phone it is fixed over the screen and hides it
+  assert.ok(['clip', 'hidden'].includes(deck.clip), 'the deck lets a wide tab spill sideways: ' + deck.clip);
   assert.notEqual(deck.zoom, '1.5');
   assert.equal(deck.zoomButtons, false);
-  assert.equal(status.pos, 'sticky');
-  assert.ok(status.scrollY > 300 && status.top > 0 && status.bottom <= status.ih + 1, 'the status line does not stick to the foot');
-  // Refresh on the tab whose chart is drawn afresh, the page scrolled into the tab
-  await page.click('.console__rail [data-tab="dependencies"]');
+  assert.equal(status.pos, 'relative');
+  assert.ok(status.scrollY === 0 && Math.abs(status.bottom - status.ih) <= 1, 'the status line does not rest on the foot, or the page scrolled: ' + JSON.stringify(status));
+  // Refresh on the tab whose chart is drawn afresh, the page asked to scroll, which it cannot
+  await phoneTab(page, 'dependencies');
   await sleep(600);
   await page.evaluate(() => window.scrollTo(0, 1e6));
   let before = 0;
@@ -2407,8 +2412,9 @@ await check('P6: on a phone every tab fits the window, the saved text size and i
   await sleep(400);
   const released = await page.evaluate(() => document.querySelector('.console__stage').style.minHeight);
   console.log('      refresh: before', before, 'after', seen.join(','), '| stage held:', JSON.stringify(held), '| released:', JSON.stringify(released));
-  assert.ok(before > 300, 'the page did not scroll into the tab');
-  assert.match(held, /^\d+(\.\d+)?px$/);
+  assert.equal(before, 0, 'the page scrolled on a phone');
+  // a page that cannot scroll has no place to hold, so the stage is not held
+  assert.equal(held, '');
   assert.equal(released, '');
   assert.ok(seen.every((v) => v === before), 'the page jumped through Refresh');
   assert.deepEqual(errors, []);
@@ -2570,7 +2576,7 @@ async function restingY(page) {
   return last;
 }
 
-await check('P12: on a phone, Refresh on the Dependencies tab keeps the tab at the height of the screen it was given and the chart\'s box held until the chart is drawn again, the page never moving, and a read that fails lets the box go', async () => {
+await check('P12: on a phone, Refresh on the Dependencies tab keeps the tab at the height of the screen it was given and the chart\'s box held until the chart is drawn again, the page never moving (a phone\'s never scrolls), and a read that fails lets the box go', async () => {
   const { routes, phase } = graphRoutes();
   const { context, page, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo#dependencies', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
   await loaded(page);
@@ -2598,11 +2604,12 @@ await check('P12: on a phone, Refresh on the Dependencies tab keeps the tab at t
   const heldAt = [...new Set(seen.filter((s) => s.kids === 0 && s.min).map((s) => s.min))];
   const tabs = [...new Set(seen.map((s) => s.tab + ' ' + s.tabH))];
   console.log('      before', before, '| the box', at.box, 'held at', JSON.stringify(heldAt), '| the tab', at.tab, 'through Refresh', JSON.stringify(tabs), '| samples', seen.length, '| empty and unheld:', JSON.stringify(unheld.slice(0, 3)), '| moved:', JSON.stringify(moved.slice(0, 3)));
-  assert.ok(before > 300, 'the page did not scroll into the tab');
+  assert.equal(before, 0, 'the page scrolled on a phone, which it never does');
   assert.ok(seen.some((s) => s.kids === 0), 'the box was never emptied, so nothing was measured');
   assert.deepEqual(unheld, [], 'the empty box lost its hold before the chart was drawn');
   assert.ok(heldAt.length > 0 && heldAt.every((h) => parseFloat(h) >= at.box - 0.5), 'the empty box was held lower than it stood: ' + JSON.stringify([at.box, heldAt]));
-  assert.match(at.tab, /^[0-9]+px$/, 'the tab was not given its height on a phone');
+  // the tab fills the stage of a console fixed over the screen, by the layout and not by a height
+  // of its own, and keeps that height through Refresh
   assert.equal(tabs.length, 1, 'the tab\'s height changed through Refresh');
   assert.equal(tabs[0].split(' ')[0], at.tab);
   assert.deepEqual(moved, [], 'the page moved through Refresh');
@@ -2621,7 +2628,9 @@ await check('P12: on a phone, Refresh on the Dependencies tab keeps the tab at t
   await context.close();
 });
 
-await check('P13: on a phone, Refresh pressed twice keeps the stage held until the second read is done', async () => {
+// on a phone the page never scrolls (the owner's home screen of 2026-10-20), so Refresh has no place
+// on the page to keep and holds no stage; a computer's page never scrolls either
+await check('P13: on a phone, Refresh pressed twice holds no stage, since the page never scrolls, and the page stays at its top', async () => {
   const { routes, phase } = graphRoutes();
   const { context, page, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo#dependencies', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
   await loaded(page);
@@ -2636,10 +2645,12 @@ await check('P13: on a phone, Refresh pressed twice keeps the stage held until t
   await graphDrawn(page);
   await sleep(400);
   const released = await page.evaluate(() => document.querySelector('.console__stage').style.minHeight);
-  console.log('      held at the presses:', JSON.stringify(twice), '| while the issues were on their way:', samples.join(' '), '| at the end:', JSON.stringify(released));
-  assert.match(twice, /^\d+(\.\d+)?px$/);
-  assert.ok(samples.every((v) => v !== '(none)'), 'the first refresh let the second one\'s hold go');
+  const y = await scrollYOf(page);
+  console.log('      held at the presses:', JSON.stringify(twice), '| while the issues were on their way:', samples.join(' '), '| at the end:', JSON.stringify(released), '| the page at', y);
+  assert.equal(twice, '');
+  assert.ok(samples.every((v) => v === '(none)'), 'a refresh held the stage of a page that cannot scroll');
   assert.equal(released, '');
+  assert.equal(y, 0, 'the page scrolled on a phone');
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -3207,7 +3218,7 @@ await check('P25: the message foot has a grip of its own along its top, a separa
 await check('P26: a finger drags the foot\'s grip on a phone, upright and sideways, sizing the foot and never scrolling the page, the grip a thumb\'s to take with its bar in view and over none of the message\'s words or the foot\'s buttons', async () => {
   for (const [viewport, dy] of [[{ width: 390, height: 844 }, -150], [{ width: 844, height: 390 }, -60]]) {
     const where = viewport.width + ' x ' + viewport.height;
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport, mobile: true });
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport, mobile: true });
     await loaded(page);
     await sleep(400);
     const grip = await page.evaluate(() => {
@@ -3247,7 +3258,7 @@ await check('P26: a finger drags the foot\'s grip on a phone, upright and sidewa
 });
 
 await check('P27: the arrow keys size the foot from its focused grip, up to grow and down to shrink, and a double-click puts it back as tall as its message', async () => {
-  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 800 } });
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport: { width: 1280, height: 800 } });
   await loaded(page);
   await sleep(300);
   const rest = await footOf(page);
@@ -3276,7 +3287,7 @@ await check('P27: the arrow keys size the foot from its focused grip, up to grow
 await check('P28: the foot\'s size is kept across a reload and read back only when it is a number in its bounds, a kept size the window cannot hold is held to it, and a window made shorter takes the foot down with it and back', async () => {
   const facts = async (layout, viewport) => {
     const storage = { local: Object.assign({}, asTester.local, layout === undefined ? {} : { symphony_panel_layout: typeof layout === 'string' ? layout : JSON.stringify(layout) }) };
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage, viewport: viewport || { width: 1280, height: 800 } });
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage, viewport: viewport || { width: 1280, height: 800 } });
     await loaded(page);
     await sleep(300);
     const f = await footOf(page);
@@ -3338,7 +3349,7 @@ await check('P29: the foot is held between one line of message with its buttons 
   const desks = [[{ width: 1280, height: 800 }, 0], [{ width: 1440, height: 900 }, 0], [{ width: 1920, height: 1080 }, 0], [{ width: 1280, height: 800 }, -3], [{ width: 1280, height: 800 }, 5]];
   for (const [viewport, steps] of desks) {
     const where = viewport.width + ' x ' + viewport.height + (steps ? ' at ' + (steps < 0 ? 'A-' : 'A+') + ' x' + Math.abs(steps) : '');
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport });
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport });
     await loaded(page);
     for (let i = 0; i < Math.abs(steps); i++) await page.click(steps < 0 ? '#cp-zoom-down' : '#cp-zoom-up');
     await sayOneLine(page);
@@ -3367,7 +3378,7 @@ await check('P29: the foot is held between one line of message with its buttons 
   // the Ask Claude bar grown while the foot is at its tallest, as it does while an answer is waited
   // for: the foot gives way so the stage keeps its least, and takes its size back once the bar shrinks
   {
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 800 } });
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport: { width: 1280, height: 800 } });
     await loaded(page);
     await mouseDragFoot(page, -3000);
     const top = await footOf(page);
@@ -3386,7 +3397,7 @@ await check('P29: the foot is held between one line of message with its buttons 
   }
   for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
     const where = 'a phone at ' + viewport.width + ' x ' + viewport.height;
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport, mobile: true });
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport, mobile: true });
     await loaded(page);
     await sayOneLine(page);
     await sleep(400);
@@ -3396,7 +3407,8 @@ await check('P29: the foot is held between one line of message with its buttons 
     const low = await footOf(page);
     const line = await page.evaluate(footLineFacts);
     console.log('      ' + where + ': up', top.foot.top, 'to', top.foot.bottom, '| down', low.foot.height, JSON.stringify(line.parts));
-    assert.ok(near(top.foot.top, 180, 1.5), where + ': dragged up, the foot leaves ' + top.foot.top + ' px of the window above it, not 180');
+    // the console fills the screen, as a computer's does, so the stage keeps its least of 180 px
+    assert.ok(top.stage.height >= 179.5 && top.stage.height <= 182, where + ': dragged up, the foot left the stage ' + top.stage.height + ' px');
     assert.ok(line.clear, where + ': Clear does not show beside the message');
     for (const part of line.parts) assert.ok(part.inside && part.hit, where + ': dragged down, ' + part.name + ' is cut off or covered (' + JSON.stringify(part) + ')');
     for (const [name, f] of [['up', top], ['down', low]]) {
@@ -3408,19 +3420,19 @@ await check('P29: the foot is held between one line of message with its buttons 
   }
   // the phone's layout with a text size a computer saved, which it does not apply: a laptop's
   // window snapped to half the screen, by the mouse, and a phone, by a finger, each dragged to the
-  // top still leave 180 px of the window above the foot, whatever the saved size
+  // top still leave the stage its least of 180 px, whatever the saved size
   for (const [viewport, mobile] of [[{ width: 720, height: 760 }, false], [{ width: 390, height: 844 }, true]]) {
     for (const zoom of [0.7, 1.5]) {
       const where = (mobile ? 'a phone at ' : 'a narrow window at ') + viewport.width + ' x ' + viewport.height + ' with text at ' + zoom + ' saved';
       const storage = { local: Object.assign({}, asTester.local, { symphony_panel_layout: JSON.stringify({ zoom }) }) };
-      const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage, viewport, mobile });
+      const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage, viewport, mobile });
       await loaded(page);
       await sayOneLine(page);
       await sleep(400);
       if (mobile) await fingerDragFoot(page, -3000); else await mouseDragFoot(page, -3000);
       const top = await footOf(page);
-      console.log('      ' + where + ': up', top.foot.top, 'to', top.foot.bottom, 'scrolled', top.sy);
-      assert.ok(near(top.foot.top, 180, 1.5), where + ': dragged up, the foot runs from ' + top.foot.top + ' to ' + top.foot.bottom + ', not from 180');
+      console.log('      ' + where + ': up', top.foot.top, 'to', top.foot.bottom, 'stage', top.stage.height, 'scrolled', top.sy);
+      assert.ok(top.stage.height >= 179.5 && top.stage.height <= 182, where + ': dragged up, the foot left the stage ' + top.stage.height + ' px');
       assertPhoneFits(top, where);
       assert.equal(top.sy, 0, where + ': the drag scrolled the page');
       assert.deepEqual(errors, []);
@@ -3434,7 +3446,7 @@ await check('P30: the foot\'s grip follows the pointer under every text size, an
   for (const [viewport, zoom, mobile] of cases) {
     const where = (mobile ? 'a phone with ' : '') + 'text at ' + zoom;
     const storage = { local: Object.assign({}, asTester.local, zoom === 1 ? {} : { symphony_panel_layout: JSON.stringify({ zoom }) }) };
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage, viewport, mobile });
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage, viewport, mobile });
     await loaded(page);
     await sleep(400);
     const before = await footOf(page);
@@ -3478,7 +3490,7 @@ await check('P31: a long task box in a foot sized small keeps the foot its size,
   for (const [viewport, mobile, layout] of cases) {
     const where = viewport.width + ' x ' + viewport.height + (layout ? ', the foot sized ' + layout.foot : ', the foot unsized');
     const storage = { local: Object.assign({}, asTester.local, layout ? { symphony_panel_layout: JSON.stringify(layout) } : {}) };
-    const { context, page, errors } = await open({ script: real, routes: longRunRoutes(), path: '/symphony/control/?repo=acme/demo', storage, viewport, mobile });
+    const { context, page, errors } = await open({ script: real, routes: longRunRoutes(), path: '/symphony/control/?repo=acme/demo#command', storage, viewport, mobile });
     await loaded(page);
     await sleep(300);
     const before = await footOf(page);
@@ -3558,7 +3570,7 @@ await check('P32: on the control page the site\'s bar is hidden from the start, 
   const cases = [[{ width: 1280, height: 800 }, false, 0], [{ width: 390, height: 844 }, true, 0], [{ width: 390, height: 844 }, true, 47]];
   for (const [viewport, mobile, inset] of cases) {
     const where = viewport.width + ' x ' + viewport.height + (inset ? ' with a top inset of ' + inset : '');
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport, mobile });
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport, mobile });
     if (inset) {
       const cdp = await context.newCDPSession(page);
       await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: inset, bottom: 0, left: 0, right: 0 } });
@@ -3594,7 +3606,7 @@ await check('P32: on the control page the site\'s bar is hidden from the start, 
 });
 
 await check('P33: the pointer at the window\'s top edge brings the bar back over the deck, which does not move; the bar stays while the pointer is over it, though the focus leaves it, or over a section strip it dropped, goes a moment after the pointer leaves and not at once, comes for a pointer leaving the window across the top, and not for one passing just under the edge', async () => {
-  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 800 } });
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport: { width: 1280, height: 800 } });
   await loaded(page);
   await sleep(500);
   await page.mouse.move(640, 400);
@@ -3675,7 +3687,7 @@ await check('P33: the pointer at the window\'s top edge brings the bar back over
 });
 
 await check('P34: keyboard focus brings the bar: Tab from the page\'s start reaches it and shows it, focus leaving it lets it go after its wait, it stays while the focus moves in it, and Escape sends it away at once with the focus', async () => {
-  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 800 } });
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport: { width: 1280, height: 800 } });
   await loaded(page);
   await sleep(500);
   // the pointer rests on the deck, so only the focus holds the bar: one resting where the bar slides
@@ -3714,7 +3726,7 @@ await check('P34: keyboard focus brings the bar: Tab from the page\'s start reac
 });
 
 await check('P35: on a phone the handle at the top centre shows the bar when tapped or swiped down, a tap outside sends it away at once, a short wait does too, a touch in the bar starts the wait again, and its open menu holds it and closes with it', async () => {
-  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
   await loaded(page);
   await sleep(700);
   const rest = await barOf(page);
@@ -3807,15 +3819,16 @@ await check('P35: on a phone the handle at the top centre shows the bar when tap
   console.log('      the menu opened and closed by its button, 5.5 s later:', tapped.shown, tapped.menu, 'focus', tapped.focus);
   assert.equal(tapped.menu, false, 'the second tap on the menu\'s button did not close the menu');
   assert.equal(tapped.shown, false, 'the focus a tap left on the menu\'s button held the bar past its wait');
-  // a swipe down on the handle with the page scrolled shows the bar and never scrolls the page
+  // a swipe down on the handle shows the bar and never scrolls the page, which on a phone is asked
+  // to scroll and cannot
   await page.evaluate(() => window.scrollTo({ top: 300, behavior: 'instant' }));
   await sleep(300);
   const scrolled = await scrollYOf(page);
   await fingerDrag(page, h.left + h.width / 2, h.top + 6, 60);
-  await barIn(page, 'a swipe down from the handle with the page scrolled did not show the bar');
+  await barIn(page, 'a swipe down from the handle did not show the bar');
   const swiped = await scrollYOf(page);
-  console.log('      a swipe on the handle with the page scrolled to', scrolled, ': scrolled to', swiped);
-  assert.ok(scrolled >= 290, 'the page did not scroll to 300 to swipe over it: ' + scrolled);
+  console.log('      a swipe on the handle with the page asked to scroll to 300, at', scrolled, ': scrolled to', swiped);
+  assert.equal(scrolled, 0, 'the page scrolled on a phone');
   assert.equal(swiped, scrolled, 'the swipe on the handle scrolled the page from ' + scrolled + ' to ' + swiped);
   assert.deepEqual(errors, []);
   await context.close();
@@ -3826,6 +3839,7 @@ await check('P36: full screen still hides the bar, its hot strip and its handle,
     const where = viewport.width + ' x ' + viewport.height;
     const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport, mobile });
     await loaded(page);
+    // on a phone Full screen is on the home screen, with the repository's name
     await sleep(400);
     await page.click('#cp-full');
     await page.waitForFunction(() => document.body.classList.contains('console-full'), null, { timeout: 3000 });
@@ -3851,7 +3865,7 @@ await check('P36: full screen still hides the bar, its hot strip and its handle,
 
 await check('P37: where less motion is asked the bar shows and goes at once, with no slide, and otherwise it slides', async () => {
   for (const motion of ['reduce', 'no-preference']) {
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 800 } });
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport: { width: 1280, height: 800 } });
     await page.emulateMedia({ reducedMotion: motion });
     await loaded(page);
     await sleep(400);
@@ -3871,7 +3885,7 @@ await check('P37: where less motion is asked the bar shows and goes at once, wit
     await context.close();
   }
   // a phone, whose section strip rides with the bar
-  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await loaded(page);
   const slides = await page.evaluate(() => [getComputedStyle(document.getElementById('nav')).transitionDuration, getComputedStyle(document.getElementById('flyouts')).transitionDuration]);
@@ -3930,7 +3944,7 @@ await check('P39: the foot\'s grip lies in the gap above the foot and the Ask Cl
       const layout = Object.assign({}, zoom === 1 ? {} : { zoom }, foot ? { foot } : {});
       const where = 'text at ' + zoom + (foot ? ', the foot sized ' + foot : '');
       const storage = { local: Object.assign({}, asTester.local, Object.keys(layout).length ? { symphony_panel_layout: JSON.stringify(layout) } : {}) };
-      const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage, viewport: { width: 1440, height: 900 } });
+      const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage, viewport: { width: 1440, height: 900 } });
       await loaded(page);
       await sayOneLine(page);
       await sleep(300);
@@ -3976,7 +3990,7 @@ const frameRecorder = () => {
 await check('P40: on a fresh load, the panel\'s script slow to come, the bar is above the window from the first frame the page paints and never slides, and the deck starts where it stays and never moves, on a computer and on a phone', async () => {
   for (const [viewport, mobile] of [[{ width: 1280, height: 800 }, false], [{ width: 390, height: 844 }, true]]) {
     const where = viewport.width + ' x ' + viewport.height;
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport, mobile, noLoad: true });
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport, mobile, noLoad: true });
     await context.route('**/assets/js/symphony-panel.js*', async (route) => { await sleep(700); await route.fulfill({ status: 200, contentType: 'application/javascript', body: real }); });
     await context.addInitScript(frameRecorder);
     await page.goto(BASE + '/symphony/control/?repo=acme/demo');
@@ -3997,7 +4011,7 @@ await check('P40: on a fresh load, the panel\'s script slow to come, the bar is 
 });
 
 await check('P41: a drag that is no grip\'s, a text selection run up to the window\'s top or a press moved off a button to the edge, brings no bar while its button is held, nor does a pointer that leaves across the top just after moving with a button held, and the edge brings the bar as ever to a pointer with no button held', async () => {
-  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 800 } });
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport: { width: 1280, height: 800 } });
   await loaded(page);
   await page.click('.console__rail [data-tab="about"]');
   await sleep(400);
@@ -4052,7 +4066,7 @@ await check('P41: a drag that is no grip\'s, a text selection run up to the wind
 
 await check('P42: a grip pressed while the keyboard\'s focus is in the shown bar sends the bar away with the focus, so nothing of the hidden bar keeps it and Enter follows no link nobody sees, for the foot\'s grip and the side column\'s', async () => {
   for (const [sel, dx, dy] of [['[data-split="foot"]', 0, -60], ['[data-split="side"]', 30, 0]]) {
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 800 } });
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport: { width: 1280, height: 800 } });
     await loaded(page);
     await sleep(400);
     await page.mouse.move(640, 400);
@@ -4082,41 +4096,36 @@ await check('P42: a grip pressed while the keyboard\'s focus is in the shown bar
   }
 });
 
-await check('P43: where the page scrolls, a phone\'s, a narrow window\'s or a tablet\'s held upright, the foot rests on the window\'s bottom on every tab at the page\'s top, and its grip stays under the finger or the mouse that drags it, on a short tab and with the page scrolled past the deck\'s end', async () => {
+await check('P43: on a phone, a narrow window or a tablet held upright, whose console fills the screen and whose page never scrolls, the foot rests on the window\'s bottom on every tab, and its grip stays under the finger or the mouse that drags it, upright and sideways', async () => {
   {
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
     await loaded(page);
     await sleep(400);
     const off = [];
     for (const tab of PHONE_TABS) {
-      await page.click('.console__rail [data-tab="' + tab + '"]');
-      if (tab === 'explore') await page.click('#ex-wide');
-      await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+      await phoneTab(page, tab);
       await sleep(250);
       const f = await footOf(page);
       if (!near(f.foot.bottom, f.ih, 1)) off.push(tab + ' (the foot ends at ' + f.foot.bottom.toFixed(1) + ')');
     }
-    console.log('      390 x 844, tabs whose foot does not rest on the window\'s bottom at the page\'s top:', off.join(', ') || 'none');
-    assert.deepEqual(off, [], 'at the page\'s top the foot does not rest on the window\'s bottom on ' + off.join(', '));
+    console.log('      390 x 844, tabs whose foot does not rest on the window\'s bottom:', off.join(', ') || 'none');
+    assert.deepEqual(off, [], 'the foot does not rest on the window\'s bottom on ' + off.join(', '));
     assert.deepEqual(errors, []);
     await context.close();
   }
   const cases = [
-    ['a phone, the Board tab at the page\'s top', { width: 390, height: 844 }, true, 'board', false, -120],
-    ['a phone, the page scrolled past the deck\'s end', { width: 390, height: 844 }, true, 'command', true, -100],
-    ['a phone sideways, the page scrolled past the deck\'s end', { width: 844, height: 390 }, true, 'command', true, -60],
+    ['a phone, the Board tab', { width: 390, height: 844 }, true, 'board', false, -120],
+    ['a phone, the Command tab', { width: 390, height: 844 }, true, 'command', false, -100],
+    ['a phone sideways, the Command tab', { width: 844, height: 390 }, true, 'command', false, -60],
     ['a tablet upright, the Board tab', { width: 768, height: 1024 }, true, 'board', false, -150],
     ['a narrow window, the Board tab, by the mouse', { width: 800, height: 900 }, false, 'board', false, -100],
   ];
-  for (const [where, viewport, mobile, tab, end, dy] of cases) {
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport, mobile });
+  for (const [where, viewport, mobile, tab, , dy] of cases) {
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport, mobile });
     await loaded(page);
-    await page.click('.console__rail [data-tab="' + tab + '"]');
+    await phoneTab(page, tab);
     await sayOneLine(page);
     await sleep(400);
-    // past the deck's end: the deck ends a third of the window above its bottom, the breadcrumb and
-    // the footer under it, so the foot rests on the deck's end and not on the window's bottom
-    if (end) await page.evaluate(() => { const d = document.getElementById('console').getBoundingClientRect(); window.scrollTo({ top: window.scrollY + d.bottom - innerHeight * 2 / 3, behavior: 'instant' }); });
     await sleep(300);
     // the grip is read after every step of the drag as well as after it, since a grip that catches
     // the pointer up only once the drag is over, by a scroll that glides, is not under it meanwhile
@@ -4153,7 +4162,7 @@ await check('P43: where the page scrolls, a phone\'s, a narrow window\'s or a ta
     const up = await drag(dy);
     const down = await drag(-dy / 2);
     console.log('      ' + where + ': up ' + (-dy) + ': the grip moved ' + up.moved.toFixed(1) + ', the foot grew ' + up.grew.toFixed(1) + ', scrolled ' + up.from.sy + ' -> ' + up.to.sy + ', at most ' + up.lag.toFixed(1) + ' from the pointer on the way | down ' + (-dy / 2) + ': the grip moved ' + down.moved.toFixed(1) + ', the foot ' + down.grew.toFixed(1) + ', at most ' + down.lag.toFixed(1) + ' from the pointer');
-    if (end) assert.ok(up.from.foot.bottom < up.from.ih - 40, where + ': the foot rested on the window\'s bottom, so the case is not the one meant');
+    assert.ok(up.from.sy === 0 && up.to.sy === 0 && down.to.sy === 0, where + ': the page scrolled');
     assert.ok(near(up.moved, dy, 3), where + ': the grip moved ' + up.moved.toFixed(1) + ' under a pointer that moved ' + dy);
     assert.ok(near(up.grew, -dy, 3), where + ': the foot grew ' + up.grew.toFixed(1) + ' for ' + (-dy));
     assert.ok(near(down.moved, -dy / 2, 3), where + ': dragged back, the grip moved ' + down.moved.toFixed(1) + ' under a pointer that moved ' + (-dy / 2));
@@ -4165,10 +4174,10 @@ await check('P43: where the page scrolls, a phone\'s, a narrow window\'s or a ta
   }
 });
 
-await check('P44: on a phone a thumb that swipes up from the foot\'s top edge beside the grip\'s bar scrolls the page and leaves the foot its size, since only the grip\'s middle, about its bar, sizes the foot', async () => {
+await check('P44: on a phone a thumb that swipes up from the foot\'s top edge beside the grip\'s bar leaves the foot its size and the page, which never scrolls, at its top, since only the grip\'s middle, about its bar, sizes the foot', async () => {
   for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
     const where = viewport.width + ' x ' + viewport.height;
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport, mobile: true });
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport, mobile: true });
     await loaded(page);
     await sleep(400);
     const g = await page.evaluate(() => { const r = document.querySelector('[data-split="foot"]').getBoundingClientRect(); return { left: r.left, right: r.right, y: r.top + r.height / 2 }; });
@@ -4180,7 +4189,7 @@ await check('P44: on a phone a thumb that swipes up from the foot\'s top edge be
     const after = await footOf(page);
     console.log('      ' + where + ': the grip from', g.left, 'to', g.right, '| a thumb at', x, 'on', at, '| scrolled', before.sy, '->', after.sy, '| the foot', before.foot.height, '->', after.foot.height, 'kept', after.kept);
     assert.ok(!/console__split/.test(at), where + ': the foot\'s top edge at ' + x + ' is the grip\'s');
-    assert.ok(after.sy - before.sy > 60, where + ': the thumb\'s swipe scrolled the page ' + (after.sy - before.sy) + ' px');
+    assert.ok(before.sy === 0 && after.sy === 0, where + ': the thumb\'s swipe scrolled the page from ' + before.sy + ' to ' + after.sy);
     assert.ok(near(after.foot.height, before.foot.height, 0.5) && after.kept === null, where + ': the thumb\'s swipe sized the foot to ' + after.foot.height + ', kept ' + after.kept);
     assert.deepEqual(errors, []);
     await context.close();
@@ -4199,7 +4208,7 @@ const tabletWithMouse = () => {
 };
 
 await check('P45: on a touch-first screen with a mouse too, the mouse leaving the window across the top brings the bar, and the mouse resting on the bar keeps it, past a touch\'s wait too, as on a computer', async () => {
-  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1024, height: 1366 }, mobile: true, initScript: tabletWithMouse });
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport: { width: 1024, height: 1366 }, mobile: true, initScript: tabletWithMouse });
   await loaded(page);
   await sleep(400);
   const media = await page.evaluate(() => ({ hover: matchMedia('(hover: hover)').matches, any: matchMedia('(any-hover: hover)').matches }));
@@ -4242,7 +4251,7 @@ await check('P45: on a touch-first screen with a mouse too, the mouse leaving th
 });
 
 await check('P46: on a phone the handle\'s whole press area is the tab a person sees, in the site\'s colours, so a tap just under it presses what lies under it and shows no bar', async () => {
-  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
   await loaded(page);
   await sleep(500);
   const tab = await page.evaluate(() => {
@@ -4252,10 +4261,8 @@ await check('P46: on a phone the handle\'s whole press area is the tab a person 
   console.log('      handle', JSON.stringify(tab));
   assert.ok(near(tab.tab.left, 0, 0.5) && near(tab.tab.top, 0, 0.5) && near(tab.tab.width, tab.box.width, 0.5) && near(tab.tab.height, tab.box.height, 0.5), 'the tab a person sees is smaller than the handle\'s press area: ' + JSON.stringify(tab));
   assert.equal(tab.tab.bg, 'rgb(241, 238, 227)', 'the handle\'s tab is not drawn in the site\'s colours');
-  // the page scrolled so the Command tab's readouts pass under the handle, a tap just below the tab
-  // presses the readout there, which opens its tab
-  await page.evaluate(() => { const r = document.querySelector('.readout[data-jump="cp-given"]').getBoundingClientRect(); window.scrollTo({ top: window.scrollY + r.top - 4, behavior: 'instant' }); });
-  await sleep(300);
+  // under the handle on a phone lies the console's own top edge, above the back bar: a tap just
+  // below the handle's tab lands there and not on the handle
   await page.evaluate(() => { window.__pressed = []; document.addEventListener('click', (e) => window.__pressed.push(String(e.target.closest('button') ? e.target.closest('button').className : e.target.className)), true); });
   const below = { x: tab.box.left + tab.box.width / 2, y: tab.box.top + tab.box.height + 3 };
   const under = await page.evaluate(([x, y]) => { const n = document.elementFromPoint(x, y); const b = n && n.closest('button'); return b ? String(b.className) : n ? String(n.className || n.tagName) : 'nothing'; }, [below.x, below.y]);
@@ -4263,8 +4270,8 @@ await check('P46: on a phone the handle\'s whole press area is the tab a person 
   await sleep(400);
   const f = await barOf(page), pressed = await page.evaluate(() => window.__pressed);
   console.log('      a tap 3 px under the tab, on', under, ': pressed', JSON.stringify(pressed), 'bar', f.shown);
-  assert.equal(under, 'readout', 'no readout lies 3 px under the tab, so the case is not the one meant');
-  assert.deepEqual(pressed, ['readout'], 'a tap 3 px under the handle\'s tab pressed ' + JSON.stringify(pressed));
+  assert.ok(/(^| )console( |$)/.test(under), 'the console does not lie 3 px under the tab, so the case is not the one meant: ' + under);
+  assert.deepEqual(pressed, [under], 'a tap 3 px under the handle\'s tab pressed ' + JSON.stringify(pressed));
   assert.equal(f.shown, false, 'a tap just under the handle\'s tab showed the bar');
   assert.deepEqual(errors, []);
   await context.close();
@@ -4273,7 +4280,7 @@ await check('P46: on a phone the handle\'s whole press area is the tab a person 
 await check('P47: on a tablet, either way up, the foot\'s grip is a thumb\'s as on a phone, over none of the foot\'s buttons, its message\'s words or the empty foot\'s placeholder, which stands where a message\'s words do, and a finger drags it', async () => {
   for (const viewport of [{ width: 1024, height: 1366 }, { width: 1366, height: 1024 }]) {
     const where = 'a tablet at ' + viewport.width + ' x ' + viewport.height;
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport, mobile: true });
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport, mobile: true });
     await loaded(page);
     await sleep(400);
     await page.evaluate(() => { document.getElementById('msg').textContent = ''; });
@@ -4306,7 +4313,7 @@ await check('P47: on a tablet, either way up, the foot\'s grip is a thumb\'s as 
 });
 
 await check('P48: each grip says its part\'s size and the bounds it is held to, and says the new size as a drag or the arrow keys change it: the foot\'s, the side column\'s and a token\'s panel\'s, which the script draws later', async () => {
-  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 800 } });
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport: { width: 1280, height: 800 } });
   await loaded(page);
   await sleep(300);
   const saidOn = (pg, sel) => pg.evaluate((s) => { const g = document.querySelector(s); return ['aria-valuenow', 'aria-valuemin', 'aria-valuemax'].map((a) => g.hasAttribute(a) ? Number(g.getAttribute(a)) : null); }, sel);
