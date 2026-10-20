@@ -1,1 +1,0 @@
-[["axis: 'y', sign: -1, measure: function () { return $('console').querySelector('.console__status').offsetHeight; }", "axis: 'y', sign: 1, measure: function () { return $('console').querySelector('.console__status').offsetHeight; }"]]

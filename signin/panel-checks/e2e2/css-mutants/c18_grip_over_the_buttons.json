@@ -1,1 +1,0 @@
-[[".console__split--foot { left: 0; right: 0; top: calc(-8px / var(--console-zoom, 1) - 6px); height: calc(8px / var(--console-zoom, 1) + 6px); cursor: row-resize; }", ".console__split--foot { left: 0; right: 0; top: -9px; height: 13px; cursor: row-resize; }"]]

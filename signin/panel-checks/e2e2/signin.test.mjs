@@ -2375,7 +2375,7 @@ async function phoneTab(page, tab) {
   await page.click('.console__rail [data-tab="' + tab + '"]');
 }
 
-await check('P6: on a phone every tab fits the window, the saved text size and its buttons are left to the desktop, the status line rests on the window\'s foot, and Refresh leaves the page where it was, which never scrolls', async () => {
+await check('P6: on a phone every tab fits the window, the saved text size and its buttons are left to the desktop, the note floats just over the window\'s foot, and Refresh leaves the page where it was, which never scrolls', async () => {
   const routes = phoneRoutes();
   const storage = { local: Object.assign({ symphony_panel_layout: JSON.stringify({ zoom: 1.5 }) }, asTester.local) };
   const { context, page, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo', storage, viewport: { width: 390, height: 844 }, mobile: true });
@@ -2432,8 +2432,10 @@ await check('P6: on a phone every tab fits the window, the saved text size and i
   assert.ok(['clip', 'hidden'].includes(deck.clip), 'the deck lets a wide tab spill sideways: ' + deck.clip);
   assert.notEqual(deck.zoom, '1.5');
   assert.equal(deck.zoomButtons, false);
-  assert.equal(status.pos, 'relative');
-  assert.ok(status.scrollY === 0 && Math.abs(status.bottom - status.ih) <= 1, 'the status line does not rest on the foot, or the page scrolled: ' + JSON.stringify(status));
+  // since 2026-10-20 the message is a note fixed over the screen's foot, 14 px above it, in place of
+  // a status line resting on it
+  assert.equal(status.pos, 'fixed');
+  assert.ok(status.scrollY === 0 && status.bottom <= status.ih && status.bottom >= status.ih - 30, 'the note does not float just over the foot, or the page scrolled: ' + JSON.stringify(status));
   // Refresh on the tab whose chart is drawn afresh, the page asked to scroll, which it cannot
   await phoneTab(page, 'dependencies');
   await sleep(600);
@@ -3109,48 +3111,15 @@ await check('P24: the list of repositories a token lent with no say runs on is w
   }
 });
 
-/* ---------- P25 to P38: the foot sized as the parts beside it, and the site's bar hiding itself ---------- */
-// The owner, 2026-10-19: "i cant resize the message board panel, just the control panel and window
-// which shows the tab, i should be able to resize all 3, when im in the control panel the top nav
-// panel should hide and reappear when the mouse is over it, like windows does with its taskbar" (site
-// branch claude/panel-resize-autohide). His rule of that morning holds with it: on a computer nothing
-// in the panel scrolls the page. A phone's page scrolls under a foot that sticks to the window's
-// bottom, as P6 holds, so there the foot is held to the window and the page to its width.
+/* ---------- P32 to P38: the site's bar hiding itself ---------- */
+// The owner, 2026-10-19: "when im in the control panel the top nav panel should hide and reappear
+// when the mouse is over it, like windows does with its taskbar" (site branch
+// claude/panel-resize-autohide). The foot he asked to size that day (P25 to P31, P39, P43, P44 and
+// P47) is gone since 2026-10-20: the page's message is a note floating over the screen's foot and
+// Claude a floating button at the top right (site, "a floating Claude"), so nothing there sizes.
 
-// In the page: the foot, its grip, the stage and the deck on screen, the size the layout keeps, and
-// how far the page could scroll either way
-function footFacts() {
-  const c = document.getElementById('console'), st = c.querySelector('.console__status'), grip = c.querySelector('[data-split="foot"]');
-  const box = (n) => { const r = n.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, height: r.height, left: r.left, right: r.right }; };
-  let kept = null;
-  try { kept = (JSON.parse(localStorage.getItem('symphony_panel_layout') || '{}') || {}).foot; } catch (e) { kept = 'unreadable'; }
-  const se = document.scrollingElement;
-  return { foot: box(st), stage: box(c.querySelector('.console__stage')), deck: box(c), grip: grip ? box(grip) : null, sized: c.classList.contains('console--foot'), prop: c.style.getPropertyValue('--foot-h'), kept: kept === undefined ? null : kept,
-    bar: document.body.classList.contains('console-bar-shown'), ih: innerHeight, iw: innerWidth, sh: se.scrollHeight, sw: se.scrollWidth, sy: Math.round(scrollY), sx: Math.round(scrollX) };
-}
-const footOf = (p) => p.evaluate(footFacts);
 const near = (a, b, tol) => Math.abs(a - b) <= (tol === undefined ? 1 : tol);
-// the page cannot scroll either way, and the deck runs from the window's top to its bottom
-function assertFits(f, where) {
-  assert.ok(f.sh <= f.ih && f.sw <= f.iw && f.sy === 0 && f.sx === 0, where + ': the page scrolls (' + f.sw + ' x ' + f.sh + ' in ' + f.iw + ' x ' + f.ih + ', at ' + f.sx + ',' + f.sy + ')');
-  assert.ok(near(f.deck.top, 0, 0.5) && near(f.deck.bottom, f.ih, 0.5), where + ': the deck runs from ' + f.deck.top + ' to ' + f.deck.bottom + ' in a window ' + f.ih + ' tall');
-}
-// a phone's page is no wider than the window, and the foot stands at the window's bottom
-function assertPhoneFits(f, where) {
-  assert.ok(f.sw <= f.iw && f.sx === 0, where + ': the page is ' + f.sw + ' px wide in ' + f.iw);
-  assert.ok(near(f.foot.bottom, f.ih, 1), where + ': the foot ends at ' + f.foot.bottom + ', not at the window\'s bottom ' + f.ih);
-}
-// the foot's grip dragged from its middle, dy window pixels down (up where negative), by the mouse
-async function mouseDragFoot(page, dy) {
-  const g = await page.evaluate(() => { const r = document.querySelector('[data-split="foot"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
-  await page.mouse.move(g.x, g.y);
-  await page.mouse.down();
-  await page.mouse.move(g.x, g.y + dy, { steps: 8 });
-  await page.mouse.up();
-  await sleep(150);
-  return g;
-}
-// the same drag by a finger, through Chromium's touch events, as a phone's screen sends them
+// a finger dragged from x, y by dy window pixels, through Chromium's touch events, as a phone's screen sends them
 async function fingerDrag(page, x, y, dy) {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
@@ -3159,343 +3128,6 @@ async function fingerDrag(page, x, y, dy) {
   await cdp.detach();
   await sleep(150);
 }
-async function fingerDragFoot(page, dy) {
-  const g = await page.evaluate(() => { const r = document.querySelector('[data-split="foot"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
-  await fingerDrag(page, g.x, g.y, dy);
-  return g;
-}
-// a short message at the foot, so Clear shows beside it
-const sayOneLine = (p) => p.evaluate(() => { document.getElementById('msg').textContent = 'Saved.'; });
-// In the page: the first line of the message, Clear and the foot's other buttons that show, each
-// whole inside the foot and the first thing under its own middle
-function footLineFacts() {
-  const st = document.querySelector('.console__status'), msg = document.getElementById('msg');
-  const s = st.getBoundingClientRect(), m = msg.getBoundingClientRect();
-  const range = document.createRange();
-  range.selectNodeContents(msg);
-  const line = range.getClientRects()[0];
-  const parts = [['the message\'s line', line]].concat(Array.from(st.querySelectorAll('button')).filter((b) => b.getClientRects().length && getComputedStyle(b).visibility !== 'hidden').map((b) => [b.id || b.textContent.trim(), b.getBoundingClientRect(), b]));
-  const out = parts.map(([name, r, node]) => {
-    const inside = !!r && r.top >= s.top - 0.5 && r.bottom <= s.bottom + 0.5 && (node ? true : r.top >= m.top - 0.5 && r.bottom <= m.bottom + 0.5);
-    const at = r && document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-    return { name, inside, hit: !!(at && (node ? node.contains(at) || at === node : msg.contains(at))) };
-  });
-  return { parts: out, clear: !!out.find((x) => x.name === 'cp-msg-close'), foot: s.height };
-}
-
-// In the page: what of the foot the grip lies over: how far into the message's first line of words
-// it reaches (none where 0 or less), and which of the foot's buttons that show it meets
-function gripOver() {
-  const g = document.querySelector('[data-split="foot"]').getBoundingClientRect(), msg = document.getElementById('msg');
-  const range = document.createRange();
-  range.selectNodeContents(msg);
-  const line = range.getClientRects()[0];
-  const buttons = Array.from(document.querySelectorAll('.console__status button')).filter((b) => b.getClientRects().length && getComputedStyle(b).visibility !== 'hidden')
-    .filter((b) => { const r = b.getBoundingClientRect(); return r.left < g.right && r.right > g.left && r.top < g.bottom && r.bottom > g.top; }).map((b) => b.id || b.textContent.trim());
-  return { words: line ? g.bottom - line.top : null, buttons };
-}
-
-// In the page, with the message empty: the placeholder's line of words, the status line's ::before,
-// and the grip's bar, its ::after, each as a box on screen
-function placeholderFacts() {
-  const st = document.querySelector('.console__status'), s = st.getBoundingClientRect(), ph = getComputedStyle(st, '::before');
-  const g = document.querySelector('[data-split="foot"]'), r = g.getBoundingClientRect(), a = getComputedStyle(g, '::after');
-  const words = parseFloat(ph.height) || parseFloat(ph.lineHeight) || parseFloat(ph.fontSize) * 1.3;
-  return { content: ph.content, words: { top: s.top + parseFloat(ph.top), bottom: s.top + parseFloat(ph.top) + words }, bar: { top: r.top + parseFloat(a.top), bottom: r.top + parseFloat(a.top) + parseFloat(a.height) } };
-}
-
-await check('P25: the message foot has a grip of its own along its top, a separator over none of the message\'s words that the mouse drags: up grows the foot, down shrinks it, the stage gives up or takes back exactly what the foot takes, the size is kept, and the deck still fits the window', async () => {
-  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester, viewport: { width: 1280, height: 800 } });
-  await loaded(page);
-  await sleep(300);
-  const grip = await page.evaluate(() => {
-    const g = document.querySelector('#console .console__status > [data-split="foot"]');
-    if (!g) return null;
-    const a = getComputedStyle(g, '::after'), r = g.getBoundingClientRect();
-    const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-    return { first: g === g.parentElement.firstElementChild, role: g.getAttribute('role'), orientation: g.getAttribute('aria-orientation'), label: g.getAttribute('aria-label'), tab: g.tabIndex,
-      cursor: getComputedStyle(g).cursor, touch: getComputedStyle(g).touchAction, shown: g.checkVisibility(), hit: at === g, height: r.height, barW: parseFloat(a.width), barH: parseFloat(a.height), bar: a.backgroundColor };
-  });
-  console.log('      grip:', JSON.stringify(grip));
-  assert.ok(grip, 'the foot has no grip');
-  assert.deepEqual([grip.first, grip.role, grip.orientation, grip.tab, grip.cursor, grip.touch, grip.shown, grip.hit], [true, 'separator', 'horizontal', 0, 'row-resize', 'none', true, true]);
-  assert.match(grip.label, /^Drag to size the messages; double-click to reset$/);
-  assert.ok(grip.height >= 12, 'the grip is too thin to take with a mouse: ' + grip.height);
-  // visible but quiet: a short bar of the deck's light ink, see-through, where the other grips show none until hovered
-  const alpha = /rgba\(\d+, \d+, \d+, ([\d.]+)\)/.exec(grip.bar);
-  assert.ok(grip.barW >= 40 && grip.barH >= 3 && alpha && Number(alpha[1]) >= 0.15 && Number(alpha[1]) <= 0.6, 'the grip shows no quiet bar to take: ' + grip.barW + ' x ' + grip.barH + ' ' + grip.bar);
-  await sayOneLine(page);
-  const over = await page.evaluate(gripOver);
-  await page.evaluate(() => { document.getElementById('msg').textContent = ''; });
-  console.log('      the grip over the foot:', JSON.stringify(over));
-  assert.ok(over.words !== null && over.words <= 0.5, 'the grip lies over the message\'s words by ' + over.words + ' px');
-  const rest = await footOf(page);
-  assert.deepEqual([rest.sized, rest.prop, rest.kept], [false, '', null], 'the foot was sized before anyone sized it');
-  assertFits(rest, 'at rest');
-  await mouseDragFoot(page, -200);
-  const up = await footOf(page);
-  await mouseDragFoot(page, 120);
-  const down = await footOf(page);
-  console.log('      at rest:', rest.foot.height, '+', rest.stage.height, '| up 200:', up.foot.height, '+', up.stage.height, '| down 120:', down.foot.height, '+', down.stage.height, '| kept', down.kept);
-  assert.ok(near(up.foot.height, rest.foot.height + 200), 'dragging the grip up 200 px made the foot ' + up.foot.height + ' tall from ' + rest.foot.height);
-  assert.ok(near(down.foot.height, up.foot.height - 120), 'dragging the grip down 120 px made the foot ' + down.foot.height + ' tall from ' + up.foot.height);
-  for (const [name, f] of [['up', up], ['down', down]]) {
-    assert.ok(near(f.stage.height + f.foot.height, rest.stage.height + rest.foot.height), name + ': the stage did not give up exactly what the foot took');
-    assert.ok(near(f.grip.bottom, f.foot.top, 0.5), name + ': the grip no longer lies along the foot\'s top, its bottom at ' + f.grip.bottom + ' for a foot from ' + f.foot.top);
-    assert.equal(f.sized, true);
-    assertFits(f, name);
-  }
-  assert.ok(near(down.kept, down.foot.height), 'the layout keeps ' + down.kept + ' for a foot ' + down.foot.height + ' tall');
-  assert.deepEqual(errors, []);
-  await context.close();
-});
-
-await check('P26: a finger drags the foot\'s grip on a phone, upright and sideways, sizing the foot and never scrolling the page, the grip a thumb\'s to take with its bar in view and over none of the message\'s words or the foot\'s buttons', async () => {
-  for (const [viewport, dy] of [[{ width: 390, height: 844 }, -150], [{ width: 844, height: 390 }, -60]]) {
-    const where = viewport.width + ' x ' + viewport.height;
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport, mobile: true });
-    await loaded(page);
-    await sleep(400);
-    const grip = await page.evaluate(() => {
-      const g = document.querySelector('[data-split="foot"]'), a = getComputedStyle(g, '::after'), r = g.getBoundingClientRect();
-      const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-      return { shown: g.checkVisibility(), height: r.height, width: r.width, left: r.left, touch: getComputedStyle(g).touchAction, hit: at === g, barW: parseFloat(a.width), barH: parseFloat(a.height), bar: a.backgroundColor, barTop: parseFloat(a.top), barMid: r.left + parseFloat(a.left) + parseFloat(a.width) / 2 };
-    });
-    // the placeholder an empty foot shows, under the grip's bar and not behind it
-    await page.evaluate(() => { document.getElementById('msg').textContent = ''; });
-    const placeholder = await page.evaluate(placeholderFacts);
-    await sayOneLine(page);
-    const over = await page.evaluate(gripOver);
-    const rest = await footOf(page);
-    await fingerDragFoot(page, dy);
-    const up = await footOf(page);
-    await fingerDragFoot(page, -dy / 2);
-    const down = await footOf(page);
-    console.log('      ' + where + ': grip', JSON.stringify(grip), JSON.stringify(over), 'placeholder', JSON.stringify(placeholder), '| foot', rest.foot.height, '->', up.foot.height, '->', down.foot.height, '| scrolled', rest.sy, up.sy, down.sy, '| kept', down.kept);
-    assert.ok(grip.shown && grip.hit, where + ': the grip is not there to touch');
-    // a thumb's grip, and still over none of the message's words nor the foot's buttons
-    assert.ok(over.words !== null && over.words <= 0.5, where + ': the grip lies over the message\'s words by ' + over.words + ' px');
-    assert.deepEqual(over.buttons, [], where + ': the grip lies over the foot\'s buttons');
-    assert.equal(grip.touch, 'none', where + ': a finger on the grip would scroll the page');
-    assert.ok(grip.height >= 24 && grip.width >= 96, where + ': the grip is smaller than a thumb: ' + grip.width + ' x ' + grip.height);
-    // only its middle, about its bar, so the rest of the foot's top edge scrolls the page (P44)
-    assert.ok(grip.width <= 160 && near(grip.left + grip.width / 2, grip.barMid, 1), where + ': the grip is not a thumb\'s width about its bar: ' + grip.width + ' wide, centred at ' + (grip.left + grip.width / 2) + ' for a bar at ' + grip.barMid);
-    assert.ok(placeholder.content.includes('Messages from the panel show here.') && placeholder.words.top >= placeholder.bar.bottom - 0.5, where + ': the grip\'s bar lies over the empty foot\'s placeholder: ' + JSON.stringify(placeholder));
-    assert.ok(grip.barW >= 48 && grip.barH >= 4 && grip.bar !== 'rgba(0, 0, 0, 0)', where + ': the grip\'s bar does not show');
-    assert.ok(near(up.foot.height, rest.foot.height - dy), where + ': a finger dragging up ' + (-dy) + ' px made the foot ' + up.foot.height + ' tall from ' + rest.foot.height);
-    assert.ok(near(down.foot.height, up.foot.height + dy / 2), where + ': a finger dragging down made the foot ' + down.foot.height + ' tall from ' + up.foot.height);
-    assert.deepEqual([rest.sy, up.sy, down.sy], [0, 0, 0], where + ': the finger\'s drag scrolled the page');
-    assert.ok(near(down.kept, down.foot.height), where + ': the layout keeps ' + down.kept);
-    for (const f of [up, down]) assertPhoneFits(f, where);
-    assert.deepEqual(errors, []);
-    await context.close();
-  }
-});
-
-await check('P27: the arrow keys size the foot from its focused grip, up to grow and down to shrink, and a double-click puts it back as tall as its message', async () => {
-  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport: { width: 1280, height: 800 } });
-  await loaded(page);
-  await sleep(300);
-  const rest = await footOf(page);
-  await page.focus('[data-split="foot"]');
-  await page.keyboard.press('ArrowUp');
-  await page.keyboard.press('ArrowUp');
-  const two = await footOf(page);
-  await page.keyboard.press('ArrowDown');
-  const one = await footOf(page);
-  console.log('      foot:', rest.foot.height, '| up twice', two.foot.height, 'kept', two.kept, '| down once', one.foot.height, 'kept', one.kept);
-  assert.ok(near(two.foot.height, rest.foot.height + 32), 'two presses of ArrowUp made the foot ' + two.foot.height + ' from ' + rest.foot.height);
-  assert.ok(near(one.foot.height, rest.foot.height + 16), 'ArrowDown made the foot ' + one.foot.height);
-  assert.ok(near(one.stage.height + one.foot.height, rest.stage.height + rest.foot.height), 'the stage did not give up exactly what the foot took');
-  assert.ok(near(one.kept, one.foot.height), 'the keys\' size was not kept');
-  assertFits(one, 'by the keys');
-  await page.dblclick('[data-split="foot"]');
-  await sleep(150);
-  const reset = await footOf(page);
-  console.log('      after a double-click:', reset.foot.height, '| sized', reset.sized, '| kept', reset.kept);
-  assert.deepEqual([reset.sized, reset.prop, reset.kept], [false, '', null], 'the double-click did not put the foot back');
-  assert.ok(near(reset.foot.height, rest.foot.height) && near(reset.stage.height, rest.stage.height), 'the foot is ' + reset.foot.height + ' tall after the reset, not ' + rest.foot.height);
-  assert.deepEqual(errors, []);
-  await context.close();
-});
-
-await check('P28: the foot\'s size is kept across a reload and read back only when it is a number in its bounds, a kept size the window cannot hold is held to it, and a window made shorter takes the foot down with it and back', async () => {
-  const facts = async (layout, viewport) => {
-    const storage = { local: Object.assign({}, asTester.local, layout === undefined ? {} : { symphony_panel_layout: typeof layout === 'string' ? layout : JSON.stringify(layout) }) };
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage, viewport: viewport || { width: 1280, height: 800 } });
-    await loaded(page);
-    await sleep(300);
-    const f = await footOf(page);
-    f.zoom = await page.evaluate(() => getComputedStyle(document.querySelector('#console .console__status')).zoom);
-    return { context, page, errors, f };
-  };
-  // sized by the keys, then the page loaded again
-  let { context, page, errors, f } = await facts();
-  const rest = f;
-  await page.focus('[data-split="foot"]');
-  for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowUp');
-  const sized = await footOf(page);
-  await page.reload();
-  await loaded(page);
-  await sleep(300);
-  const again = await footOf(page);
-  console.log('      sized', sized.foot.height, 'kept', sized.kept, '| after a reload', again.foot.height, again.sized);
-  assert.ok(near(again.foot.height, sized.foot.height) && again.sized, 'the size did not last a reload');
-  assert.ok(near(again.foot.height, rest.foot.height + 96));
-  assert.deepEqual(errors, []);
-  await context.close();
-  // kept sizes that are not a number in the part's bounds are left out, and the rest of the record kept
-  for (const bad of ['"300"', '10', '-40', '5000', 'null', 'true', '[300]', '{"px": 300}']) {
-    ({ context, page, errors, f } = await facts('{"foot": ' + bad + ', "zoom": 1.2}'));
-    console.log('      kept foot ' + bad + ':', f.foot.height, f.sized, JSON.stringify(f.prop), 'zoom', f.zoom);
-    assert.deepEqual([f.sized, f.prop], [false, ''], 'a kept foot of ' + bad + ' was read');
-    assert.equal(f.zoom, '1.2', 'the record\'s text size was dropped with the bad foot');
-    assert.ok(near(f.foot.height / 1.2, rest.foot.height, 1.5), 'with a kept foot of ' + bad + ' the foot is ' + f.foot.height + ' tall');
-    assert.deepEqual(errors, []);
-    await context.close();
-  }
-  // a size in the part's bounds but taller than this window leaves: held to what leaves the stage its least
-  ({ context, page, errors, f } = await facts({ foot: 1500 }));
-  console.log('      kept 1500 at 1280 x 800:', f.foot.height, '| stage', f.stage.height);
-  assert.ok(f.sized && f.stage.height >= 179.5 && f.stage.height <= 182, 'a kept foot of 1500 left the stage ' + f.stage.height + ' px');
-  assertFits(f, 'kept 1500');
-  assert.deepEqual(errors, []);
-  await context.close();
-  // a window made shorter takes the foot down so the stage keeps its least; made taller, the foot is the size kept
-  ({ context, page, errors, f } = await facts({ foot: 500 }, { width: 1280, height: 900 }));
-  const tall = f;
-  await page.setViewportSize({ width: 1280, height: 600 });
-  await sleep(400);
-  const short = await footOf(page);
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await sleep(400);
-  const back = await footOf(page);
-  console.log('      kept 500: at 900 tall', tall.foot.height, '| at 600', short.foot.height, 'stage', short.stage.height, '| at 900 again', back.foot.height);
-  assert.ok(near(tall.foot.height, 500), 'a kept foot of 500 is ' + tall.foot.height + ' tall');
-  assert.ok(short.stage.height >= 179.5 && short.stage.height <= 182, 'the shorter window left the stage ' + short.stage.height + ' px');
-  assertFits(short, 'the window made shorter');
-  assert.ok(near(back.foot.height, 500), 'the window made taller again left the foot ' + back.foot.height + ' tall, not the 500 kept');
-  assert.equal(back.kept, 500, 'the shorter window rewrote the size kept');
-  assert.deepEqual(errors, []);
-  await context.close();
-});
-
-await check('P29: the foot is held between one line of message with its buttons and what leaves the stage its least, on a computer at three sizes and at the smallest and largest text, and on a phone either way up, the deck always fitting', async () => {
-  const desks = [[{ width: 1280, height: 800 }, 0], [{ width: 1440, height: 900 }, 0], [{ width: 1920, height: 1080 }, 0], [{ width: 1280, height: 800 }, -3], [{ width: 1280, height: 800 }, 5]];
-  for (const [viewport, steps] of desks) {
-    const where = viewport.width + ' x ' + viewport.height + (steps ? ' at ' + (steps < 0 ? 'A-' : 'A+') + ' x' + Math.abs(steps) : '');
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport });
-    await loaded(page);
-    for (let i = 0; i < Math.abs(steps); i++) await page.click(steps < 0 ? '#cp-zoom-down' : '#cp-zoom-up');
-    await sayOneLine(page);
-    await sleep(300);
-    const zoom = await page.evaluate(() => document.getElementById('cp-zoom-reset').textContent);
-    const rest = await footOf(page);
-    await mouseDragFoot(page, -3000);
-    const top = await footOf(page);
-    await mouseDragFoot(page, 3000);
-    const low = await footOf(page);
-    const line = await page.evaluate(footLineFacts);
-    console.log('      ' + where + ' (' + zoom + '): foot', rest.foot.height, '| up', top.foot.height, 'stage', top.stage.height, 'bar', top.bar, '| down', low.foot.height, JSON.stringify(line.parts));
-    assert.equal(zoom, steps < 0 ? '70%' : steps > 0 ? '170%' : '100%', where + ': the text size is not at its end');
-    assert.ok(top.stage.height >= 179.5 && top.stage.height <= 182, where + ': dragged up, the foot left the stage ' + top.stage.height + ' px');
-    assert.equal(top.bar, false, where + ': a grip dragged past the window\'s top called the site\'s bar');
-    assert.ok(line.clear, where + ': Clear does not show beside the message');
-    for (const part of line.parts) assert.ok(part.inside && part.hit, where + ': dragged down, ' + part.name + ' is cut off or covered (' + JSON.stringify(part) + ')');
-    assert.ok(low.foot.height < rest.foot.height + 1, where + ': dragged down, the foot is ' + low.foot.height + ', taller than at rest');
-    for (const [name, f] of [['up', top], ['down', low]]) {
-      assert.ok(near(f.stage.height + f.foot.height, rest.stage.height + rest.foot.height), where + ', ' + name + ': the stage did not give up exactly what the foot took');
-      assertFits(f, where + ', ' + name);
-    }
-    assert.deepEqual(errors, []);
-    await context.close();
-  }
-  // the Ask Claude bar grown while the foot is at its tallest, as it does while an answer is waited
-  // for: the foot gives way so the stage keeps its least, and takes its size back once the bar shrinks
-  {
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport: { width: 1280, height: 800 } });
-    await loaded(page);
-    await mouseDragFoot(page, -3000);
-    const top = await footOf(page);
-    await page.evaluate(() => { const d = document.createElement('div'); d.id = 'p29-tall'; d.style.height = '120px'; document.getElementById('cp-askbar').appendChild(d); });
-    await sleep(300);
-    const grown = await footOf(page);
-    await page.evaluate(() => document.getElementById('p29-tall').remove());
-    await sleep(300);
-    const back = await footOf(page);
-    console.log('      the Ask Claude bar 120 px taller: foot', top.foot.height, '->', grown.foot.height, 'stage', grown.stage.height, '| shrunk again: foot', back.foot.height);
-    assert.ok(grown.stage.height >= 179.5 && grown.stage.height <= 182, 'the grown Ask Claude bar left the stage ' + grown.stage.height + ' px');
-    assertFits(grown, 'the Ask Claude bar grown');
-    assert.ok(near(back.foot.height, top.foot.height), 'the foot did not take its size back');
-    assert.deepEqual(errors, []);
-    await context.close();
-  }
-  for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
-    const where = 'a phone at ' + viewport.width + ' x ' + viewport.height;
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport, mobile: true });
-    await loaded(page);
-    await sayOneLine(page);
-    await sleep(400);
-    await fingerDragFoot(page, -3000);
-    const top = await footOf(page);
-    await fingerDragFoot(page, 3000);
-    const low = await footOf(page);
-    const line = await page.evaluate(footLineFacts);
-    console.log('      ' + where + ': up', top.foot.top, 'to', top.foot.bottom, '| down', low.foot.height, JSON.stringify(line.parts));
-    // the console fills the screen, as a computer's does, so the stage keeps its least of 180 px
-    assert.ok(top.stage.height >= 179.5 && top.stage.height <= 182, where + ': dragged up, the foot left the stage ' + top.stage.height + ' px');
-    assert.ok(line.clear, where + ': Clear does not show beside the message');
-    for (const part of line.parts) assert.ok(part.inside && part.hit, where + ': dragged down, ' + part.name + ' is cut off or covered (' + JSON.stringify(part) + ')');
-    for (const [name, f] of [['up', top], ['down', low]]) {
-      assertPhoneFits(f, where + ', ' + name);
-      assert.equal(f.sy, 0, where + ', ' + name + ': the drag scrolled the page');
-    }
-    assert.deepEqual(errors, []);
-    await context.close();
-  }
-  // the phone's layout with a text size a computer saved, which it does not apply: a laptop's
-  // window snapped to half the screen, by the mouse, and a phone, by a finger, each dragged to the
-  // top still leave the stage its least of 180 px, whatever the saved size
-  for (const [viewport, mobile] of [[{ width: 720, height: 760 }, false], [{ width: 390, height: 844 }, true]]) {
-    for (const zoom of [0.7, 1.5]) {
-      const where = (mobile ? 'a phone at ' : 'a narrow window at ') + viewport.width + ' x ' + viewport.height + ' with text at ' + zoom + ' saved';
-      const storage = { local: Object.assign({}, asTester.local, { symphony_panel_layout: JSON.stringify({ zoom }) }) };
-      const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage, viewport, mobile });
-      await loaded(page);
-      await sayOneLine(page);
-      await sleep(400);
-      if (mobile) await fingerDragFoot(page, -3000); else await mouseDragFoot(page, -3000);
-      const top = await footOf(page);
-      console.log('      ' + where + ': up', top.foot.top, 'to', top.foot.bottom, 'stage', top.stage.height, 'scrolled', top.sy);
-      assert.ok(top.stage.height >= 179.5 && top.stage.height <= 182, where + ': dragged up, the foot left the stage ' + top.stage.height + ' px');
-      assertPhoneFits(top, where);
-      assert.equal(top.sy, 0, where + ': the drag scrolled the page');
-      assert.deepEqual(errors, []);
-      await context.close();
-    }
-  }
-});
-
-await check('P30: the foot\'s grip follows the pointer under every text size, and a finger on a phone whatever text size a computer saved', async () => {
-  const cases = [[{ width: 1280, height: 800 }, 0.7, false], [{ width: 1280, height: 800 }, 1, false], [{ width: 1280, height: 800 }, 1.5, false], [{ width: 390, height: 844 }, 1.5, true]];
-  for (const [viewport, zoom, mobile] of cases) {
-    const where = (mobile ? 'a phone with ' : '') + 'text at ' + zoom;
-    const storage = { local: Object.assign({}, asTester.local, zoom === 1 ? {} : { symphony_panel_layout: JSON.stringify({ zoom }) }) };
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage, viewport, mobile });
-    await loaded(page);
-    await sleep(400);
-    const before = await footOf(page);
-    const g = mobile ? await fingerDragFoot(page, -100) : await mouseDragFoot(page, -100);
-    const after = await footOf(page);
-    const moved = (after.grip.top + after.grip.height / 2) - g.y;
-    console.log('      ' + where + ': the pointer moved -100, the grip ' + moved.toFixed(1) + ', the foot ' + before.foot.height.toFixed(1) + ' -> ' + after.foot.height.toFixed(1));
-    assert.ok(near(moved, -100, 2), where + ': the grip moved ' + moved.toFixed(1) + ' px under a pointer that moved 100');
-    assert.ok(near(after.foot.height - before.foot.height, 100, 2), where + ': the foot grew ' + (after.foot.height - before.foot.height).toFixed(1) + ' px');
-    assert.deepEqual(errors, []);
-    await context.close();
-  }
-});
-
 // a run of the Workers workflow with many steps, failed, so its task box shows every step and the
 // last lines of its log
 function longRunRoutes() {
@@ -3519,45 +3151,6 @@ function taskBoxFacts() {
   return { foot: s.height, msg: { top: m.top, bottom: m.bottom, height: m.height }, scrolls: msg.scrollHeight > msg.clientHeight + 1, overflow: getComputedStyle(msg).overflowY, headShown: head.top >= m.top - 0.5 && head.top < m.bottom,
     inFoot: m.top >= s.top - 0.5 && m.bottom <= s.bottom + 0.5, endReached: end.bottom <= m.bottom + 1 && end.bottom > m.top, clearHit: !!(at && at.closest('#cp-msg-close')), steps: task.querySelectorAll('.msgtask__steps li').length, log: !task.querySelector('.msgtask__log').hidden };
 }
-
-await check('P31: a long task box in a foot sized small keeps the foot its size, shows its first line and scrolls inside the message box, never the page; a foot sized tall is filled by the box past its usual cap; a foot nobody sized grows with the box to its cap as before', async () => {
-  const cases = [[{ width: 1280, height: 800 }, false, { foot: 24 }], [{ width: 390, height: 844 }, true, { foot: 24 }], [{ width: 1280, height: 800 }, false, { foot: 400 }], [{ width: 1280, height: 800 }, false, null]];
-  for (const [viewport, mobile, layout] of cases) {
-    const where = viewport.width + ' x ' + viewport.height + (layout ? ', the foot sized ' + layout.foot : ', the foot unsized');
-    const storage = { local: Object.assign({}, asTester.local, layout ? { symphony_panel_layout: JSON.stringify(layout) } : {}) };
-    const { context, page, errors } = await open({ script: real, routes: longRunRoutes(), path: '/symphony/control/?repo=acme/demo#command', storage, viewport, mobile });
-    await loaded(page);
-    await sleep(300);
-    const before = await footOf(page);
-    await page.click('#cp-run-workers');
-    await untilFoot(page, 'Finished: failure', 20000);
-    await sleep(300);
-    const box = await page.evaluate(taskBoxFacts);
-    const after = await footOf(page);
-    console.log('      ' + where + ': foot', before.foot.height, '->', after.foot.height, '| box', JSON.stringify(box));
-    assert.equal(box.steps, 14);
-    assert.equal(box.log, true, where + ': the box shows no log');
-    // the box is taller than a small foot and than the usual cap, and fits whole in the tall one
-    const tall = !!layout && layout.foot === 400;
-    assert.ok(/auto|scroll/.test(box.overflow), where + ': the message box cannot scroll inside itself');
-    assert.equal(box.scrolls, !tall, where + (tall ? ': the box does not fit the tall foot whole' : ': the long box does not scroll inside the message box'));
-    assert.ok(box.headShown, where + ': the box\'s first line does not show');
-    assert.ok(box.inFoot, where + ': the message box runs out of the foot');
-    assert.ok(box.endReached, where + ': the box\'s last line cannot be scrolled into the message box');
-    assert.ok(box.clearHit, where + ': Clear is covered');
-    if (layout) {
-      assert.ok(near(after.foot.height, before.foot.height), where + ': the foot grew from ' + before.foot.height + ' to ' + after.foot.height + ' though it was sized');
-      // a foot sized taller than the message box's usual cap: the box fills it, past that cap
-      if (layout.foot === 400) assert.ok(near(after.foot.height, 400) && box.msg.height >= 400 - 12, where + ': the message box is ' + box.msg.height + ' tall in a foot of ' + after.foot.height);
-    } else {
-      assert.ok(after.foot.height > before.foot.height + 100, where + ': the unsized foot did not grow with the box');
-      assert.ok(box.msg.height <= 0.26 * viewport.height + 1, where + ': the message box grew past its cap: ' + box.msg.height);
-    }
-    if (mobile) { assertPhoneFits(after, where); assert.equal(after.sy, 0, where + ': the box scrolled the page'); } else assertFits(after, where);
-    assert.deepEqual(errors, []);
-    await context.close();
-  }
-});
 
 // In the page: whether the site's bar is wanted, where it and its section strip are, the deck, the
 // hot strip and the handle, and what holds the focus
@@ -3952,62 +3545,11 @@ await check('P38: every other page of the site keeps its bar where it always was
   }
 });
 
-// The review of the foot and the bar, 2026-10-19: each check below holds what one of its findings
+// The review of the foot and the bar, 2026-10-19 (the foot's own checks went with the foot): each check below holds what one of its findings
 // found wrong, and fails on the branch as it stood before the fix (site 2d22660).
 
-// In the page: what a press just inside each of the foot's buttons' top edge, at its middle, lands
-// on: the button itself, or what took it from the button
-function buttonEdges() {
-  return Array.from(document.querySelectorAll('.console__status button')).filter((b) => b.getClientRects().length && getComputedStyle(b).visibility !== 'hidden').map((b) => {
-    const r = b.getBoundingClientRect();
-    const missed = [1, 2].map((dy) => document.elementFromPoint(r.left + r.width / 2, r.top + dy)).filter((at) => !at || !(at === b || b.contains(at)))
-      .map((at) => !at ? 'nothing' : at.hasAttribute('data-split') ? 'the grip' : String(at.id || at.className || at.tagName));
-    return { name: b.id || b.textContent.trim(), missed };
-  });
-}
-// In the page: the foot's grip, the foot and the Ask Claude bar's last line of content, on screen
-function gripGap() {
-  const g = document.querySelector('[data-split="foot"]').getBoundingClientRect(), st = document.querySelector('.console__status').getBoundingClientRect();
-  const ask = document.getElementById('cp-askbar');
-  const inner = Array.from(ask.querySelectorAll('*')).filter((n) => n.getClientRects().length && n.checkVisibility()).map((n) => n.getBoundingClientRect().bottom);
-  return { top: g.top, bottom: g.bottom, height: g.height, footTop: st.top, askContent: inner.length ? Math.max.apply(null, inner) : null };
-}
-
-await check('P39: the foot\'s grip lies in the gap above the foot and the Ask Claude bar\'s bottom padding, over none of the foot\'s buttons and none of the bar\'s content at any text size, sized or not, so a press just inside a button\'s top edge is the button\'s and a double press on A+ steps the text and leaves the foot its size', async () => {
-  for (const zoom of [0.7, 1, 1.5, 1.7]) {
-    for (const foot of [null, 200]) {
-      const layout = Object.assign({}, zoom === 1 ? {} : { zoom }, foot ? { foot } : {});
-      const where = 'text at ' + zoom + (foot ? ', the foot sized ' + foot : '');
-      const storage = { local: Object.assign({}, asTester.local, Object.keys(layout).length ? { symphony_panel_layout: JSON.stringify(layout) } : {}) };
-      const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage, viewport: { width: 1440, height: 900 } });
-      await loaded(page);
-      await sayOneLine(page);
-      await sleep(300);
-      const edges = await page.evaluate(buttonEdges);
-      const g = await page.evaluate(gripGap);
-      console.log('      ' + where + ': grip', g.top.toFixed(1), 'to', g.bottom.toFixed(1), 'foot from', g.footTop.toFixed(1), 'the bar\'s content to', g.askContent && g.askContent.toFixed(1), '| missed', JSON.stringify(edges.filter((e) => e.missed.length)));
-      assert.ok(edges.length >= 5, where + ': the foot shows ' + edges.length + ' buttons');
-      for (const e of edges) assert.deepEqual(e.missed, [], where + ': a press just inside ' + e.name + '\'s top edge lands on ' + e.missed.join(', '));
-      assert.ok(near(g.bottom, g.footTop, 0.5), where + ': the grip runs down to ' + g.bottom + ', past the foot\'s top ' + g.footTop);
-      assert.ok(g.askContent !== null && g.top >= g.askContent - 0.5, where + ': the grip reaches up to ' + g.top + ', over the Ask Claude bar\'s content, which ends at ' + g.askContent);
-      assert.ok(g.height >= 12, where + ': the grip is too thin to take with a mouse: ' + g.height);
-      if (zoom === 1 && foot) {
-        const up = await page.evaluate(() => { const r = document.getElementById('cp-zoom-up').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 2 }; });
-        await page.mouse.dblclick(up.x, up.y);
-        await sleep(400);
-        const after = await page.evaluate(() => ({ zoom: document.getElementById('cp-zoom-reset').textContent, kept: JSON.parse(localStorage.getItem('symphony_panel_layout') || '{}') }));
-        console.log('      a double press 2 px inside A+\'s top edge:', JSON.stringify(after));
-        assert.notEqual(after.zoom, '100%', 'a double press just inside A+\'s top edge did not step the text');
-        assert.equal(after.kept.foot, 200, 'a double press just inside A+\'s top edge put the foot back: ' + JSON.stringify(after.kept));
-      }
-      assert.deepEqual(errors, []);
-      await context.close();
-    }
-  }
-});
-
 // In the page, from before it first paints: on each frame, where the bar and the deck are and
-// whether the panel's script has drawn the foot's grip yet, and every transition the bar runs
+// whether the panel's script has shown the signed-in panel yet (the foot's grip, which marked it before, went with the foot), and every transition the bar runs
 const frameRecorder = () => {
   window.__frames = []; window.__slides = [];
   document.addEventListener('transitionrun', (e) => { if (e.target && e.target.id === 'nav') window.__slides.push(e.propertyName); }, true);
@@ -4015,7 +3557,7 @@ const frameRecorder = () => {
     const nav = document.getElementById('nav'), deck = document.getElementById('console');
     if (nav) {
       const n = nav.getBoundingClientRect(), d = deck && deck.getBoundingClientRect();
-      window.__frames.push({ t: Math.round(performance.now()), navBottom: n.bottom, deckTop: d ? d.top : null, deckBottom: d ? d.bottom : null, script: !!document.querySelector('[data-split="foot"]') });
+      window.__frames.push({ t: Math.round(performance.now()), navBottom: n.bottom, deckTop: d ? d.top : null, deckBottom: d ? d.bottom : null, script: !!document.querySelector('#cp-app:not(.hidden)') });
     }
     if (window.__frames.length < 600) requestAnimationFrame(look);
   };
@@ -4099,8 +3641,8 @@ await check('P41: a drag that is no grip\'s, a text selection run up to the wind
   await context.close();
 });
 
-await check('P42: a grip pressed while the keyboard\'s focus is in the shown bar sends the bar away with the focus, so nothing of the hidden bar keeps it and Enter follows no link nobody sees, for the foot\'s grip and the side column\'s', async () => {
-  for (const [sel, dx, dy] of [['[data-split="foot"]', 0, -60], ['[data-split="side"]', 30, 0]]) {
+await check('P42: a grip pressed while the keyboard\'s focus is in the shown bar sends the bar away with the focus, so nothing of the hidden bar keeps it and Enter follows no link nobody sees, for the side column\'s grip (the foot\'s went with the foot)', async () => {
+  for (const [sel, dx, dy] of [['[data-split="side"]', 30, 0]]) {
     const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport: { width: 1280, height: 800 } });
     await loaded(page);
     await sleep(400);
@@ -4126,106 +3668,6 @@ await check('P42: a grip pressed while the keyboard\'s focus is in the shown bar
     assert.equal(before.focusInBar, true, sel + ': Tab did not put the focus in the bar');
     assert.equal(after.focusInBar, false, sel + ': the bar went with the focus left in it, on ' + after.focus);
     assert.equal(page.url(), url, sel + ': Enter after the drag left the panel for ' + page.url());
-    assert.deepEqual(errors, []);
-    await context.close();
-  }
-});
-
-await check('P43: on a phone, a narrow window or a tablet held upright, whose console fills the screen and whose page never scrolls, the foot rests on the window\'s bottom on every tab, and its grip stays under the finger or the mouse that drags it, upright and sideways', async () => {
-  {
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport: { width: 390, height: 844 }, mobile: true });
-    await loaded(page);
-    await sleep(400);
-    const off = [];
-    for (const tab of PHONE_TABS) {
-      await phoneTab(page, tab);
-      await sleep(250);
-      const f = await footOf(page);
-      if (!near(f.foot.bottom, f.ih, 1)) off.push(tab + ' (the foot ends at ' + f.foot.bottom.toFixed(1) + ')');
-    }
-    console.log('      390 x 844, tabs whose foot does not rest on the window\'s bottom:', off.join(', ') || 'none');
-    assert.deepEqual(off, [], 'the foot does not rest on the window\'s bottom on ' + off.join(', '));
-    assert.deepEqual(errors, []);
-    await context.close();
-  }
-  const cases = [
-    ['a phone, the Board tab', { width: 390, height: 844 }, true, 'board', false, -120],
-    ['a phone, the Command tab', { width: 390, height: 844 }, true, 'command', false, -100],
-    ['a phone sideways, the Command tab', { width: 844, height: 390 }, true, 'command', false, -60],
-    ['a tablet upright, the Board tab', { width: 768, height: 1024 }, true, 'board', false, -150],
-    ['a narrow window, the Board tab, by the mouse', { width: 800, height: 900 }, false, 'board', false, -100],
-  ];
-  for (const [where, viewport, mobile, tab, , dy] of cases) {
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport, mobile });
-    await loaded(page);
-    await phoneTab(page, tab);
-    await sayOneLine(page);
-    await sleep(400);
-    await sleep(300);
-    // the grip is read after every step of the drag as well as after it, since a grip that catches
-    // the pointer up only once the drag is over, by a scroll that glides, is not under it meanwhile
-    const gripY = () => page.evaluate(() => { const r = document.querySelector('[data-split="foot"]').getBoundingClientRect(); return r.top + r.height / 2; });
-    const drag = async (by) => {
-      const g0 = await page.evaluate(() => { const r = document.querySelector('[data-split="foot"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
-      const f0 = await footOf(page);
-      let lag = 0;
-      if (mobile) {
-        const cdp = await page.context().newCDPSession(page);
-        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: g0.x, y: g0.y }] });
-        for (let i = 1; i <= 10; i++) {
-          const y = g0.y + by * i / 10;
-          await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: g0.x, y }] });
-          await sleep(16);
-          lag = Math.max(lag, Math.abs(await gripY() - y));
-        }
-        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-        await cdp.detach();
-      } else {
-        await page.mouse.move(g0.x, g0.y);
-        await page.mouse.down();
-        for (let i = 1; i <= 8; i++) {
-          const y = g0.y + by * i / 8;
-          await page.mouse.move(g0.x, y);
-          lag = Math.max(lag, Math.abs(await gripY() - y));
-        }
-        await page.mouse.up();
-      }
-      await sleep(150);
-      const f1 = await footOf(page);
-      return { moved: (f1.grip.top + f1.grip.height / 2) - g0.y, grew: f1.foot.height - f0.foot.height, lag, from: f0, to: f1 };
-    };
-    const up = await drag(dy);
-    const down = await drag(-dy / 2);
-    console.log('      ' + where + ': up ' + (-dy) + ': the grip moved ' + up.moved.toFixed(1) + ', the foot grew ' + up.grew.toFixed(1) + ', scrolled ' + up.from.sy + ' -> ' + up.to.sy + ', at most ' + up.lag.toFixed(1) + ' from the pointer on the way | down ' + (-dy / 2) + ': the grip moved ' + down.moved.toFixed(1) + ', the foot ' + down.grew.toFixed(1) + ', at most ' + down.lag.toFixed(1) + ' from the pointer');
-    assert.ok(up.from.sy === 0 && up.to.sy === 0 && down.to.sy === 0, where + ': the page scrolled');
-    assert.ok(near(up.moved, dy, 3), where + ': the grip moved ' + up.moved.toFixed(1) + ' under a pointer that moved ' + dy);
-    assert.ok(near(up.grew, -dy, 3), where + ': the foot grew ' + up.grew.toFixed(1) + ' for ' + (-dy));
-    assert.ok(near(down.moved, -dy / 2, 3), where + ': dragged back, the grip moved ' + down.moved.toFixed(1) + ' under a pointer that moved ' + (-dy / 2));
-    assert.ok(near(down.grew, dy / 2, 3), where + ': dragged back, the foot changed by ' + down.grew.toFixed(1));
-    assert.ok(up.lag <= 3 && down.lag <= 3, where + ': on the way the grip fell ' + up.lag.toFixed(1) + ' and ' + down.lag.toFixed(1) + ' px behind the pointer');
-    assert.ok(up.to.sw <= up.to.iw && up.to.sx === 0, where + ': the page pans sideways');
-    assert.deepEqual(errors, []);
-    await context.close();
-  }
-});
-
-await check('P44: on a phone a thumb that swipes up from the foot\'s top edge beside the grip\'s bar leaves the foot its size and the page, which never scrolls, at its top, since only the grip\'s middle, about its bar, sizes the foot', async () => {
-  for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
-    const where = viewport.width + ' x ' + viewport.height;
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport, mobile: true });
-    await loaded(page);
-    await sleep(400);
-    const g = await page.evaluate(() => { const r = document.querySelector('[data-split="foot"]').getBoundingClientRect(); return { left: r.left, right: r.right, y: r.top + r.height / 2 }; });
-    const x = Math.max(30, g.left - 50);
-    const at = await page.evaluate(([x, y]) => { const n = document.elementFromPoint(x, y); return n ? String(n.className || n.tagName) : 'nothing'; }, [x, g.y]);
-    const before = await footOf(page);
-    await fingerDrag(page, x, g.y, -160);
-    await sleep(300);
-    const after = await footOf(page);
-    console.log('      ' + where + ': the grip from', g.left, 'to', g.right, '| a thumb at', x, 'on', at, '| scrolled', before.sy, '->', after.sy, '| the foot', before.foot.height, '->', after.foot.height, 'kept', after.kept);
-    assert.ok(!/console__split/.test(at), where + ': the foot\'s top edge at ' + x + ' is the grip\'s');
-    assert.ok(before.sy === 0 && after.sy === 0, where + ': the thumb\'s swipe scrolled the page from ' + before.sy + ' to ' + after.sy);
-    assert.ok(near(after.foot.height, before.foot.height, 0.5) && after.kept === null, where + ': the thumb\'s swipe sized the foot to ' + after.foot.height + ', kept ' + after.kept);
     assert.deepEqual(errors, []);
     await context.close();
   }
@@ -4312,65 +3754,18 @@ await check('P46: on a phone the handle\'s whole press area is the tab a person 
   await context.close();
 });
 
-await check('P47: on a tablet, either way up, the foot\'s grip is a thumb\'s as on a phone, over none of the foot\'s buttons, its message\'s words or the empty foot\'s placeholder, which stands where a message\'s words do, and a finger drags it', async () => {
-  for (const viewport of [{ width: 1024, height: 1366 }, { width: 1366, height: 1024 }]) {
-    const where = 'a tablet at ' + viewport.width + ' x ' + viewport.height;
-    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport, mobile: true });
-    await loaded(page);
-    await sleep(400);
-    await page.evaluate(() => { document.getElementById('msg').textContent = ''; });
-    const placeholder = await page.evaluate(placeholderFacts);
-    const grip = await page.evaluate(() => { const g = document.querySelector('[data-split="foot"]'), r = g.getBoundingClientRect(), a = getComputedStyle(g, '::after'); return { height: r.height, barW: parseFloat(a.width), coarse: matchMedia('(pointer: coarse)').matches }; });
-    await sayOneLine(page);
-    // where a message's first line stands, which the placeholder stands at while the foot is empty
-    const said = await page.evaluate(() => { const range = document.createRange(); range.selectNodeContents(document.getElementById('msg')); return range.getClientRects()[0].top; });
-    const over = await page.evaluate(gripOver);
-    const edges = (await page.evaluate(buttonEdges)).filter((e) => e.missed.length);
-    const rest = await footOf(page);
-    const g = await fingerDragFoot(page, -100);
-    const up = await footOf(page);
-    const moved = (up.grip.top + up.grip.height / 2) - g.y;
-    console.log('      ' + where + ':', JSON.stringify(grip), JSON.stringify(over), 'placeholder', JSON.stringify(placeholder), 'a message from', said.toFixed(1), '| missed', JSON.stringify(edges), '| a finger up 100: the grip', moved.toFixed(1), 'the foot', rest.foot.height.toFixed(1), '->', up.foot.height.toFixed(1));
-    assert.equal(grip.coarse, true, where + ': the tablet\'s pointer is not coarse');
-    assert.ok(grip.height >= 24 && grip.barW >= 48, where + ': the grip is not a thumb\'s: ' + JSON.stringify(grip));
-    assert.ok(over.words !== null && over.words <= 0.5, where + ': the grip lies over the message\'s words by ' + over.words + ' px');
-    assert.deepEqual(over.buttons, [], where + ': the grip lies over the foot\'s buttons');
-    assert.deepEqual(edges, [], where + ': a press just inside a button\'s top edge is not the button\'s');
-    assert.ok(placeholder.words.top >= placeholder.bar.bottom - 0.5, where + ': the grip\'s bar lies over the empty foot\'s placeholder: ' + JSON.stringify(placeholder));
-    // the placeholder moves down with the words the foot's top padding moves down, within the 2 px a
-    // computer's foot shows between them too, so the empty foot reads as the same line a message fills
-    assert.ok(near(placeholder.words.top, said, 3), where + ': the placeholder stands at ' + placeholder.words.top.toFixed(1) + ' and a message\'s words at ' + said.toFixed(1));
-    assert.ok(near(moved, -100, 2) && near(up.foot.height - rest.foot.height, 100, 2), where + ': a finger up 100 moved the grip ' + moved.toFixed(1) + ' and the foot ' + (up.foot.height - rest.foot.height).toFixed(1));
-    assertFits(up, where);
-    assert.deepEqual(errors, []);
-    await context.close();
-  }
-});
-
-await check('P48: each grip says its part\'s size and the bounds it is held to, and says the new size as a drag or the arrow keys change it: the foot\'s, the side column\'s and a token\'s panel\'s, which the script draws later', async () => {
+await check('P48: each grip says its part\'s size and the bounds it is held to, and says the new size as the arrow keys change it: the side column\'s and a token\'s panel\'s, which the script draws later (the foot\'s went with the foot)', async () => {
   const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport: { width: 1280, height: 800 } });
   await loaded(page);
   await sleep(300);
   const saidOn = (pg, sel) => pg.evaluate((s) => { const g = document.querySelector(s); return ['aria-valuenow', 'aria-valuemin', 'aria-valuemax'].map((a) => g.hasAttribute(a) ? Number(g.getAttribute(a)) : null); }, sel);
   const said = (sel) => saidOn(page, sel);
-  const foot = '[data-split="foot"]', side = '[data-split="side"]';
-  const rest = await footOf(page), atRest = await said(foot);
-  await mouseDragFoot(page, -3000);
-  const top = await footOf(page), atTop = await said(foot);
-  await mouseDragFoot(page, 3000);
-  const low = await footOf(page), atLow = await said(foot);
-  await page.focus(foot);
-  await page.keyboard.press('ArrowUp');
-  const keyed = await footOf(page), atKey = await said(foot);
-  console.log('      the foot: at rest', rest.foot.height.toFixed(1), JSON.stringify(atRest), '| at its top', top.foot.height, JSON.stringify(atTop), '| at its least', low.foot.height, JSON.stringify(atLow), '| ArrowUp', keyed.foot.height, JSON.stringify(atKey));
-  assert.ok(atRest.every((v) => v !== null), 'the foot\'s grip says no size or bounds: ' + JSON.stringify(atRest));
-  assert.ok(near(atRest[0], rest.foot.height, 1), 'the foot\'s grip says ' + atRest[0] + ' for a foot ' + rest.foot.height + ' tall');
-  assert.deepEqual([atTop[0], atTop[0]], [atTop[2], Math.round(top.foot.height)], 'dragged to its top, the foot\'s grip says ' + JSON.stringify(atTop));
-  assert.deepEqual([atLow[0], atLow[0]], [atLow[1], Math.round(low.foot.height)], 'dragged to its least, the foot\'s grip says ' + JSON.stringify(atLow));
-  assert.equal(atKey[0], Math.round(keyed.foot.height), 'after ArrowUp the foot\'s grip says ' + atKey[0] + ' for a foot ' + keyed.foot.height);
+  const side = '[data-split="side"]';
   const width = () => page.evaluate(() => document.querySelector('#console .console__side').offsetWidth);
-  const sideAt = await said(side), w0 = await width();
+  // a grip says its size once it takes the focus, as a screen reader meets it (the foot's drag,
+  // which made the side column's grip say its size before, went with the foot)
   await page.focus(side);
+  const sideAt = await said(side), w0 = await width();
   await page.keyboard.press('ArrowRight');
   const sideKey = await said(side), w1 = await width();
   console.log('      the side column:', w0, JSON.stringify(sideAt), '| ArrowRight', w1, JSON.stringify(sideKey));
@@ -4449,6 +3844,167 @@ await check('S3: a refusal to someone who does not administer the repository say
 await check('S4: a refusal when both hold passes GitHub\'s own words on, and blames neither the role nor the installation', async () => {
   const { context, answer, errors } = await inviteNewbie(shareRoutes(true, { administration: 'write', metadata: 'read' }, { status: 403, body: { message: 'Organization policy forbids outside collaborators' } }));
   assert.match(answer, /\(403\) although you administer acme\/demo and SymphonyBoard holds Administration there: .*Organization policy forbids outside collaborators/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+/* ---------- T1 to T5: the note over the screen's foot ---------- */
+// Since 2026-10-20 the page's message is a note floating over the screen's foot, nothing at all
+// while it is empty, and Claude a floating button at the top right (site, "a floating Claude"). The
+// review of that change asked for each of these: a plain note goes by itself and a warning stays;
+// Clear hides a task under way without ending it and gives the focus back; the empty note stays
+// rendered, so the live region announces what is said next; and no tab's last row lies under it.
+const noteFast = real.replace('var NOTE_MS = 8000;', 'var NOTE_MS = 1500;');
+const tokenSideRoutes = (more) => signInRoutes([], Object.assign({ 'GET /repos/acme/demo/actions/secrets': { total_count: 2, secrets: [{ name: 'CLAUDE_CODE_OAUTH_TOKEN' }, { name: 'SYMPHONY_CLAUDE_1' }] } }, more || {}));
+
+await check('T1: a plain note goes by itself after a while, a warning stays until Clear', async () => {
+  assert.notEqual(noteFast, real, 'the note\'s time was not found in the script');
+  let refuse = false;
+  const routes = tokenSideRoutes({ 'POST /repos/acme/demo/actions/workflows/pool.yml/dispatches': () => refuse ? { status: 404, body: { message: 'Not Found' } } : null });
+  const { context, page, errors } = await open({ script: noteFast, routes, path: '/symphony/control/?repo=acme/demo#tokens', storage: asTester, viewport: { width: 1280, height: 900 } });
+  await loaded(page);
+  await page.waitForSelector('#tk-tile-1', { timeout: 10000 });
+  await page.evaluate(() => document.getElementById('tk-tile-1').click());
+  await page.waitForSelector('#tk-probe', { timeout: 5000 });
+  await page.evaluate(() => document.getElementById('tk-probe').click());
+  await untilFoot(page, 'Reading every token', 5000);
+  await sleep(2600);
+  const plain = await footText(page);
+  refuse = true;
+  await page.evaluate(() => document.getElementById('tk-probe').click());
+  await untilFoot(page, 'no workflow Pool yet', 5000);
+  await sleep(2600);
+  const warned = await page.evaluate(() => ({ text: document.getElementById('msg').textContent, warn: document.getElementById('msg').classList.contains('admin__warn') }));
+  await page.click('#cp-msg-close');
+  const cleared = await footText(page);
+  console.log('      the plain note after its time:', JSON.stringify(plain), '| the warning:', JSON.stringify(warned).slice(0, 120), '| after Clear:', JSON.stringify(cleared));
+  assert.equal(plain, '', 'the plain note stayed past its time');
+  assert.ok(warned.warn && /no workflow Pool yet/.test(warned.text), 'the warning went by itself: ' + JSON.stringify(warned));
+  assert.equal(cleared, '', 'Clear left the warning');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('T2: Clear hides a task under way without ending it: its run is still followed, and nothing is started again (P5 holds that the Sign-in waiting tile shows a hidden sign-in again)', async () => {
+  const routes = runRoutes('success', 1000);
+  let dispatched = 0, reads = 0;
+  routes['POST /repos/acme/demo/actions/workflows/workers.yml/dispatches'] = () => { dispatched++; return null; };
+  const jobs = routes['GET /repos/acme/demo/actions/runs/11/jobs'];
+  routes['GET /repos/acme/demo/actions/runs/11/jobs'] = (req) => { reads++; return jobs(req); };
+  const { context, page, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo', storage: asTester });
+  await loaded(page);
+  await page.click('#cp-run-workers');
+  await untilFoot(page, 'Queued on main', 5000);
+  await page.waitForFunction(() => document.querySelector('#msg .msgtask[data-state="live"]'), null, { timeout: 15000 });
+  await page.click('#cp-msg-close');
+  const after = await footText(page), at = reads;
+  const start = Date.now();
+  while (reads === at && Date.now() - start < 30000) await sleep(250);
+  const goneOn = reads > at;
+  console.log('      after Clear:', JSON.stringify(after), '| reads went on:', goneOn, reads - at, '| dispatches:', dispatched);
+  assert.equal(after, '', 'Clear left the note');
+  assert.ok(goneOn, 'the task\'s run was read no more once Clear hid it');
+  assert.equal(dispatched, 1, 'Clear started the workers again');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('T3: Clear gives the focus back where it was before it went into the note, never leaving it on the emptied note', async () => {
+  const routes = runRoutes('success', 3);
+  routes['POST /repos/acme/demo/actions/workflows/board.yml/dispatches'] = { status: 403, body: { message: 'Resource not accessible by personal access token' } };
+  const { context, page, errors } = await open({ script: real, routes, path: '/symphony/control/?repo=acme/demo', storage: asTester });
+  await loaded(page);
+  await page.click('#cp-run-board');
+  await untilFoot(page, 'Starting a workflow needs Actions', 5000);
+  await page.focus('#cp-msg-close');
+  await page.keyboard.press('Enter');
+  await sleep(300);
+  const f = await page.evaluate(() => ({ focus: document.activeElement && document.activeElement.id, msg: document.getElementById('msg').textContent }));
+  console.log('      after Clear by the keyboard:', JSON.stringify(f));
+  assert.equal(f.msg, '', 'Clear left the note');
+  assert.equal(f.focus, 'cp-run-board', 'the focus did not go back to the button that spoke: ' + f.focus);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('T4: the empty note stays rendered, unseen and taking no press, so the live region announces what is said next, and shows once something is said', async () => {
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo', storage: asTester });
+  await loaded(page);
+  await page.evaluate(() => { const m = document.getElementById('msg'); while (m.firstChild) m.removeChild(m.firstChild); });
+  await sleep(400);
+  const look = () => page.evaluate(() => { const st = document.querySelector('.console__status'), c = getComputedStyle(st), m = document.getElementById('msg'); return { display: c.display, visibility: c.visibility, opacity: c.opacity, events: c.pointerEvents, live: m.getAttribute('aria-live'), role: m.getAttribute('role'), mdisplay: getComputedStyle(m).display }; });
+  const empty = await look();
+  await page.evaluate(() => { document.getElementById('msg').textContent = 'Saved.'; });
+  await sleep(400);
+  const said = await look();
+  console.log('      empty:', JSON.stringify(empty), '| said:', JSON.stringify(said));
+  assert.ok(empty.display !== 'none' && empty.mdisplay !== 'none' && empty.visibility !== 'hidden', 'the empty note is not rendered, so a live region would miss what is said next: ' + JSON.stringify(empty));
+  assert.deepEqual([empty.opacity, empty.events, empty.live, empty.role], ['0', 'none', 'polite', 'status']);
+  assert.deepEqual([said.opacity, said.events], ['1', 'auto'], 'a note said does not show: ' + JSON.stringify(said));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// a note of several lines, a warning so it stays
+const sayLong = (page) => page.evaluate(() => {
+  const m = document.getElementById('msg');
+  m.textContent = '';
+  const p = document.createElement('p');
+  p.className = 'msg__note';
+  p.textContent = 'A long note over the screen\'s foot. '.repeat(16);
+  m.appendChild(p);
+  m.className = 'admin__box admin__warn';
+});
+// In the page: the shown tab's scrolling box run to its end, its last thing that shows, and the note
+function lastRow() {
+  const panel = Array.from(document.querySelectorAll('[data-tab-panel]')).find((p) => !p.hidden);
+  const scrollers = [panel].concat(Array.from(panel.querySelectorAll('*'))).filter((n) => n.scrollHeight > n.clientHeight + 2 && /auto|scroll/.test(getComputedStyle(n).overflowY));
+  scrollers.forEach((n) => { n.scrollTop = n.scrollHeight; });
+  const shown = Array.from(panel.querySelectorAll('p, li, tr, button, summary, h3')).filter((n) => n.checkVisibility() && n.getClientRects().length);
+  const last = shown.reduce((a, n) => (!a || n.getBoundingClientRect().bottom > a.getBoundingClientRect().bottom ? n : a), null);
+  const note = document.querySelector('.console__status').getBoundingClientRect();
+  return { tab: panel.id, scrollers: scrollers.length, last: last ? Math.round(last.getBoundingClientRect().bottom) : null, note: Math.round(note.top), noteH: Math.round(note.height), ih: innerHeight };
+}
+await check('T5: a long note never lies over a tab\'s last row: the tab gives up the note\'s height at its foot, on a laptop, a short window and a phone', async () => {
+  const seen = {};
+  for (const [viewport, mobile] of [[{ width: 1280, height: 800 }, false], [{ width: 900, height: 500 }, false], [{ width: 390, height: 844 }, true]]) {
+    const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#about', storage: asTester, viewport, mobile });
+    await loaded(page);
+    if (await page.isVisible('#rail-about')) await page.click('#rail-about');
+    await sleep(400);
+    await sayLong(page);
+    await sleep(500);
+    const f = await page.evaluate(lastRow);
+    const what = viewport.width + ' x ' + viewport.height;
+    seen[what] = f;
+    assert.ok(f.noteH > 60 && f.scrollers > 0 && f.last !== null, what + ': the note is not long or the tab does not scroll, so this says nothing: ' + JSON.stringify(f));
+    assert.ok(f.last <= f.note + 1, what + ': the tab\'s last row ends at ' + f.last + ', under the note from ' + f.note);
+    assert.deepEqual(errors, [], what);
+    await context.close();
+  }
+  console.log('      ' + JSON.stringify(seen));
+});
+
+// T6: since the foot went, the side column's grip is the one a finger meets on a touch screen (a
+// tablet held upright is wide enough for the side column; a phone folds it), so its touch-action is
+// what keeps the browser from taking the finger's drag for a pan
+await check('T6: on a tablet, a finger dragging the side column\'s grip widens the column with it rather than the browser panning the page', async () => {
+  const { context, page, errors } = await open({ script: real, path: '/symphony/control/?repo=acme/demo#command', storage: asTester, viewport: { width: 1024, height: 1366 }, mobile: true });
+  await loaded(page);
+  await sleep(400);
+  const widthOf = () => page.evaluate(() => document.querySelector('#console .console__side').getBoundingClientRect().width);
+  const g = await page.evaluate(() => { const r = document.querySelector('[data-split="side"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + Math.min(r.height / 2, 200), shown: r.width > 0 && r.height > 0 }; });
+  assert.equal(g.shown, true, 'the side column\'s grip is not shown on a tablet held upright');
+  const before = await widthOf();
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: g.x, y: g.y }] });
+  for (let i = 1; i <= 10; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: g.x + 6 * i, y: g.y }] }); await sleep(16); }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+  await sleep(300);
+  const after = await widthOf();
+  console.log('      the side column before', before, '| after a 60px finger drag', after);
+  assert.ok(after - before > 40, 'a finger dragging the side grip 60px moved the column by ' + (after - before) + 'px');
   assert.deepEqual(errors, []);
   await context.close();
 });
