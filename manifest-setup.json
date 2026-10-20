@@ -10,6 +10,8 @@
   "public": true,
   "default_permissions": {
     "administration": "write",
+    "pages": "write",
+    "actions_variables": "write",
     "metadata": "read",
     "organization_administration": "write",
     "organization_secrets": "write",

@@ -64,7 +64,7 @@ installations may use the App.
 | app/envfile.py | The env file register.py writes and the server reads |
 | app/vendor/ | protocol_check.py and claims.py from symphony-protocol, with its `__init__.py` and vendoring.py, and VENDORED, the record they are held to (vendor/README.md) |
 | manifest.json | The App's manifest: name, permissions, events |
-| manifest-setup.json | The setup App's manifest: Administration and Metadata, the organization's Administration, Secrets and Variables, public, no webhook (The Setup App for the front door) |
+| manifest-setup.json | The setup App's manifest: Administration, Pages, Variables and Metadata, the organization's Administration, Secrets and Variables, public, no webhook (The Setup App for the front door) |
 | scripts/register.py | Registers the App, or with `--setup` the setup App, for an organization by GitHub's manifest flow |
 | scripts/collect.py | Collects the field metrics projects share, daily from .github/workflows/collect.yml (Field metrics) |
 | scripts/check.sh | The checks; CI's job `check` runs it |
@@ -200,8 +200,12 @@ pull requests" that a new organization holds off for its repositories
 14), and the organization's Secrets and Variables (write), to add the
 repository adopted to the lists of repositories that read the requester's
 own token slots of the organization's pool and the pool's two variables
-(symphony-start#72; the Apps' privacy statement, version 32), and nothing
-else, no webhook and no events, and an adopter
+(symphony-start#72; the Apps' privacy statement, version 32), and, on
+the repository, Pages and Variables (write), with which the run turns on
+GitHub Pages built by GitHub Actions and sets the variable SYMPHONY_DOCS
+for the whole template's documentation site, on a token of its own so an
+installation that has not accepted them still adopts (symphony-start#89),
+and nothing else, no webhook and no events, and an adopter
 installs it on the one repository for that one run and uninstalls it
 afterwards; the run mints its token for that repository alone, and the
 repository's settings need no step by hand.
