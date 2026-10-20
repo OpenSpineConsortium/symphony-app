@@ -504,7 +504,7 @@ await check('XP11: at 1440 x 900, on a phone upright and on one sideways, the le
   }
 });
 
-await check('XP12: Panel, or a press on the folded side column or foot, brings them back; Panel folds them again, and another tab shows the console as it was', async () => {
+await check('XP12: Panel, or a press on the folded side column, brings it back (the foot it brought back too went with the foot on 2026-10-20); Panel folds them again, and another tab shows the console as it was', async () => {
   const { context, page, errors } = await open(routes());
   try {
     await toExplore(page);
@@ -517,15 +517,15 @@ await check('XP12: Panel, or a press on the folded side column or foot, brings t
     assert.equal(await page.getAttribute('#ex-wide', 'aria-pressed'), 'true');
     await page.click('#ex-wide');
     assert.ok(await sideW() < 80, 'Panel did not fold the side column again');
-    // a press on the foot's empty part
-    const foot = await page.$eval('.console__status', (n) => { const r = n.getBoundingClientRect(); return { x: r.right - 6, y: r.top + r.height / 2 }; });
-    await page.mouse.click(foot.x, foot.y);
-    assert.ok(await sideW() > 150, 'a press on the folded foot did not bring the panel back');
+    // a press on the folded column's empty part, under its tab buttons
+    const side = await page.$eval('.console__side', (n) => { const r = n.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.bottom - 12 }; });
+    await page.mouse.click(side.x, side.y);
+    assert.ok(await sideW() > 150, 'a press on the folded side column did not bring the panel back');
     await page.click('#ex-wide');
     await page.click('#rail-board');
     await page.waitForFunction(() => location.hash === '#board');
     assert.ok(await sideW() > 150, 'another tab kept the side column folded');
-    assert.ok(await page.isVisible('#cp-refresh'), 'another tab kept the foot folded');
+    assert.ok(await page.isVisible('#cp-refresh'), 'another tab kept Refresh folded away');
     await page.click('#rail-explore');
     await page.waitForFunction(() => location.hash === '#explore');
     assert.ok(await sideW() < 80, 'coming back to Explore did not fold the side column');

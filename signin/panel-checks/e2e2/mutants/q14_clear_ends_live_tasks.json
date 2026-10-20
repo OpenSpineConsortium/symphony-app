@@ -1,0 +1,1 @@
+[["      msgTasks.forEach(function (t) { if (t.live) t.hide(); });\n", "      msgTasks.forEach(function (t) { t.live = false; });\n"]]

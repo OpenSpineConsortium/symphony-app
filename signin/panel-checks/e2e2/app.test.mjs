@@ -5,7 +5,8 @@
 // standalone, with the icons it names each a PNG of the size it says and one of them maskable;
 // Apple's touch icon and its head lines for iOS; and a viewport that covers the whole screen, with
 // every part of the page that reaches the screen's edge (the header and its drawer, the section
-// strip, the deck, the status line, the Ask Claude drawer, the breadcrumb and the footer) keeping
+// strip, the deck, the note over the screen's foot and the floating Claude button, the Ask Claude
+// drawer, the breadcrumb and the footer) keeping
 // its words inside a phone's or a tablet's safe areas, which Chromium plays through
 // Emulation.setSafeAreaInsetsOverride, while nothing moves where there are none; and the Full
 // screen button offered only where the browser can make a page full screen. Each check states what
@@ -60,12 +61,21 @@ function pngSize(buf) {
 }
 const px = (v) => parseFloat(v);
 
-// In the page: the bottom of the status line's words and buttons as they show, with how many show,
-// so a status line with nothing in it cannot pass for one that stands clear
+// In the page: the bottom of the note's words and buttons as they show, with how many show, so a
+// note with nothing in it cannot pass for one that stands clear, and how far the note's box stands
+// off the screen's bottom (since 2026-10-20 the page's message is a note floating over the screen's
+// foot, in place of a status line resting on it)
 function statusFoot() {
   const st = document.querySelector('.console__status');
   const parts = [document.getElementById('msg')].concat(Array.from(st.querySelectorAll('button'))).filter((e) => e && e.getClientRects().length);
-  return { foot: Math.max.apply(null, parts.map((e) => e.getBoundingClientRect().bottom)), shown: parts.length, height: window.innerHeight, status: getComputedStyle(st).paddingBottom };
+  return { foot: Math.max.apply(null, parts.map((e) => e.getBoundingClientRect().bottom)), shown: parts.length, height: window.innerHeight, off: Math.round(window.innerHeight - st.getBoundingClientRect().bottom) };
+}
+// In the page, the panel's app shown as a sign-in shows it: how far the floating Claude button
+// stands off the screen's top and right edges
+function claudeButton() {
+  document.getElementById('cp-app').classList.remove('hidden');
+  const b = document.getElementById('cp-claude'), r = b.getBoundingClientRect();
+  return { shown: b.getClientRects().length > 0, top: Math.round(r.top), right: Math.round(document.documentElement.clientWidth - r.right) };
 }
 // In the page: for each part, by a selector for what is drawn inside it, the leftmost left and the
 // rightmost right of everything of it that shows, with how many show
@@ -164,7 +174,7 @@ await check('H2: iOS gets a 180 px touch icon, the head lines that open the page
   } finally { await context.close(); }
 });
 
-await check('H3: where the screen has no safe areas, a computer\'s or a phone\'s, nothing moves: the deck keeps its padding, the status line its own, the header the window\'s width and its own padding, and the strip, the breadcrumb and the footer theirs', async () => {
+await check('H3: where the screen has no safe areas, a computer\'s or a phone\'s, nothing moves: the deck keeps its padding, the note and the Claude button their places, the header the window\'s width and its own padding, and the strip, the breadcrumb and the footer theirs', async () => {
   for (const [viewport, mobile, side, band] of [[{ width: 1280, height: 900 }, false, '32px', '32px'], [{ width: 1000, height: 800 }, false, '20px', '32px'], [{ width: 390, height: 844 }, true, '16px', '16px']]) {
     const { context, page } = await open(viewport, null, mobile);
     try {
@@ -174,13 +184,16 @@ await check('H3: where the screen has no safe areas, a computer\'s or a phone\'s
         const r = nav.getBoundingClientRect();
         const pad = (sel) => { const s = getComputedStyle(document.querySelector(sel)); return [s.paddingLeft, s.paddingRight]; };
         return { left: c.paddingLeft, right: c.paddingRight, bottom: c.paddingBottom,
-          status: getComputedStyle(document.querySelector('.console__status')).paddingBottom, nav: [r.left, r.right], width: document.documentElement.clientWidth,
+          status: Math.round(innerHeight - document.querySelector('.console__status').getBoundingClientRect().bottom), nav: [r.left, r.right], width: document.documentElement.clientWidth,
           navPad: pad('#nav'), bands: [pad('.subnav--fly.is-here .subnav__in'), pad('.crumbs'), pad('.footer')] };
       });
-      // on a phone the deck is fixed over the screen with no foot padding of its own: the status
-      // line's own padding holds it off the screen's bottom
+      // on a phone the deck is fixed over the screen with no foot padding of its own; the note
+      // floats 14 px over the screen's bottom, and the Claude button 16 px under its top and 26 px
+      // in from its right on a computer, 32 px and 20 px on a phone
       assert.deepEqual([got.left, got.right, got.bottom], ['14px', '14px', mobile ? '0px' : '12px'], 'the deck\'s padding moved at ' + viewport.width + ' px');
-      assert.equal(got.status, mobile ? '6px' : '0px', 'the status line\'s padding moved at ' + viewport.width + ' px');
+      assert.equal(got.status, 14, 'the note moved off the screen\'s bottom at ' + viewport.width + ' px');
+      const b = await page.evaluate(claudeButton);
+      assert.deepEqual(b, { shown: true, top: mobile ? 32 : 16, right: mobile ? 20 : 26 }, 'the Claude button moved at ' + viewport.width + ' px');
       assert.deepEqual(got.nav, [0, got.width], 'the header no longer spans the window at ' + viewport.width + ' px');
       assert.deepEqual(got.navPad, [side, side], 'the header\'s own padding moved at ' + viewport.width + ' px');
       assert.deepEqual(got.bands, [[band, band], [band, band], [band, band]], 'the strip\'s, the breadcrumb\'s or the footer\'s padding moved at ' + viewport.width + ' px');
@@ -188,18 +201,19 @@ await check('H3: where the screen has no safe areas, a computer\'s or a phone\'s
   }
 });
 
-await check('H4: on a phone held upright, installed, the status line\'s words and buttons stand clear of the home bar, by its own padding', async () => {
-  const { context, page } = await open({ width: 390, height: 844 }, { top: 0, bottom: 34, left: 0, right: 0 }, true);
+await check('H4: on a phone held upright, installed, the note\'s words and buttons stand clear of the home bar, the note floating its 14 px over it, and the Claude button its 32 px under the status bar\'s inset', async () => {
+  const { context, page } = await open({ width: 390, height: 844 }, { top: 47, bottom: 34, left: 0, right: 0 }, true);
   try {
     await page.evaluate(() => window.scrollTo(0, 0));
     const got = await page.evaluate(statusFoot);
-    assert.ok(got.shown > 0, 'the status line shows nothing to measure');
-    assert.ok(got.foot <= got.height - 34 + 0.5, 'the status line reaches ' + (got.height - got.foot) + ' px from the foot, under the home bar');
-    assert.equal(px(got.status), 6 + 34);
+    assert.ok(got.shown > 0, 'the note shows nothing to measure');
+    assert.ok(got.foot <= got.height - 34 + 0.5, 'the note reaches ' + (got.height - got.foot) + ' px from the foot, under the home bar');
+    assert.equal(got.off, 14 + 34);
+    assert.deepEqual(await page.evaluate(claudeButton), { shown: true, top: 47 + 32, right: 20 }, 'the Claude button is not held under the status bar\'s inset');
   } finally { await context.close(); }
 });
 
-await check('H5: on a phone held sideways, installed, the header\'s bar and the deck\'s dark ground run to the screen\'s edges while the brand, the menu and its drawer, the deck\'s content, the strip, the Ask Claude drawer, the breadcrumb and the footer keep inside the notch on either side, and the status line\'s words and buttons stand clear of the home bar', async () => {
+await check('H5: on a phone held sideways, installed, the header\'s bar and the deck\'s dark ground run to the screen\'s edges while the brand, the menu and its drawer, the deck\'s content, the strip, the Ask Claude drawer, the breadcrumb and the footer keep inside the notch on either side, and the note\'s words and buttons stand clear of the home bar', async () => {
   const insets = { top: 0, bottom: 21, left: 47, right: 47 };
   const { context, page } = await open({ width: 844, height: 390 }, insets, true);
   try {
@@ -218,19 +232,26 @@ await check('H5: on a phone held sideways, installed, the header\'s bar and the 
     assert.ok(got.inner[0] >= 47 + 14 && got.inner[1] <= W - 47 - 14, 'the deck\'s content runs under the notch: ' + got.inner.join(' to '));
     assert.deepEqual(got.deck, [0, W], 'the deck\'s dark ground no longer runs to the screen\'s edges');
     const foot = await page.evaluate(statusFoot);
-    assert.ok(foot.shown > 0, 'the status line shows nothing to measure');
-    assert.ok(foot.foot <= foot.height - 21 + 0.5, 'the status line reaches ' + (foot.height - foot.foot) + ' px from the foot, under the home bar');
-    assert.equal(px(foot.status), 6 + 21);
+    assert.ok(foot.shown > 0, 'the note shows nothing to measure');
+    assert.ok(foot.foot <= foot.height - 21 + 0.5, 'the note reaches ' + (foot.height - foot.foot) + ' px from the foot, under the home bar');
+    assert.equal(foot.off, 14 + 21);
+    // held sideways the button takes the short screen's place, 6 px under the top and 10 px in from
+    // the notch on the right
+    assert.deepEqual(await page.evaluate(claudeButton), { shown: true, top: 6, right: 47 + 10 }, 'the Claude button runs under the notch');
     assertInside(await page.evaluate(partEdges, BANDS_PHONE), 47, W - 47);
-    // the answer's drawer, shown as an answer shows it: fixed to the screen in the phone layout
+    // the answer's drawer, shown as an answer shows it: inside the Claude dialog the floating button
+    // opens (since 2026-10-20; it was fixed to the screen's foot before)
     const drawer = await page.evaluate(() => {
       document.getElementById('cp-app').classList.remove('hidden');
       document.getElementById('cp-as-drawer').hidden = false;
       document.getElementById('cp-as-answer').textContent = 'A line of the answer, long enough to run across the whole drawer from one side to the other side.';
-      return getComputedStyle(document.getElementById('cp-as-drawer')).position;
+      const d = document.getElementById('dlg-claude');
+      if (!d.open) d.showModal();
+      return { open: d.open, inside: !!document.getElementById('cp-as-drawer').closest('#dlg-claude') };
     });
-    assert.equal(drawer, 'fixed', 'the answer\'s drawer is not fixed to the screen, so this does not measure what a phone shows');
-    assertInside(await page.evaluate(partEdges, [['the Ask Claude drawer', '#cp-as-drawer'], ['its Close', '#cp-as-close'], ['its words', '#cp-as-drawer .console__askhead strong, #cp-as-answer']]), 47, W - 47);
+    assert.deepEqual(drawer, { open: true, inside: true }, 'the answer\'s drawer is not in the open Claude dialog, so this does not measure what a phone shows');
+    assertInside(await page.evaluate(partEdges, [['the Claude dialog\'s content', '#dlg-claude *'], ['the Ask Claude drawer', '#cp-as-drawer'], ['its Close', '#cp-as-close'], ['its words', '#cp-as-drawer .console__askhead strong, #cp-as-answer']]), 47, W - 47);
+    await page.evaluate(() => document.getElementById('dlg-claude').close());
     assertInside(await openNavDrawer(page), 47, W - 47);
     const open = await page.evaluate(() => { const b = document.getElementById('navLinks').getBoundingClientRect(); return [b.left, b.right, document.getElementById('navLinks').classList.contains('is-open')]; });
     assert.deepEqual(open, [0, W, true], 'the header\'s drawer is not open from edge to edge');
@@ -266,15 +287,16 @@ await check('H6: on a large phone held sideways, wider than 900 px, the header k
   } finally { await context.close(); }
 });
 
-await check('H7: on a tablet held sideways, installed, the deck keeps its desktop layout and its own foot pads the home bar, so the status line\'s words and buttons stand clear of it', async () => {
+await check('H7: on a tablet held sideways, installed, the deck keeps its desktop layout and its own foot pads the home bar, so the note\'s words and buttons stand clear of it', async () => {
   const { context, page } = await open({ width: 1180, height: 820 }, { top: 0, bottom: 20, left: 0, right: 0 }, true);
   try {
     const deck = await page.evaluate(() => { const c = getComputedStyle(document.getElementById('console')); return { overflow: c.overflow, bottom: c.paddingBottom, scrollY: window.scrollY }; });
     assert.equal(deck.overflow, 'hidden', 'the deck is not in its desktop layout at 1180 x 820');
     assert.equal(px(deck.bottom), 12 + 20);
     const foot = await page.evaluate(statusFoot);
-    assert.ok(foot.shown > 0, 'the status line shows nothing to measure');
-    assert.ok(foot.foot <= foot.height - 20 + 0.5, 'the status line reaches ' + (foot.height - foot.foot) + ' px from the foot, under the home bar');
+    assert.ok(foot.shown > 0, 'the note shows nothing to measure');
+    assert.ok(foot.foot <= foot.height - 20 + 0.5, 'the note reaches ' + (foot.height - foot.foot) + ' px from the foot, under the home bar');
+    assert.equal(foot.off, 14 + 20);
   } finally { await context.close(); }
 });
 

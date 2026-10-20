@@ -13,11 +13,11 @@ ghu_TEST or github_pat_X.
 
 ## What is here
 
-- `e2e2/signin.test.mjs`: 160 checks of the sign-in and the console's foot, run against a mocked
+- `e2e2/signin.test.mjs`: 132 checks of the sign-in and the console's note, run against a mocked
   api.github.com, a mocked GitHub authorize page and a mocked sign-in service at
   https://signin.example.test. Some checks run both ways in, Sign in with GitHub and a pasted
-  token. P1 to P22 (site pull request #78, 2026-10-19) hold the work a button starts, spoken at
-  the deck's foot, and the phone: a followed run with its link, steps, log tail and end, a failed
+  token. P1 to P22 (site pull request #78, 2026-10-19) hold the work a button starts, spoken in
+  the note, and the phone: a followed run with its link, steps, log tail and end, a failed
   run, a refused start as a plain line, a task kept through a message, the token sign-in drawn in
   the foot with the dialog closed at once, every tab fitting a phone with Refresh holding the page,
   a long message leaving Clear reachable; reads of a run retried before giving up, a run left when
@@ -37,77 +37,60 @@ ghu_TEST or github_pat_X.
   none selected, and a list an older page left readable by the private repositories, or by all,
   closed, its value kept, when an owner opens the Tokens tab, a close GitHub refuses let go without
   a word, and the last repository taken off deleting the list.
-  P25 to P38 (site branch claude/panel-resize-autohide, 2026-10-19, after the owner's "i should be
-  able to resize all 3, when im in the control panel the top nav panel should hide and reappear when
-  the mouse is over it, like windows does with its taskbar") hold the message foot as the third part
-  a person sizes, and the site's bar hiding itself on the control page. The foot's grip lies along
-  its top, its bottom on the foot's top edge, a separator with a quiet bar, over none of the
-  message's words, that a mouse drags, up to grow the foot and down to shrink it, the stage giving
-  up or taking back exactly what the foot takes (P25); a finger drags it on a phone either way up
-  without scrolling the page, the grip a thumb's, 96 to 160 px wide about its bar, and over none of
-  the message's words, the foot's buttons or the empty foot's placeholder (P26); the arrow keys step
-  it by 16 px and a double-click puts it back as tall as its message (P27); its size is kept across
-  a reload, read back only as a number in the part's bounds with the rest of the record kept, held
-  to what the window leaves, and a window made shorter takes the foot down and gives it back (P28);
-  it is held between one line of message with Clear and its buttons, whole and pressable, and what
-  leaves the stage 180 px, at 1280 x 800, 1440 x 900 and 1920 x 1080, at the smallest and the
-  largest text, on a phone upright and sideways, while the Ask Claude bar grows, and in a narrow
-  window by the mouse or on a phone by a finger with the smallest or the largest text saved, which
-  neither applies, a grip dragged past the window's top calling no bar (P29, and P41 for any press
-  held there); the grip follows the pointer under every text size, and a finger on a phone whatever
-  text size a computer saved (P30); and a long task box, a failed run of fourteen steps with its
-  log, keeps a small foot its size, its first line showing, Clear pressable and the rest scrolled
-  inside the message box, fills a foot sized tall past the box's usual cap, and grows a foot nobody
-  sized to that cap as before (P31). On a computer every one of them finds the deck filling the
-  window with no page scroll either way; a phone's page scrolls under its sticky foot by design
-  (P6), so there the page is held to the window's width, the foot to the window's bottom and the
-  drags to scroll nothing. The bar is hidden from the start, wholly above the window, the deck
-  starting at the window's top or the Home Screen app's top inset, with neither the hot strip nor
-  the phone's handle over a control of the deck or the words of its title (P32); the pointer at the
-  top edge brings it back over the deck, which does not move, and it stays while the pointer is over
-  it, though the focus passes through it and out, or over a section strip it dropped, goes a moment
-  after the pointer leaves and not at once, comes for a pointer leaving the window across the top
-  and not for one passing just under the edge or leaving by a side near the top, goes after its wait
-  when a pointer grazes the edge and is back on the deck before the bar is under it, and is opaque
-  over the deck (P33); Tab from the page's start brings it, it goes after its wait when the focus
-  leaves and stays while the focus moves in it, and Escape sends it away at once with the focus
-  (P34); on a phone the handle, a tab in the site's colours at the top centre, shows it for a tap or
-  a swipe down, a tap outside sends it at once and four seconds do too, a touch in the bar starts
-  the wait again, the menu opened from it holds it past that wait and closes with it, the menu
-  opened and closed by two taps on its button leaves the bar to go after its wait, since a tap's
-  focus is no keyboard's, and a swipe down on the handle with the page scrolled shows the bar and
-  scrolls nothing (P35); full screen hides the bar, the strip and the handle, and leaving it gives
-  them back (P36); where less motion is asked the bar shows with no slide, on a computer and on a
-  phone, and slides otherwise (P37); and the rest of the site, /symphony/, the cost page and the
-  home page, keeps its bar at the top with no strip and no handle (P38). P39 to P48 (the same branch
-  and day, after its adversarial review) hold what that review found: the foot's grip lies in the
-  gap above the foot and in the Ask Claude bar's bottom padding, over none of the foot's buttons and
-  none of the bar's content at any text size, sized or not, so a press just inside a button's top
-  edge is the button's and a double press on A+ leaves the foot its size (P39); on a fresh load with
-  the script slow to come, the bar is above the window from the first frame the page paints and
-  never slides, and the deck never moves, on a computer and on a phone (P40); a text selection or a
-  press run up to the window's top, or a pointer leaving across the top just after a move with a
-  button held, brings no bar, and the edge still brings it to a pointer with no button held (P41); a
-  grip pressed while the focus is in the shown bar sends the bar away with the focus, so Enter
-  follows no link nobody sees (P42); where the page scrolls, the foot rests on the window's bottom
-  on every phone tab at the page's top, and its grip stays under the finger or the mouse at every
-  step of a drag as well as after it, on a short tab and with the page scrolled past the deck's end,
-  on a phone either way up, a tablet upright and a narrow window (P43); a thumb swiping up beside
-  the grip's middle scrolls the page and leaves the foot its size (P44); on a touch-first screen
-  with a mouse too, the mouse leaving across the top brings the bar and the mouse resting on it
-  keeps it past a touch's wait (P45: the screen is made by a stub of matchMedia, since Chromium's
-  emulation answers no hover feature as such a screen does, and the strip along the top is held by
-  reading the stylesheet's own rule, shown under (any-hover: hover), which nothing in Chromium can
-  show on such a screen); the handle's whole press area is the tab a person sees, so a tap just
-  below it presses what is there and shows no bar (P46); on a tablet either way up the grip is a
-  thumb's, over none of the buttons, the message's words or the placeholder, which stands where a
-  message's words do, and a finger drags it (P47); and each grip says its part's size and the bounds
-  it is held to as a separator, and the new size as a drag or the arrow keys change it, the foot's,
-  the side column's and a token's panel's, which the script draws later (P48). `CSS_MUTANT` names a
+  P32 to P38 (site branch claude/panel-resize-autohide, 2026-10-19, after the owner's "when im in
+  the control panel the top nav panel should hide and reappear when the mouse is over it, like
+  windows does with its taskbar") hold the site's bar hiding itself on the control page. The bar is
+  hidden from the start, wholly above the window, the deck starting at the window's top or the Home
+  Screen app's top inset, with neither the hot strip nor the phone's handle over a control of the
+  deck or the words of its title (P32); the pointer at the top edge brings it back over the deck,
+  which does not move, and it stays while the pointer is over it, though the focus passes through it
+  and out, or over a section strip it dropped, goes a moment after the pointer leaves and not at
+  once, comes for a pointer leaving the window across the top and not for one passing just under the
+  edge or leaving by a side near the top, goes after its wait when a pointer grazes the edge and is
+  back on the deck before the bar is under it, and is opaque over the deck (P33); Tab from the
+  page's start brings it, it goes after its wait when the focus leaves and stays while the focus
+  moves in it, and Escape sends it away at once with the focus (P34); on a phone the handle, a tab in
+  the site's colours at the top centre, shows it for a tap or a swipe down, a tap outside sends it at
+  once and four seconds do too, a touch in the bar starts the wait again, the menu opened from it
+  holds it past that wait and closes with it, the menu opened and closed by two taps on its button
+  leaves the bar to go after its wait, since a tap's focus is no keyboard's, and a swipe down on the
+  handle with the page scrolled shows the bar and scrolls nothing (P35); full screen hides the bar,
+  the strip and the handle, and leaving it gives them back (P36); where less motion is asked the bar
+  shows with no slide, on a computer and on a phone, and slides otherwise (P37); and the rest of the
+  site, /symphony/, the cost page and the home page, keeps its bar at the top with no strip and no
+  handle (P38). From the same branch's adversarial review: on a fresh load with the script slow to
+  come, the bar is above the window from the first frame the page paints and never slides, and the
+  deck never moves, on a computer and on a phone (P40); a text selection or a press run up to the
+  window's top, or a pointer leaving across the top just after a move with a button held, brings no
+  bar, and the edge still brings it to a pointer with no button held (P41); the side column's grip
+  pressed while the focus is in the shown bar sends the bar away with the focus, so Enter follows no
+  link nobody sees (P42); on a touch-first screen with a mouse too, the mouse leaving across the top
+  brings the bar and the mouse resting on it keeps it past a touch's wait (P45: the screen is made
+  by a stub of matchMedia, since Chromium's emulation answers no hover feature as such a screen
+  does, and the strip along the top is held by reading the stylesheet's own rule, shown under
+  (any-hover: hover), which nothing in Chromium can show on such a screen); the handle's whole press
+  area is the tab a person sees, so a tap just below it presses what is there and shows no bar
+  (P46); and the side column's grip and a token's panel's, which the script draws later, each say
+  their part's size and the bounds it is held to as a separator once the focus is on them, and the
+  new size as a drag or the arrow keys change it (P48). The message foot the owner asked to size
+  that day, and its checks P25 to P31, P39, P43, P44 and P47, went on 2026-10-20 with the floating
+  Claude (site branch claude/project-thread-6cxgh2): the page's message is a note floating over the
+  screen's foot, empty and unseen when there is nothing to say, and Claude a button at the top right
+  that opens a dialog holding the box and the answer, so nothing at the foot sizes. P6 holds the
+  note fixed to the window's bottom on a phone. T1 to T6 hold the note and what is left to drag: a
+  plain note goes by itself and a warning stays until Clear (T1, with the note's time shortened in
+  the served script); Clear leaves a task under way working, only hidden (T2), and gives the focus
+  back to where it was before it went into the note (T3); the empty note stays rendered,
+  transparent and deaf to the pointer, so its live region still announces the next (T4); a long
+  note never lies over a tab's last row on a laptop, a short window or a phone (T5); and on a
+  tablet a finger dragging the side column's grip widens the column rather than panning the page,
+  the grip a finger now meets since the foot's went (T6). G1 and P11 hold that a note said on the
+  sign-in stays there, since it is the only word of why the panel is signed out, and I4 that it
+  never covers the gate's button. `CSS_MUTANT` names a
   list of pairs for control.css, served in its place, as `MUTANT` names one for the script.
 - `e2e2/panel.test.mjs`: the panel's walkthrough on both pages.
 - `e2e2/hostile.test.mjs`: 13 hostile-input checks.
-- `e2e2/assistant.test.mjs`: 26 checks of the panel's assistant (site branch claude/assistant-panel,
+- `e2e2/assistant.test.mjs`: 35 checks of the panel's assistant (site branch claude/assistant-panel,
   2026-10-18): who may ask (write access, and the repository's workflow carrying
   .github/symphony/assistant.md), the label and the issue made once and only on a press, the
   question's state block and its size, the conditional polling (If-None-Match and a 304) and where
@@ -116,7 +99,21 @@ ghu_TEST or github_pat_X.
   failed), the answer's vocabulary and what the renderer never lets through, whose comment is the
   answer, the issue read again before each question and replaced when closed, one press at a time,
   a sign-in changed under the page, a watch read on after a sign-in, and Stop watching; its cadence
-  constants are shortened in the served script, and a check may serve its own.
+  constants are shortened in the served script, and a check may serve its own. Since the floating
+  Claude (site branch claude/project-thread-6cxgh2, 2026-10-20) the box is in the Claude dialog, so
+  every check opens it by pressing the button first. A3 holds that a repository with no assistant
+  gets the task dialog from the button, since Claude is then asked by an issue. M holds the button
+  hidden on the sign-in, the bar and the answer drawer inside the dialog, and no box outside it on
+  any tab at 1280 x 900 or 900 x 500. M2 to M8 hold the press: with no Claude token set it opens the
+  Tokens tab's Add a token dialog (M2); with CLAUDE_CODE_OAUTH_TOKEN or a pool slot set it opens the
+  dialog with its box focused, as the Command tab's Ask Claude does (M3); in an organization's
+  repository it reads the repository's own secrets and the organization's that reach it (M4); a
+  read that fails opens the dialog at once and leaves the button not busy (M5); a press overtaken by
+  another tab or dialog opens nothing and clears its busy mark (M6); on a phone, upright and
+  sideways, on the home screen and in each tab, the button sits inside the screen at the top right,
+  over neither the back button, Full screen nor a tab head's What this is (M7); and no card's gear
+  and no box that scrolls passes under it, on a laptop, a short window and a phone either way up
+  (M8). `CSS_MUTANT` serves a changed control.css here as in signin.test.mjs.
 - `e2e2/graph.test.mjs`: 89 checks of the panel's Dependencies tab (site branch
   claude/graph-section, 2026-10-18; a section of the long page until the console): the chart text
   the page hands the drawing, byte for byte the two blocks symphony-protocol's board writes for its
@@ -149,7 +146,7 @@ ghu_TEST or github_pat_X.
   pipe read as a pipe (Y), the charts' edges, arrowheads and words showing on their ground inside
   the dark console (C and R, by contrast ratio), Centre its row pressed on a task the tables do not hold staying
   in this tab with its words here and on the message line (W), the assistant's "show
-  dependencies", asked from the Ask Claude bar on another tab, opening this tab at its first chart
+  dependencies", asked of Claude from another tab, opening this tab at its first chart
   and the next question naming the section (V), the window left at 0 in each of those presses at
   1366 x 657, where the page could scroll (asserted), each card's list shown in its chart's place when the
   drawing script cannot load, a hostile title inert and a title holding a Mermaid directive drawn whole, a
@@ -344,6 +341,17 @@ ghu_TEST or github_pat_X.
   page.evaluate,
   which opens nothing, so the page and not console-tabs.mjs is seen opening the tab. A check that
   wants the drawing recorded instead of made serves a stand-in for the library on its route.
+  Since the floating Claude (site branch claude/project-thread-6cxgh2, 2026-10-20) took the foot and
+  the Ask Claude bar off the deck, the stage is taller at every window, so the checks that found a
+  short stage at a window size were moved to the size that is short now, each saying so where it
+  sets it: AW's second part to 1366 x 680, AR, BU's short swipe, BT's small case and BX to
+  1280 x 640, and BO's cut case to 1366 x 540 at 170 %, since 520 px is the phone layout, which has
+  no zoom buttons; BA pinches from 180 % to 170 % in place of 150 %, the taller stage fitting the
+  focus sooner. BL no longer swipes on the foot. BW holds that a long note leaves the tab above it
+  at 390 x 844, 900 x 500, 1366 x 768 and 1280 x 720 and that Clear gives the height back, in place
+  of a sized foot; BY says and clears a note in place of dragging the foot; and the helpers that
+  measured against the foot measure against the note's top, or the window's bottom where nothing is
+  said.
 - `e2e2/folders.test.mjs`: 89 checks of the console's Folders tab, /symphony/control/#folders
   (site branch claude/folders-page, 2026-10-18; the tab took the place of the page folders.html
   before that page shipped), against a mocked Microsoft consent page, a mocked Microsoft Graph,
@@ -403,9 +411,11 @@ ghu_TEST or github_pat_X.
   with no drive a private repository holding a catalog.json shows only the connect prompt, never
   reads the file and says nothing of a catalog or a connector (NC1); at 1440 x 900 the tab is its
   one-line head over the explorer, which fills the rest, with no side column and no page scroll
-  (NC2); and Track in a repository opens the dialog that holds what is ticked and the two steps,
+  (NC2, which since the floating Claude, 2026-10-20, also finds the head on one row clear of the
+  button's 52 px: the account's line gives up its width rather than pushing How it works under it,
+  as it did when the head first kept that room); and Track in a repository opens the dialog that holds what is ticked and the two steps,
   Escape closing it with the explorer as it was (NC3); what Track answers is said in a status line
-  in the dialog, which covers the foot, and the head's button counts what is ticked (NC4); and on a
+  in the dialog, and the head's button counts what is ticked (NC4); and on a
   phone the explorer keeps a height under the window's, a long folder scrolling in its list (NC5). CAT1 to CAT9, the saved catalog drawn when no
   drive was connected (claude/folders-catalog, 2026-10-18), were retired with that route.
 - `e2e2/explore.test.mjs`: 19 checks of the console's Explore tab, /symphony/control/#explore
@@ -428,9 +438,9 @@ ghu_TEST or github_pat_X.
   that the wheel over a card zooms and goes into nothing, a glide outward comes out one level and
   no more, Enter, Escape, Backspace and the arrows among the cards; XP11 that at 1440 x 900, on a
   phone upright and sideways the level is whole with no box that scrolls and no card outside the
-  stage, the side column and the Ask Claude bar folded on a computer, the tab the whole screen on a
+  stage, the side column folded on a computer, the tab the whole screen on a
   phone with the site bar's handle over none of its controls; XP12 that Panel, a press on the
-  folded foot or on the folded side column's grip (which drags nothing) brings them back, another
+  folded side column (the folded foot it pressed went with the foot, 2026-10-20) or on its grip (which drags nothing) brings them back, another
   tab shows the console as it was, and on a phone Panel gives the page back; XP13 that +, Whole,
   a double click and - past the whole level work, and the right and left arrows on the stage and a
   swipe step to the level beside; XP14 that a log of 400 lines opens at its own size on its error
@@ -522,7 +532,14 @@ ghu_TEST or github_pat_X.
   claude/panel-resize-autohide, 2026-10-19), H5 and H6 open the header's drawer as a person then
   does, by tapping the handle at the top, which slides the bar back, and pressing the menu button
   once the bar is whole in the window; they failed on that branch only because the button stood
-  above the window, where the hidden bar keeps it. Run it with `SITE=<the site's checkout>
+  above the window, where the hidden bar keeps it. Since the floating Claude (site branch claude/project-thread-6cxgh2,
+  2026-10-20) the status line is a note fixed over the screen's foot and Claude a button at the top
+  right, so H3 to H7 hold the note's bottom inset and the button's top and right insets in place of
+  the foot's padding: the note 14 px off the bottom with no safe areas and the button 16 px from the
+  top and 26 px from the right on a computer, 32 and 20 on a phone (H3); held upright, the note
+  clear of the home bar and the button below the notch (H4); held sideways, the note clear of the
+  home bar and the button inside the right inset, the Ask Claude drawer checked inside the open
+  dialog (H5); and a tablet sideways keeping the note clear of its home bar (H7). Run it with `SITE=<the site's checkout>
   BASE=<the site's address> node app.test.mjs`.
 - `e2e2/code.test.mjs`: 29 checks of sign-in by code (site branch claude/sign-in-by-code,
   2026-10-19), the Home Screen app's way in: GitHub's device flow through the sign-in service's
@@ -573,10 +590,10 @@ ghu_TEST or github_pat_X.
   (signin/README.md, step 9). GitHub's 5xx and 429 while the person types the code are the
   service's to answer, as github_unreachable, which K5 holds the page asks again at the same
   pace; test_worker.mjs holds the service's side.
-- `e2e2/mutants/`: 537 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/mutants/`: 627 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
-  `e2e2/run-mutants.sh` runs them. The seven of the Ask Claude bar's button "Ask in claude.ai"
+  `e2e2/run-mutants.sh` runs them. The seven of the Claude dialog's button "Ask in claude.ai"
   (`a*`, check O of assistant.test.mjs: the question dropped, the same tab, the state dropped, no
   cut, the encoded form unbounded, the referrer sent, a cut by code unit) were caught against the site branch claude/ask-in-claude. The 79 of the sign-in (`m*`) were caught against master
   009109c; the 140 of the Dependencies tab (`g*`, five of them for the tab: show dependencies
@@ -863,11 +880,39 @@ ghu_TEST or github_pat_X.
   Dependencies tab's fit to a scrolling phone page (g139, g156, g157, g183, g185, g187 in the
   script; s11, s19, s23, s24, s25 in its stylesheet), Refresh's hold of a scrolling page (p04,
   p20), the foot's grip followed by a scroll of the page (p76, p83), and the bar and the deck on
-  a page that scrolls (c04, c20, c26). Their files stay, so a layout that lets the page scroll
+  a page that scrolls (c04, c20, c26); g185, g187, p76, p83, s24 and c20 went with the foot on
+  2026-10-20, and s23 was aimed again at the short screen's block as it now reads and is still
+  equivalent. s26 came with the floating Claude: the tab not giving up the note's height (BW),
+  caught. Their files stay, so a layout that lets the page scroll
   again finds them; the code they reach may go with its owner's next change. Of the Folders
   tab's, f43 survives on site master at 25159ab as here, and f129 survived one run here and was
   caught on two runs after it, a timing of the Folders checks' own.
-- `e2e2/css-mutants/`: 28 lists of pairs for the stylesheet control.css, each with its `.json.only`,
+  The floating Claude (site branch claude/project-thread-6cxgh2, 2026-10-20: the note over the
+  screen's foot and Claude a button at the top right, the foot and the Ask Claude bar gone) took
+  the code the foot's and the drawer's mutants changed, so g184 to g187 and p41 to p48, p50, p72,
+  p76 and p83 went with it; p05 was aimed again at the task dialog's close as its comment now
+  reads, and caught again (P8). p49 (the drag's scale taken from the saved text size) is
+  equivalent: the phone layout, which leaves the deck unscaled, is the one media list that hides
+  every grip (control.css, the two blocks under the console's text size), so wherever a grip shows
+  the deck's scale is the saved text size. Fourteen came with the floating Claude, each caught
+  against that branch at the commit of the suites' rewrite: the button never sending a press with
+  no Claude token to the Tokens tab (q01, M2) or always sending it there (q02, M3); the
+  organization's secrets unread, or the repository's own unread in an organization (q03, q04,
+  M4); a failed read waiting out the press's wait (q05, M5); a press another tab overtakes opening
+  the dialog once its wait runs out, or staying busy (q06, q07, M6, whose second case holds the read
+  past a shortened wait so q06 is seen); a repository with no assistant given the Claude dialog in
+  place of the task dialog (q08, A3); the box left unfocused (q09, M3); a plain note never going,
+  or a warning going too (q10, q11, T1); a note on the sign-in going by itself (q12, G1); Clear
+  leaving the focus in the emptied note (q13, T3); and Clear ending a task under way in place of
+  hiding it (q14, T2). g164 (the card pushed below the floating tools) is equivalent there too: with the
+  foot gone the stage is tall enough on every short form that the tools never meet the focus's
+  card, which BO reads on every screen it opens, and a copy of BO run with the push logging found it
+  never acts at 844 x 390, 740 x 360, 667 x 375, 640 x 360, 568 x 320, 520 x 300, 1000 x 480,
+  900 x 500 or 1366 x 540 at 170 %; the line stays for a layout that makes the stage short again.
+  k40 (the code box not brought into sight, K24) and f43 survive on the site before the floating
+  Claude (db4141a) as here, and k35 and m7 are STALE there as here; none of the four is this
+  change's.
+- `e2e2/css-mutants/`: 23 lists of pairs for the stylesheet control.css, each with its `.json.only`,
   for the part of the foot and the bar that is the stylesheet's, which no mutant of the script
   reaches; `run-mutants.sh` serves a path under css-mutants/ in place of control.css through
   `CSS_MUTANT`. Each was caught by its check against the same branch the same day: the page keeping
@@ -887,7 +932,18 @@ ghu_TEST or github_pat_X.
   the strip along the top drawn only where the main pointer hovers (P45); the handle's tab smaller
   than its press area (P46); a tablet's grip too thin for a thumb, no room kept for it at the foot's
   top, and the tablet's placeholder left above a message's line (P47); the handle letting the page
-  pan under a swipe (P35); and the phone's placeholder left under the grip's bar (P26).
+  pan under a swipe (P35); and the phone's placeholder left under the grip's bar (P26). The
+  floating Claude (2026-10-20) took the foot's rules and their mutants, c11 to c16, c18, c20, c21,
+  c24, c25, c27 and c28; c17 (the grips scrolling the page under a finger) is held now by T6, the
+  side column's grip a finger meets on a tablet. Eight came with it, caught against that branch:
+  the empty note taken out of the page, so its live region announces nothing (c29, T4); the tab
+  not giving up the note's height, so a long note lies over its last row (c30, T5); the sign-in not
+  giving it up, so the note covers the gate's button (c31, I4); the button shown on the sign-in
+  (c32, M); a head with no room for the button, or shorter than it (c33, c34, M8); the folders head
+  wrapping its account's line under the button (c35, NC2, through folders.test.mjs); and a tab
+  with no head, About, running its scrolling box under the button (c36, M8). assistant.test.mjs
+  and folders.test.mjs serve a `CSS_MUTANT` as signin.test.mjs does, named by the mutant's
+  `.json.suite`.
 - `e2e2/console-tabs.mjs`: since the panel became a console of tabs (site pull request #40,
   2026-10-18), one tab shows at a time; each suite installs this once after launching the browser,
   and every page action, visibility read and locator action on a selector first opens the tab that

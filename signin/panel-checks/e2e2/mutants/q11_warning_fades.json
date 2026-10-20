@@ -1,0 +1,1 @@
+[["    if (text && !warn) { var note = m.firstChild;", "    if (text) { var note = m.firstChild;"], ["    if (!m || !note || note.parentNode !== m || /admin__warn/.test(m.className)) return;", "    if (!m || !note || note.parentNode !== m) return;"]]

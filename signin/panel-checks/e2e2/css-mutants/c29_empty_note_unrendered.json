@@ -1,0 +1,1 @@
+[[".console > .console__status:has(#msg:empty) { opacity: 0; pointer-events: none; }", ".console > .console__status:has(#msg:empty) { display: none; }"]]

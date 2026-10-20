@@ -24,7 +24,11 @@ function reveal(selector) {
     if (tab) tab.click();
   };
   if (dialog) {
-    if (!dialog.open) {
+    // the Claude dialog opens from the floating button, whose press first reads whether a Claude
+    // token is set (pressClaude), so the dialog is opened here as that press ends where one may be
+    if (!dialog.open && dialog.id === 'dlg-claude') {
+      dialog.showModal();
+    } else if (!dialog.open) {
       const opener = document.querySelector('.console__add[data-open="' + dialog.id + '"]') || document.querySelector('[data-open="' + dialog.id + '"]');
       if (!opener) return;
       openTab(opener);

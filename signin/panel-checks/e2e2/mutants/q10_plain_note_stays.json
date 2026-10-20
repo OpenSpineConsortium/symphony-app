@@ -1,0 +1,1 @@
+[["    if (text && !warn) { var note = m.firstChild; noteTimer = setTimeout(function () { fadeNote(note); }, NOTE_MS); }", "    if (false) { var note = m.firstChild; noteTimer = setTimeout(function () { fadeNote(note); }, NOTE_MS); }"]]

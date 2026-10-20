@@ -1,0 +1,1 @@
+[[".console.console--toast:has(> #cp-app.hidden) { padding-bottom: calc(var(--toast-h, 0px) + 20px); }", ""]]

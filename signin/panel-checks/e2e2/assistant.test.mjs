@@ -46,6 +46,13 @@ async function check(name, fn) {
 // A check that needs another cadence serves its own copy (open's opts.constants).
 let script = fs.readFileSync(SITE + '/assets/js/symphony-panel.js', 'utf8');
 if (process.env.MUTANT) for (const [a, b] of JSON.parse(fs.readFileSync(process.env.MUTANT, 'utf8'))) { assert.ok(script.includes(a), 'mutant text not found: ' + a.slice(0, 60)); script = script.replace(a, b); }
+// a stylesheet mutant (css-mutants/, CSS_MUTANT), as signin.test.mjs serves one, for a rule of
+// control.css that only this suite's checks hold
+let controlCss = null;
+if (process.env.CSS_MUTANT) {
+  controlCss = fs.readFileSync(SITE + '/assets/css/control.css', 'utf8');
+  for (const [a, b] of JSON.parse(fs.readFileSync(process.env.CSS_MUTANT, 'utf8'))) { assert.ok(controlCss.includes(a), 'mutant text not found: ' + a.slice(0, 60)); controlCss = controlCss.replace(a, () => b); }
+}
 script = script.replace(/var SIGNIN_SERVICE = '[^']*';/, "var SIGNIN_SERVICE = '';").replace(/var CLIENT_ID = '[^']*';/, "var CLIENT_ID = '';");
 function withConstants(source, constants) {
   for (const [name, value] of Object.entries(constants)) {
@@ -145,7 +152,7 @@ await consoleTabs(browser);
 async function open(routes, opts) {
   opts = opts || {};
   const served = opts.constants ? withConstants(script, opts.constants) : script;
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const context = await browser.newContext(Object.assign({ viewport: opts.viewport || { width: 1280, height: 900 } }, opts.mobile ? { isMobile: true, hasTouch: true } : {}));
   const calls = [];
   await context.route('https://api.github.com/**', async (route) => {
     const req = route.request();
@@ -168,6 +175,7 @@ async function open(routes, opts) {
     if (spec.status === 204 || spec.status === 304) return route.fulfill({ status: spec.status, headers, body: '' });
     return route.fulfill({ status: spec.status, contentType: 'application/json', headers, body: JSON.stringify(spec.body) });
   });
+  if (controlCss !== null) await context.route('**/assets/css/control.css*', (route) => route.fulfill({ status: 200, contentType: 'text/css', body: controlCss }));
   await context.route('**/assets/js/symphony-panel.js*', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: served }));
   // every scrollIntoView the page makes, so a check can tell what it centred
   await context.addInitScript(() => {
@@ -193,7 +201,21 @@ async function signIn(page) {
   await page.click('#cp-open');
   await page.waitForSelector('#cp-app:not(.hidden)', { timeout: 8000 });
 }
+// the assistant lives in the Claude dialog that the floating button at the top right opens, and the
+// panel behind an open dialog takes no press, so a check opens it to ask and closes it to work the panel
+const claudeOpen = (page) => page.evaluate(() => document.getElementById('dlg-claude').open);
+async function claude(page) {
+  if (await claudeOpen(page)) return;
+  await page.click('#cp-claude');
+  await page.waitForFunction(() => document.getElementById('dlg-claude').open, null, { timeout: 12000 });
+}
+async function away(page) {
+  if (!(await claudeOpen(page))) return;
+  await page.click('#dlg-claude .cpdlg__close');
+  await page.waitForFunction(() => !document.getElementById('dlg-claude').open);
+}
 async function ask(page, text) {
+  await claude(page);
   await page.fill('#cp-as-q', text);
   await page.click('#cp-as-ask');
 }
@@ -209,6 +231,7 @@ await check('A: without write access the page offers no box and says in one sent
   routes['GET /repos/acme/demo/collaborators/tester/permission'] = { permission: 'read', role_name: 'triage', user: { login: 'tester' } };
   const { context, page, calls, errors } = await open(routes);
   await signIn(page);
+  await claude(page);
   await waitState(page, /write access/);
   const words = await stateText(page);
   console.log('     state:', words);
@@ -226,6 +249,7 @@ await check('A2: when GitHub will not say what the access is, the page says so a
   delete routes['GET /repos/acme/demo/collaborators/tester/permission'];
   const { context, page, errors } = await open(routes);
   await signIn(page);
+  await claude(page);
   await waitState(page, /would not say whether you may write/);
   const words = await stateText(page);
   console.log('     state:', words);
@@ -235,12 +259,18 @@ await check('A2: when GitHub will not say what the access is, the page says so a
   await context.close();
 });
 
-await check('A3: a repository whose workflow has no assistant file gets no box, in words, and nothing is written or looked for', async () => {
+await check('A3: a repository whose workflow has no assistant file gets no box, in words, and nothing is written or looked for; the Claude button then asks @claude through the task dialog, its title ready for the words', async () => {
   const routes = baseRoutes();
   delete routes['GET /repos/acme/demo/contents/.github/symphony/assistant.md'];
   const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
   await signIn(page);
   await waitState(page, /no assistant yet/);
+  await page.click('#cp-claude');
+  await page.waitForFunction(() => document.getElementById('dlg-task').open, null, { timeout: 12000 });
+  const fallback = await page.evaluate(() => ({ claude: document.getElementById('dlg-claude').open, focus: document.activeElement && document.activeElement.id, msg: document.getElementById('msg').textContent }));
+  console.log('     the Claude button:', JSON.stringify(fallback));
+  assert.deepEqual([fallback.claude, fallback.focus], [false, 'cp-task-title'], 'the Claude button did not open the task dialog with its title focused: ' + JSON.stringify(fallback));
+  assert.match(fallback.msg, /no assistant yet, so Claude is asked by an issue/);
   const words = await stateText(page);
   console.log('     state:', words);
   assert.match(words, /^This repository's Claude workflow has no assistant yet: \.github\/symphony\/assistant\.md is not on its default branch, so a question here would run as an ordinary @claude mention, with the tools that write\./);
@@ -277,6 +307,7 @@ await check('B: the first question makes the label and the issue, posts the ques
   };
   const { context, page, calls, errors } = await open(routes);
   await signIn(page);
+  await claude(page);
   await waitState(page, /No assistant issue yet/);
   console.log('     state before:', await stateText(page));
   assert.match(await stateText(page), /the first question opens one, "Assistant: tester", labelled assistant/);
@@ -395,6 +426,7 @@ await check('B: the first question makes the label and the issue, posts the ques
   assert.equal(await page.textContent('#cp-as-answer'), '', 'the first answer came back as the second question\'s');
   assert.equal(new URL(calls[calls.length - 1].url).searchParams.get('since'), questionAt(2), 'the reads are not since the second question');
   // Show all tasks clears the filter in words
+  await away(page);
   await page.click('#cp-as-filter button');
   assert.equal(await page.textContent('#cp-as-filter'), '');
   assert.ok(!(await page.$('#cp-queue tbody tr[data-number="9"].control__off')), 'row 9 stays hidden after Show all tasks');
@@ -407,6 +439,7 @@ await check('C2: a page opened later reuses the issue remembered in storage, loo
   routes['GET /repos/acme/demo/issues'] = tasks.concat([assistantIssue(50), issue(11, 'Mislabelled task', ['todo', 'assistant'])]);
   const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
   await signIn(page);
+  await claude(page);
   await waitState(page, /The assistant issue is #50/);
   console.log('     state:', await stateText(page));
   assert.ok(!calls.some((c) => c.key === 'GET /repos/acme/demo/issues' && /labels=assistant/.test(c.url)), 'the page searched although it remembered the issue');
@@ -431,6 +464,7 @@ await check('D: a remembered issue that is closed is forgotten and the next ques
   routes['GET /repos/acme/demo/issues/51/comments'] = resp(200, [questionComment(3, '@claude Again?')], { headers: { ETag: 'W/"q"' } });
   const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
   await signIn(page);
+  await claude(page);
   await waitState(page, /No assistant issue yet/);
   console.log('     state:', await stateText(page));
   assert.match(await stateText(page), /the one the page remembered, #50, is closed/);
@@ -454,6 +488,7 @@ await check('D2: an issue closed between two questions is read as closed before 
   routes['GET /repos/acme/demo/issues/51/comments'] = resp(200, [questionComment(2, 'y')], { headers: { ETag: 'W/"b"' } });
   const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
   await signIn(page);
+  await claude(page);
   await waitState(page, /The assistant issue is #50/);
   await ask(page, 'First');
   await waitState(page, /Watching stopped/);
@@ -478,6 +513,7 @@ await check('D3: a remembered issue that lost its label is kept and said, a ques
   routes['GET /repos/acme/demo/issues/50'] = issue(50, 'Assistant: tester', []);
   const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
   await signIn(page);
+  await claude(page);
   await waitState(page, /carries no label assistant/);
   const words = await stateText(page);
   console.log('     state:', words);
@@ -503,6 +539,7 @@ await check('E: Stop watching stops the reads, says where the question is, and o
   const routes = issueRoutes(baseRoutes(), 4);
   const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
   await signIn(page);
+  await claude(page);
   await waitState(page, /The assistant issue is #50/);
   await ask(page, 'Slow one');
   await waitState(page, /Waiting for the answer on #50/);
@@ -540,6 +577,7 @@ await check('E2: a run that failed is said as failed, its comment shown and not 
   const routes = issueRoutes(baseRoutes(), 1, (url, req, call) => call.ifNoneMatch === 'W/"e"' ? resp(304, null) : resp(200, [questionComment(1, 'x'), bot(FAILED + '\n\n```symphony\nfilter todo\n```\n', undefined, new Date().toISOString())], { headers: { ETag: 'W/"e"' } }));
   const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' }, constants: { ASSISTANT_AFTER_MS: 90000 } });
   await signIn(page);
+  await claude(page);
   await waitState(page, /The assistant issue is #50/);
   await ask(page, 'Why?');
   await waitState(page, /The run failed on #50/);
@@ -561,6 +599,7 @@ await check('E3: a 403 on the reads stops the watch at once, with GitHub\'s word
   const routes = issueRoutes(baseRoutes(), 1, resp(403, { message: 'API rate limit exceeded for user ID 1.' }));
   const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
   await signIn(page);
+  await claude(page);
   await waitState(page, /The assistant issue is #50/);
   await ask(page, 'Limit?');
   await waitState(page, /watching stopped/);
@@ -581,6 +620,7 @@ await check('E4: three failed reads in a row stop the watch, the first two said 
   const routes = issueRoutes(baseRoutes(), 1, resp(500, { message: 'Server Error' }));
   const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
   await signIn(page);
+  await claude(page);
   await waitState(page, /The assistant issue is #50/);
   await ask(page, 'Flaky?');
   await waitState(page, /the page tries again/);
@@ -599,6 +639,7 @@ await check('E5: a run that never answers is given up on at the limit, in words,
   const routes = issueRoutes(baseRoutes(), 1);
   const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' }, constants: { ASSISTANT_GIVE_UP_MS: POLL * 4 } });
   await signIn(page);
+  await claude(page);
   await waitState(page, /The assistant issue is #50/);
   await ask(page, 'Ever?');
   await waitState(page, /No final answer after/);
@@ -627,9 +668,11 @@ await check('F: a repository change while waiting stops the watch, and the assis
   routes['GET /repos/acme/beta/collaborators/tester/permission'] = { permission: 'admin' };
   const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}', symphony_panel_repos: JSON.stringify(['acme/demo', 'acme/beta']) } });
   await signIn(page);
+  await claude(page);
   await waitState(page, /The assistant issue is #50/);
   await ask(page, 'Where?');
   await waitState(page, /Waiting for the answer on #50/);
+  await away(page);
   await page.selectOption('#cp-repo', 'acme/beta');
   await waitState(page, /No assistant issue yet in acme\/beta/);
   const read = reads(calls).length;
@@ -655,6 +698,7 @@ await check('G: only a bot\'s comment from after the question is the answer; a f
   });
   const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
   await signIn(page);
+  await claude(page);
   await waitState(page, /The assistant issue is #50/);
   await ask(page, 'What is in the queue?');
   await waitState(page, /Waiting for the answer on #50/);
@@ -682,6 +726,7 @@ await check('H: a hostile answer renders no script, handler, image or link off G
   const routes = issueRoutes(baseRoutes(), 1, (url, req, call) => call.ifNoneMatch === 'W/"x"' ? resp(304, null) : resp(200, [questionComment(1, 'x'), bot(hostile, undefined, '2026-10-18T10:03:30Z')], { headers: { ETag: 'W/"x"' } }));
   const { context, page, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
   await signIn(page);
+  await claude(page);
   await waitState(page, /The assistant issue is #50/);
   await ask(page, 'Anything?');
   await waitState(page, /The assistant answered on #50/);
@@ -722,6 +767,7 @@ await check('I: two presses of Ask in a row make one issue and one question', as
   routes['GET /repos/acme/demo/issues/51/comments'] = resp(200, [questionComment(1, 'x')], { headers: { ETag: 'W/"q"' } });
   const { context, page, calls, errors } = await open(routes);
   await signIn(page);
+  await claude(page);
   await waitState(page, /No assistant issue yet/);
   await page.fill('#cp-as-q', 'Twice?');
   await page.evaluate(() => { const b = document.getElementById('cp-as-ask'); b.click(); b.click(); });
@@ -747,6 +793,7 @@ await check('J: a question longer than GitHub takes is refused in words, before 
   routes['POST /repos/acme/demo/issues'] = assistantIssue(50);
   const { context, page, calls, errors } = await open(routes);
   await signIn(page);
+  await claude(page);
   await waitState(page, /No assistant issue yet/);
   await page.fill('#cp-as-q', 'x'.repeat(70000));
   await page.click('#cp-as-ask');
@@ -767,6 +814,7 @@ await check('K: a sign-in that changed under the page is refused in words, and n
   const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
   await page.check('#cp-keep');
   await signIn(page);
+  await claude(page);
   await waitState(page, /The assistant issue is #50/);
   // another tab of the browser keeps another account's token
   await page.evaluate(() => { localStorage.setItem('symphony_panel_token', 'github_pat_OTHER'); window.dispatchEvent(new StorageEvent('storage', { key: 'symphony_panel_token', newValue: 'github_pat_OTHER' })); });
@@ -791,18 +839,21 @@ await check('L: a watch whose read failed while the tab signed out is read on wh
   };
   const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
   await signIn(page);
+  await claude(page);
   await waitState(page, /The assistant issue is #50/);
   await ask(page, 'Hold on');
   await waitState(page, /Waiting for the answer on #50/);
   const start = Date.now();
   while (!held && Date.now() - start < 5000) await sleep(50);
   assert.ok(held, 'no read was held in flight');
+  await away(page);
   await page.click('#cp-signout');
   await page.waitForSelector('#cp-gate:not(.hidden)');
   await held.abort('failed');
   await sleep(POLL * 2);
   const before = reads(calls).length;
   await signIn(page);
+  await claude(page);
   await waitState(page, /Waiting for the answer on #50/);
   await sleep(POLL * 4);
   const since = reads(calls).length - before;
@@ -840,26 +891,33 @@ async function press(page, re) {
   await b.evaluate((x) => x.click());
 }
 
-await check('M: the bar sits outside every tab, frozen on each, and the answer opens in a drawer over the stage', async () => {
+await check('M: the floating Claude button opens the Claude dialog holding the bar and the answer drawer, and no bar shows outside the dialog on any tab or layout', async () => {
   const routes = issueRoutes(baseRoutes(), 1, (url, req, call) => resp(200, [questionComment(1, 'x'), finalComment], { headers: { ETag: 'W/"a"' } }));
   const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
-  assert.equal(await page.$eval('#cp-askbar', (b) => getComputedStyle(b).display), 'none', 'the bar shows on the sign-in gate');
+  const shownBox = () => page.evaluate(() => { const q = document.getElementById('cp-as-q'); return !!q && q.checkVisibility() && q.getClientRects().length > 0; });
+  assert.equal(await shownBox(), false, 'the box shows on the sign-in gate');
+  assert.equal(await page.isVisible('#cp-claude'), false, 'the Claude button shows on the sign-in gate');
   await signIn(page);
-  await waitState(page, /The assistant issue is #50/);
   const placed = await page.evaluate(() => ({
     inTab: !!document.getElementById('cp-as-q').closest('[data-tab-panel]'),
-    inBar: !!document.getElementById('cp-as-q').closest('#cp-askbar'),
-    drawerInStage: !!document.getElementById('cp-as-drawer').closest('.console__stage'),
-    drawerInBar: !!document.getElementById('cp-as-drawer').closest('#cp-askbar'),
+    barInDialog: !!document.getElementById('cp-askbar').closest('#dlg-claude'),
+    drawerInDialog: !!document.getElementById('cp-as-drawer').closest('#dlg-claude'),
+    open: document.getElementById('dlg-claude').open,
   }));
-  assert.deepEqual(placed, { inTab: false, inBar: true, drawerInStage: true, drawerInBar: false });
-  // on every tab the box is on screen, inside the window, and the page does not scroll
-  for (const tab of ['command', 'board', 'tasks', 'pulls', 'runs', 'workers', 'agents', 'tokens', 'share', 'about']) {
-    await page.evaluate((t) => document.querySelector('.console__rail [data-tab="' + t + '"]').click(), tab);
-    const r = await page.evaluate(() => { const b = document.getElementById('cp-as-q').getBoundingClientRect(); return { top: b.top, bottom: b.bottom, h: window.innerHeight, y: window.pageYOffset }; });
-    assert.ok(r.top > 0 && r.bottom <= r.h, 'the box is off screen on ' + tab + ': ' + JSON.stringify(r));
-    assert.equal(r.y, 0, 'opening ' + tab + ' moved the window');
+  assert.deepEqual(placed, { inTab: false, barInDialog: true, drawerInDialog: true, open: false });
+  // on every tab, a laptop's and a short window's, no box shows until the button is pressed
+  for (const size of [{ width: 1280, height: 900 }, { width: 900, height: 500 }]) {
+    await page.setViewportSize(size);
+    for (const tab of ['command', 'board', 'tasks', 'pulls', 'runs', 'workers', 'agents', 'tokens', 'share', 'about']) {
+      await page.evaluate((t) => { const b = document.querySelector('.console__rail [data-tab="' + t + '"]'); if (b) b.click(); }, tab);
+      assert.equal(await shownBox(), false, 'the box shows outside the dialog on ' + tab + ' at ' + size.width + ' x ' + size.height);
+    }
   }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await claude(page);
+  await waitState(page, /The assistant issue is #50/);
+  const r = await page.evaluate(() => { const b = document.getElementById('cp-as-q').getBoundingClientRect(); return { top: b.top, bottom: b.bottom, h: window.innerHeight, focus: document.activeElement && document.activeElement.id }; });
+  assert.ok(r.top > 0 && r.bottom <= r.h, 'the box is off screen in the dialog: ' + JSON.stringify(r));
   assert.equal(await page.isVisible('#cp-as-drawer'), false, 'the drawer is open before any answer');
   assert.equal(await page.isVisible('#cp-as-toggle'), false, 'Answer is offered before any answer');
   // Enter sends; the drawer opens with the answer, Close and Escape shut it, Answer opens it again
@@ -887,9 +945,206 @@ await check('M: the bar sits outside every tab, frozen on each, and the answer o
   await context.close();
 });
 
+// The floating Claude button, the owner's of 2026-10-20: "a floating Claude in the top right you
+// click on to either add your first token if non is available or ask Claude something"
+const tokenOpen = (page) => page.evaluate(() => { const d = document.getElementById('tk-dialog'); return !!d && d.open && /Add a token/.test(d.textContent); });
+const secretsList = (names) => ({ total_count: names.length, secrets: names.map((name) => ({ name, created_at: now, updated_at: now })) });
+async function pressedTo(page, what) {
+  await page.click('#cp-claude');
+  if (what === 'tokens') await page.waitForFunction(() => { const d = document.getElementById('tk-dialog'); return !!d && d.open; }, null, { timeout: 12000 });
+  else await page.waitForFunction((id) => document.getElementById(id).open, what, { timeout: 12000 });
+}
+await check('M2: with no Claude token set for the repository, the Claude button opens the Tokens tab\'s Add a token', async () => {
+  const routes = baseRoutes();
+  routes['GET /repos/acme/demo/actions/secrets'] = secretsList(['SOMETHING_ELSE']);
+  const { context, page, errors } = await open(routes);
+  await signIn(page);
+  await pressedTo(page, 'tokens');
+  const f = await page.evaluate(() => ({ tab: location.hash, claude: document.getElementById('dlg-claude').open, busy: document.getElementById('cp-claude').getAttribute('aria-busy') }));
+  console.log('     no token:', JSON.stringify(f), await tokenOpen(page));
+  assert.equal(await tokenOpen(page), true, 'Add a token did not open');
+  assert.deepEqual([f.tab, f.claude, f.busy], ['#tokens', false, null], 'the press did not land on the Tokens tab alone: ' + JSON.stringify(f));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+for (const name of ['CLAUDE_CODE_OAUTH_TOKEN', 'SYMPHONY_CLAUDE_3']) {
+  await check('M3: with a Claude token set (' + name + '), the Claude button opens the Claude dialog with its box focused, and so does the Command tab\'s Ask Claude', async () => {
+    const routes = issueRoutes(baseRoutes(), 1);
+    routes['GET /repos/acme/demo/actions/secrets'] = secretsList([name]);
+    const { context, page, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
+    await signIn(page);
+    await waitState(page, /The assistant issue is #50/);
+    await pressedTo(page, 'dlg-claude');
+    const f = await page.evaluate(() => ({ focus: document.activeElement && document.activeElement.id, tokens: !!document.getElementById('tk-dialog') && document.getElementById('tk-dialog').open }));
+    assert.deepEqual(f, { focus: 'cp-as-q', tokens: false }, 'the press did not open the dialog with its box focused: ' + JSON.stringify(f));
+    await away(page);
+    await page.evaluate(() => document.querySelector('.console__rail [data-tab="command"]').click());
+    await page.click('#tab-command button[data-focus="cp-as-q"]');
+    await page.waitForFunction(() => document.getElementById('dlg-claude').open, null, { timeout: 12000 });
+    assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.id), 'cp-as-q', 'the Command tab\'s Ask Claude did not focus the box');
+    assert.deepEqual(errors, []);
+    await context.close();
+  });
+}
+await check('M4: in an organization\'s repository the Claude button reads the repository\'s own secrets and the organization\'s it reaches besides: a token in either opens the dialog, none in any opens Add a token', async () => {
+  const seen = {};
+  for (const [what, repoOwn, orgShared, want] of [['the repository\'s own', ['CLAUDE_CODE_OAUTH_TOKEN'], [], 'dlg-claude'], ['an organization secret it reaches', [], ['SYMPHONY_CLAUDE_7'], 'dlg-claude'], ['none', [], [], 'tokens']]) {
+    const routes = issueRoutes(baseRoutes(), 1);
+    routes['GET /repos/acme/demo'] = { full_name: 'acme/demo', default_branch: 'main', private: false, topics: ['symphony'], id: 123, owner: { id: 77, login: 'acme', type: 'Organization' }, permissions: { admin: true, push: true } };
+    routes['GET /orgs/acme/actions/secrets'] = secretsList([]);
+    routes['GET /repos/acme/demo/actions/secrets'] = secretsList(repoOwn);
+    routes['GET /repos/acme/demo/actions/organization-secrets'] = secretsList(orgShared);
+    const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
+    await signIn(page);
+    await pressedTo(page, want);
+    seen[what] = await page.evaluate(() => ({ claude: document.getElementById('dlg-claude').open, tokens: !!document.getElementById('tk-dialog') && document.getElementById('tk-dialog').open }));
+    assert.deepEqual(seen[what], { claude: want === 'dlg-claude', tokens: want === 'tokens' }, what + ': ' + JSON.stringify(seen[what]));
+    assert.ok(calls.some((c) => c.key === 'GET /repos/acme/demo/actions/organization-secrets'), what + ': the organization secrets the repository reaches were not read');
+    assert.deepEqual(errors, [], what);
+    await context.close();
+  }
+  console.log('     ' + JSON.stringify(seen));
+});
+await check('M5: where the tokens cannot be read the Claude button opens the dialog at once, not after its wait, and never Add a token', async () => {
+  let fail = false;
+  const routes = issueRoutes(baseRoutes(), 1);
+  const repo = routes['GET /repos/acme/demo'];
+  routes['GET /repos/acme/demo'] = () => fail ? resp(500, { message: 'Server Error' }) : repo;
+  const { context, page, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
+  await signIn(page);
+  await waitState(page, /The assistant issue is #50/);
+  fail = true;
+  const began = Date.now();
+  await pressedTo(page, 'dlg-claude');
+  const took = Date.now() - began;
+  console.log('     opened after', took, 'ms');
+  assert.ok(took < 4000, 'the dialog waited ' + took + ' ms for a read that had failed');
+  assert.equal(await tokenOpen(page), false);
+  assert.equal(await page.getAttribute('#cp-claude', 'aria-busy'), null, 'the button stays busy');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+// M6's second case holds the read past the press's wait (shortened to 1.2 s), so a press that missed
+// the tab change would open the dialog over the new tab once the wait ran out
+await check('M6: a press that another tab overtakes while the tokens are read opens nothing over it, whether the read comes back or its wait runs out, and the button is busy only while its own press waits', async () => {
+  for (const comes of [true, false]) {
+    let release;
+    const held = new Promise((r) => { release = r; });
+    const routes = issueRoutes(baseRoutes(), 1);
+    routes['GET /repos/acme/demo/actions/secrets'] = () => held.then(() => secretsList([]));
+    const { context, page, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' }, constants: comes ? null : { CLAUDE_WAIT_MS: 1200 } });
+    await signIn(page);
+    await page.click('#cp-claude');
+    await sleep(300);
+    const busy = await page.getAttribute('#cp-claude', 'aria-busy');
+    await page.evaluate(() => document.querySelector('.console__rail [data-tab="board"]').click());
+    if (comes) release();
+    await sleep(comes ? 1500 : 2500);
+    const f = await page.evaluate(() => ({ claude: document.getElementById('dlg-claude').open, tokens: !!document.getElementById('tk-dialog') && document.getElementById('tk-dialog').open, tab: location.hash, busy: document.getElementById('cp-claude').getAttribute('aria-busy') }));
+    console.log('     ' + (comes ? 'the read comes back' : 'the wait runs out') + ': busy while waiting:', busy, '| after the tab changed:', JSON.stringify(f));
+    assert.equal(busy, 'true', 'the button did not say it was busy while the read was on its way');
+    assert.deepEqual(f, { claude: false, tokens: false, tab: '#board', busy: null }, 'the overtaken press opened something or stayed busy');
+    assert.deepEqual(errors, []);
+    release();
+    await context.close();
+  }
+});
+// In the page: the floating button's box and what it must stay clear of, each that shows
+function buttonPlace() {
+  const box = (n) => { const r = n.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom }; };
+  const shown = (n) => !!n && n.checkVisibility() && n.getClientRects().length > 0;
+  const b = document.getElementById('cp-claude');
+  const others = [['the back button', document.getElementById('cp-back')], ['full screen', document.getElementById('cp-full')]]
+    .concat(Array.from(document.querySelectorAll('[data-tab-panel]:not([hidden]) .console__head .console__help > summary')).map((n) => ['the head\'s ' + n.textContent.trim(), n]))
+    .concat(Array.from(document.querySelectorAll('[data-tab-panel]:not([hidden]) .console__head button')).map((n) => ['the head\'s ' + (n.id || n.textContent.trim()), n]))
+    .filter(([, n]) => shown(n));
+  const me = box(b);
+  const meets = others.filter(([, n]) => { const o = box(n); return o.l < me.r && o.r > me.l && o.t < me.b && o.b > me.t; }).map(([name]) => name);
+  const at = document.elementFromPoint((me.l + me.r) / 2, (me.t + me.b) / 2);
+  return { me, w: innerWidth, h: innerHeight, shown: shown(b), meets, top: at === b || b.contains(at) };
+}
+await check('M7: on a phone, on the home screen and in each tab, the Claude button sits at the top right inside the screen, over none of the back button, full screen or a tab head\'s What this is, and takes its own presses', async () => {
+  const seen = {};
+  for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
+    const { context, page, errors } = await open(baseRoutes(), { viewport, mobile: true });
+    await signIn(page);
+    await sleep(400);
+    const places = [['home', null], ['command', 'command'], ['tasks', 'tasks'], ['about', 'about'], ['tokens', 'tokens']];
+    for (const [where, tab] of places) {
+      if (tab) {
+        if (await page.isVisible('#cp-back')) { await page.click('#cp-back'); await sleep(250); }
+        await page.click('#rail-' + tab);
+        await sleep(400);
+      }
+      const f = await page.evaluate(buttonPlace);
+      const what = viewport.width + ' x ' + viewport.height + ', ' + where;
+      seen[what] = [Math.round(f.me.t), Math.round(f.w - f.me.r), f.meets];
+      assert.ok(f.shown && f.top, what + ': the button does not show or does not take its own press: ' + JSON.stringify(f));
+      assert.ok(f.me.t >= 0 && f.me.r <= f.w && f.me.l >= f.w / 2 && f.me.b <= f.h / 3, what + ': the button is not at the top right inside the screen: ' + JSON.stringify(f.me));
+      assert.deepEqual(f.meets, [], what + ': the button lies over ' + f.meets.join(', '));
+    }
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  console.log('     ' + JSON.stringify(seen));
+});
+
+// In the page: every card gear and every scrolling box of the shown tab that meets the floating
+// button, each scrolling box run from its top to its end in steps, so a gear that scrolls under the
+// button anywhere is caught
+function underButton() {
+  const me = document.getElementById('cp-claude').getBoundingClientRect();
+  const meets = (r) => r.width > 0 && r.left < me.right && r.right > me.left && r.top < me.bottom && r.bottom > me.top;
+  const panel = Array.from(document.querySelectorAll('[data-tab-panel]')).find((p) => !p.hidden);
+  const scrollers = [panel].concat(Array.from(panel.querySelectorAll('*'))).filter((n) => /auto|scroll/.test(getComputedStyle(n).overflowY) && n.getClientRects().length);
+  const out = new Set();
+  let gears = 0;
+  const look = () => {
+    const shown = Array.from(panel.querySelectorAll('.card__gear, .tok__gear')).filter((g) => g.checkVisibility());
+    gears = Math.max(gears, shown.length);
+    shown.filter((g) => meets(g.getBoundingClientRect())).forEach((g) => out.add('gear ' + (g.id || g.getAttribute('aria-label'))));
+  };
+  look();
+  // what the head holds on its right (a help's summary, a button, a switch) keeps clear of the button
+  // by the head's own room for it
+  Array.from(panel.querySelectorAll('.console__head button, .console__head summary, .console__head select, .console__head input, .console__head a'))
+    .filter((n) => n.checkVisibility() && meets(n.getBoundingClientRect())).forEach((n) => out.add('head ' + (n.id || n.textContent.trim().slice(0, 30))));
+  scrollers.forEach((n) => {
+    if (meets(n.getBoundingClientRect())) out.add('scroller ' + (n.id || n.className));
+    for (let y = 0; y <= n.scrollHeight; y += 40) { n.scrollTop = y; look(); }
+    n.scrollTop = 0;
+  });
+  return { tab: panel.id, gears, scrollers: scrollers.length, under: Array.from(out) };
+}
+await check('M8: no card\'s gear, and no box that scrolls, passes under the floating Claude button on a laptop, a short window or a phone either way, on the tabs whose cards have gears, and no head\'s control on any tab', async () => {
+  const seen = {};
+  const routes = baseRoutes();
+  routes['GET /repos/acme/demo/actions/secrets'] = secretsList(['CLAUDE_CODE_OAUTH_TOKEN', 'SYMPHONY_CLAUDE_1', 'SYMPHONY_CLAUDE_2', 'SYMPHONY_CLAUDE_3', 'SYMPHONY_CLAUDE_4', 'SYMPHONY_CLAUDE_5', 'SYMPHONY_CLAUDE_6', 'SYMPHONY_CLAUDE_7']);
+  for (const [viewport, mobile] of [[{ width: 1280, height: 800 }, false], [{ width: 900, height: 500 }, false], [{ width: 390, height: 844 }, true], [{ width: 844, height: 390 }, true]]) {
+    const { context, page, errors } = await open(routes, { viewport, mobile });
+    await signIn(page);
+    await sleep(500);
+    const tabs = await page.evaluate(() => Array.from(document.querySelectorAll('.console__rail [data-tab]')).map((b) => b.dataset.tab));
+    for (const tab of tabs) {
+      if (await page.isVisible('#cp-back')) { await page.click('#cp-back'); await sleep(250); }
+      await page.evaluate((t) => document.querySelector('.console__rail [data-tab="' + t + '"]').click(), tab);
+      await sleep(tab === 'tokens' ? 1500 : 500);
+      const f = await page.evaluate(underButton);
+      const what = viewport.width + ' x ' + viewport.height + ', ' + tab;
+      seen[what] = [f.gears, f.scrollers, f.under];
+      assert.deepEqual(f.under, [], what + ': under the Claude button: ' + f.under.join(', '));
+    }
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  console.log('     ' + JSON.stringify(seen));
+  assert.ok(Object.values(seen).some((x) => x[0] > 0), 'no tab showed a gear, so this says nothing');
+});
+
 await check('N: the lines that would change something are buttons that write nothing until pressed, each press runs the panel\'s own handler once', async () => {
   const { context, page, calls, errors } = await open(offerRoutes(OFFERS), { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
   await signIn(page);
+  await claude(page);
   await waitState(page, /The assistant issue is #50/);
   await page.waitForFunction(() => /Add the README/.test(document.getElementById('cp-pulls').textContent) && /nightly/.test(document.getElementById('cp-workers').textContent), null, { timeout: 8000 });
   await ask(page, 'What now?');
@@ -922,7 +1177,8 @@ await check('N: the lines that would change something are buttons that write not
   // merge arms the row's own Merge on the Pull requests tab; the merge waits for its Confirm
   await press(page, /^Merge #12/);
   assert.equal(await page.getAttribute('[data-tab="pulls"]', 'aria-selected'), 'true', 'merge did not open the Pull requests tab');
-  assert.equal(await page.isVisible('#cp-as-drawer'), false, 'the drawer stays over the row to confirm');
+  // the press closes the Claude dialog round the drawer, so the row to confirm is free to press
+  assert.equal(await claudeOpen(page), false, 'the Claude dialog stays over the row to confirm');
   assert.match(await page.textContent('#msg'), /Press "Confirm: merge #12 into main" beside #12/);
   assert.ok(!written().some((c) => /merge$/.test(c.key)), 'the merge ran without its confirm');
   await page.click('#tab-pulls button:has-text("Confirm: merge #12")');
@@ -956,6 +1212,7 @@ await check('N2: a button kept across a Refresh still runs once, and one from be
   const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
   await page.check('#cp-keep');
   await signIn(page);
+  await claude(page);
   await waitState(page, /The assistant issue is #50/);
   await ask(page, 'Run?');
   await page.waitForFunction(() => document.querySelectorAll('#cp-as-actions button').length === 2, null, { timeout: 8000 });
@@ -983,6 +1240,7 @@ await check('N3: a merge pressed before the checks are read is refused in words 
   routes['GET /repos/acme/demo/commits/abc12/check-runs'] = () => gate.then(() => ({ total_count: 1, check_runs: [{ status: 'completed', conclusion: 'success' }] }));
   const { context, page, calls, errors } = await open(routes, { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
   await signIn(page);
+  await claude(page);
   await waitState(page, /The assistant issue is #50/);
   await ask(page, 'Merge?');
   await page.waitForFunction(() => document.querySelectorAll('#cp-as-actions button').length === 1, null, { timeout: 8000 });
@@ -1003,6 +1261,7 @@ await check('N4: the symphony block is hidden from the answer and nothing else i
   const body = FINISHED + 'Before.\r\n\r\n```symphony\r\nrun workers\r\n```\r\n\r\nAfter the block.\n\n```symphony-state\nrepository: acme/demo\n```\n';
   const { context, page, errors } = await open(offerRoutes(body), { storage: { symphony_panel_assistant: '{"acme/demo":50}' } });
   await signIn(page);
+  await claude(page);
   await waitState(page, /The assistant issue is #50/);
   await ask(page, 'Block?');
   await page.waitForFunction(() => document.querySelectorAll('#cp-as-actions button').length === 1, null, { timeout: 8000 });
@@ -1041,6 +1300,7 @@ await check('O: Ask in claude.ai opens the question and the page\'s state in a n
   // with write access the typed question comes first, then the state, which names the tab shown
   const { context, page, calls, errors } = await open(baseRoutes());
   await signIn(page);
+  await claude(page);
   await page.waitForSelector('#cp-as-box:not(.hidden)', { timeout: 8000 });
   await stub(page);
   await page.evaluate(() => document.querySelector('.console__rail [data-tab="tasks"]').click());
