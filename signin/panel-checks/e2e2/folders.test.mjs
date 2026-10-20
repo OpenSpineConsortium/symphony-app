@@ -201,6 +201,41 @@ const recorder = () => {
   }).observe(document, { subtree: true, childList: true, characterData: true });
 };
 
+// Globus's stand-ins: the collection's id and HTTPS server, and one refresh token per service
+const COLLECTION = '11111111-2222-4333-8444-555555555555';
+const HTTPS_SERVER = 'https://m-test.example.test';
+const GL_REFRESH_T = 'AgREFRESH-transfer-stand-in';
+const GL_REFRESH_H = 'AgREFRESH-https-stand-in';
+const GL_ACCESS_T = 'AgACCESS-transfer-stand-in';
+const GL_ACCESS_H = 'AgACCESS-https-stand-in';
+function globusTokens(body, code) {
+  if (body.code !== code && !/^GLCODE/.test(body.code || '')) return { status: 401, body: { error: 'invalid_grant', error_description: 'no such code' } };
+  const scope = body.scope || '';
+  return { access_token: 'AgACCESS-auth', resource_server: 'auth.globus.org', expires_in: 172800, refresh_token: 'AgREFRESH-auth', token_type: 'Bearer', scope: 'openid profile', other_tokens: [
+    { access_token: GL_ACCESS_T, resource_server: 'transfer.api.globus.org', expires_in: 172800, refresh_token: GL_REFRESH_T, token_type: 'Bearer', scope: 'urn:globus:auth:scope:transfer.api.globus.org:all' },
+    { access_token: GL_ACCESS_H, resource_server: COLLECTION, expires_in: 172800, refresh_token: GL_REFRESH_H, token_type: 'Bearer', scope: 'https://auth.globus.org/scopes/' + COLLECTION + '/https' },
+  ] };
+}
+const GRID = (at, rows) => ({ DATA_TYPE: 'file_list', endpoint: COLLECTION, path: at, absolute_path: at, DATA: rows, length: rows.length, total: rows.length, rename_supported: false, symlink_supported: true });
+function transferRoutes() {
+  return {
+    '/v0.10/endpoint_search': { DATA: [{ id: 'other-id', display_name: 'wsugrid#globus-old', canonical_name: 'x' }, { id: COLLECTION, display_name: 'wsugrid#globus', canonical_name: 'wsugrid#globus' }] },
+    ['/v0.10/endpoint/' + COLLECTION]: { id: COLLECTION, display_name: 'wsugrid#globus', https_server: HTTPS_SERVER, default_directory: '/home/go2432/', high_assurance: false },
+    ['/v0.10/operation/endpoint/' + COLLECTION + '/ls']: (call) => {
+      const at = call.query.path;
+      if (at === '/home/go2432/') return GRID(at, [
+        { DATA_TYPE: 'file', name: 'data', type: 'dir', size: 4096, last_modified: '2026-10-20 10:00:00+00:00', permissions: '0755', user: 'go2432', group: 'osc' },
+        { DATA_TYPE: 'file', name: 'preview.mp4', type: 'file', size: 123456789, last_modified: '2026-10-19 09:30:00+00:00', permissions: '0644', user: 'go2432', group: 'osc' },
+        { DATA_TYPE: 'file', name: 'notes.txt', type: 'file', size: 19, last_modified: '2026-10-18 08:00:00+00:00', permissions: '0644', user: 'go2432', group: 'osc' },
+        { DATA_TYPE: 'file', name: HOSTILE, type: 'file', size: 1, last_modified: '2026-10-18 08:00:00+00:00', permissions: '0644', user: 'go2432', group: 'osc' },
+      ]);
+      if (at === '/home/go2432/data/') return GRID(at, [{ DATA_TYPE: 'file', name: 'clip one.mkv', type: 'file', size: 10, last_modified: '2026-10-18 08:00:00+00:00', permissions: '0644', user: 'go2432', group: 'osc' }]);
+      if (at === '/') return GRID(at, [{ DATA_TYPE: 'file', name: 'home', type: 'dir', size: 4096, last_modified: '2026-10-18 08:00:00+00:00', permissions: '0755', user: 'root', group: 'root' }, { DATA_TYPE: 'file', name: 'rs', type: 'dir', size: 4096, last_modified: '2026-10-18 08:00:00+00:00', permissions: '0755', user: 'root', group: 'root' }]);
+      if (at === '/home/') return GRID(at, [{ DATA_TYPE: 'file', name: 'go2432', type: 'dir', size: 4096, last_modified: '2026-10-18 08:00:00+00:00', permissions: '0755', user: 'go2432', group: 'osc' }]);
+      return GRID(at, []);
+    },
+  };
+}
 const browser = await chromium.launch();
 await consoleTabs(browser);
 async function open(opts) {
@@ -233,7 +268,57 @@ async function open(opts) {
     return route.fulfill({ status: 200, contentType: 'application/json', headers, body: JSON.stringify(r) });
   });
   if (controlCss !== null) await context.route('**/assets/css/control.css*', (route) => route.fulfill({ status: 200, contentType: 'text/css', body: controlCss }));
-  await context.route('**/assets/js/symphony-panel.js*', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: o.script || configured }));
+  const script = o.script || (o.globusClient ? configured.replace("var GLOBUS_CLIENT = '';", "var GLOBUS_CLIENT = '" + o.globusClient + "';") : configured);
+  await context.route('**/assets/js/symphony-panel.js*', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: script }));
+  // Globus Auth: its sign-in page straight back with a code and the state, its token endpoint
+  // answering the page's own exchange, and its userinfo; the Transfer API by a table; and the
+  // collection's HTTPS server, which the preview pane fetches from with the collection's token
+  const globus = [];
+  const GCORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
+  await context.route('https://auth.globus.org/**', async (route) => {
+    const req = route.request();
+    const u = new URL(req.url());
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: GCORS, body: '' });
+    if (u.pathname === '/v2/oauth2/authorize') {
+      authorize.push(u);
+      const back = u.searchParams.get('redirect_uri') + (o.denied
+        ? '?error=access_denied&error_description=' + encodeURIComponent('The user has denied access.') + '&state=' + encodeURIComponent(u.searchParams.get('state'))
+        : '?code=GLCODE' + authorize.length + '&state=' + encodeURIComponent(o.wrongState ? 'not-the-state' : u.searchParams.get('state')));
+      return route.fulfill({ status: 200, contentType: 'text/html', body: '<script>location.replace(' + JSON.stringify(back) + ')</script>' });
+    }
+    const body = Object.fromEntries(new URLSearchParams(req.postData() || ''));
+    const call = { path: u.pathname, query: u.search, body, auth: req.headers()['authorization'] || '', type: req.headers()['content-type'] || '', origin: req.headers()['origin'] || '' };
+    globus.push(call);
+    let r = o.auth && o.auth[u.pathname] ? o.auth[u.pathname](call) : undefined;
+    if (r === undefined && u.pathname === '/v2/oauth2/token' && body.grant_type === 'authorization_code') r = globusTokens(body, 'GLCODE1');
+    if (r === undefined && u.pathname === '/v2/oauth2/token' && body.grant_type === 'refresh_token') r = { access_token: 'AG-renewed-' + body.refresh_token, resource_server: body.refresh_token === GL_REFRESH_T ? 'transfer.api.globus.org' : body.refresh_token === GL_REFRESH_H ? COLLECTION : 'auth.globus.org', expires_in: 172800, token_type: 'Bearer' };
+    if (r === undefined && u.pathname === '/v2/oauth2/userinfo') r = { preferred_username: 'go2432@wayne.edu', name: 'Greg' };
+    if (r === undefined) return route.fulfill({ status: 404, headers: GCORS, contentType: 'application/json', body: JSON.stringify({ error: 'not_found' }) });
+    if (r && r.status) return route.fulfill({ status: r.status, headers: GCORS, contentType: 'application/json', body: JSON.stringify(r.body || {}) });
+    return route.fulfill({ status: 200, headers: GCORS, contentType: 'application/json', body: JSON.stringify(r) });
+  });
+  const transferTable = o.transfer || transferRoutes();
+  await context.route('https://transfer.api.globus.org/**', (route) => {
+    const req = route.request();
+    const u = new URL(req.url());
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: GCORS, body: '' });
+    const call = { path: u.pathname, query: Object.fromEntries(u.searchParams), auth: req.headers()['authorization'] || '' };
+    globus.push(call);
+    let r = transferTable[u.pathname];
+    if (typeof r === 'function') r = r(call);
+    if (r === undefined && transferTable['*']) r = transferTable['*'](call);
+    if (r === undefined) return route.fulfill({ status: 404, headers: GCORS, contentType: 'application/json', body: JSON.stringify({ code: 'ClientError.NotFound', message: 'not found' }) });
+    if (r && r.status) return route.fulfill({ status: r.status, headers: GCORS, contentType: 'application/json', body: JSON.stringify(r.body || {}) });
+    return route.fulfill({ status: 200, headers: GCORS, contentType: 'application/json', body: JSON.stringify(r) });
+  });
+  await context.route(HTTPS_SERVER + '/**', (route) => {
+    const req = route.request();
+    const u = new URL(req.url());
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: GCORS, body: '' });
+    globus.push({ path: u.pathname, query: u.search, auth: req.headers()['authorization'] || '', https: true });
+    if (/\.txt$/.test(u.pathname)) return route.fulfill({ status: 200, headers: GCORS, contentType: 'text/plain', body: 'hello from the grid' });
+    return route.fulfill({ status: 200, headers: GCORS, contentType: 'application/octet-stream', body: 'bytes' });
+  });
   // Microsoft's consent page: straight back with a code and the state it was given
   await context.route('https://login.microsoftonline.com/**', (route) => {
     const u = new URL(route.request().url());
@@ -311,7 +396,7 @@ async function open(opts) {
   }, o.storage === undefined ? signedIn(o.repos) : o.storage);
   service.length = 0; calls.length = 0;
   if (!o.noLoad) await page.goto(BASE + (o.path || PAGE));
-  return { context, page, calls, service, authorize, graph, pieces, errors, logs };
+  return { context, page, calls, service, authorize, graph, pieces, errors, logs, globus };
 }
 
 const msg = (page) => page.textContent('#msg');
@@ -2712,7 +2797,9 @@ await check('FS1: with no drive the tab is one dashed "+ Add a cloud drive" tile
   await page.click('#fd-add-tile');
   assert.equal(await page.evaluate(() => document.getElementById('dlg-cloud').open), true);
   assert.deepEqual(await page.$$eval('#dlg-cloud .clouds__tile', (l) => l.map((t) => [(t.querySelector('.clouds__name') || t).textContent.trim(), t.tagName === 'BUTTON', t.getAttribute('aria-label')])),
-    [['Connect OneDrive', true, null], ['Google Drive', false, 'Google Drive, coming later'], ['Dropbox', false, 'Dropbox, coming later']]);
+    [['Connect OneDrive', true, null], ['Connect Globus', true, null], ['Google Drive', false, 'Google Drive, coming later'], ['Dropbox', false, 'Dropbox, coming later']]);
+  assert.equal(await page.evaluate(() => document.getElementById('fd-globus').disabled), true, 'Globus can be pressed while the page is not registered there');
+  assert.equal((await page.textContent('#fd-globus .clouds__sub')).trim(), 'Not registered at Globus yet');
   assert.equal(await page.textContent('#fd-cloud-note'), '', 'the dialog gives a reason for a button that can be pressed');
   await page.waitForFunction(() => !document.getElementById('fd-connect').disabled, null, { timeout: 15000 });
   assert.equal(authorize.length, 0, 'Microsoft was asked before the press');
@@ -2778,6 +2865,306 @@ await check('FS3: a walk-only repository that is public is tracked into only onc
   assert.deepEqual(errors, []);
   await context.close();
 });
+
+/* ---------- Globus: the second drive, read-only, signed in by the page itself ---------- */
+// the Globus list is drawn, past its "Reading" line: no ticks on it, so the items are waited for
+const listedGlobus = (page) => page.waitForFunction(() => !!document.querySelector('#fd-items [data-item]'), null, { timeout: 15000 });
+async function pressGlobus(env) {
+  const { page } = env;
+  await ready(page);
+  await page.click('#rail-folders');
+  await openClouds(page);
+  await page.waitForFunction(() => !document.getElementById('fd-globus').disabled, null, { timeout: 15000 });
+  await page.click('#fd-globus');
+  await page.waitForFunction(() => /Connected to Globus/.test((document.getElementById('fd-connect-note') || {}).textContent || ''), null, { timeout: 20000 });
+}
+const keptGlobus = (page) => keptDrive(page, 'tester|globus');
+
+await check('GL1: Connect Globus goes to Globus Auth with PKCE, offline access and the console as redirect, exchanges the code in the page with the matching verifier and no service, finds the collection by name, keeps only refresh tokens, and draws the home folder read-only with no ticks', async () => {
+  const env = await open({ globusClient: 'gl-client-id' });
+  const { context, page, service, authorize, globus, errors } = env;
+  await pressGlobus(env);
+  assert.equal(authorize.length, 1, 'one press is not one trip to Globus');
+  const u = authorize[0];
+  assert.equal(u.origin + u.pathname, 'https://auth.globus.org/v2/oauth2/authorize');
+  assert.equal(u.searchParams.get('client_id'), 'gl-client-id');
+  assert.equal(u.searchParams.get('response_type'), 'code');
+  assert.equal(u.searchParams.get('scope'), 'openid profile urn:globus:auth:scope:transfer.api.globus.org:all');
+  assert.equal(u.searchParams.get('redirect_uri'), CONSOLE);
+  assert.equal(u.searchParams.get('access_type'), 'offline', 'no refresh token was asked for');
+  assert.equal(u.searchParams.get('code_challenge_method'), 'S256');
+  assert.ok(/^[0-9a-f]{32}$/.test(u.searchParams.get('state')), 'a state of 16 random bytes');
+  const exchange = globus.filter((g) => g.path === '/v2/oauth2/token' && g.body.grant_type === 'authorization_code');
+  assert.equal(exchange.length, 1);
+  assert.equal(exchange[0].body.code, 'GLCODE1');
+  assert.equal(exchange[0].body.client_id, 'gl-client-id');
+  assert.equal(exchange[0].body.redirect_uri, CONSOLE);
+  assert.match(exchange[0].type, /application\/x-www-form-urlencoded/);
+  assert.equal(exchange[0].query, '?include_consented_scopes=true');
+  assert.equal(exchange[0].auth, '', 'a token went to the token endpoint');
+  const hash = crypto.createHash('sha256').update(exchange[0].body.code_verifier).digest('base64url');
+  assert.equal(hash, u.searchParams.get('code_challenge'), 'the verifier sent is the one the challenge was made from');
+  assert.deepEqual(service.filter((s) => s.path !== '/drive/config').map((s) => s.path), [], 'the sign-in service was asked for a Globus connection');
+  const fetched = await fetchedFrom(page);
+  const atExchange = fetched.find((f) => /oauth2\/token/.test(f.url));
+  assert.ok(atExchange, 'the exchange was not seen leaving the page');
+  assert.deepEqual(returnWords(atExchange.at), [], 'the code was still in the address when it was exchanged: ' + atExchange.at);
+  assertCleanRequests(fetched);
+  await listedGlobus(page);
+  assert.equal(globus.some((g) => /\/endpoint\/\/ls$/.test(g.path)), false, 'a folder was asked for before the collection was known');
+  const search = globus.find((g) => g.path === '/v0.10/endpoint_search');
+  assert.ok(search, 'the collection was not looked up');
+  assert.equal(search.query.filter_fulltext, 'wsugrid#globus');
+  assert.equal(search.query.filter_scope, 'all');
+  assert.equal(search.auth, 'Bearer ' + GL_ACCESS_T, 'the Transfer API was not called with its own token');
+  assert.ok(globus.find((g) => g.path === '/v0.10/endpoint/' + COLLECTION), 'the collection found by its exact name was not read: ' + JSON.stringify(globus.map((g) => g.path)));
+  assert.ok(globus.find((g) => g.path === '/v2/oauth2/userinfo' && g.auth === 'Bearer AgACCESS-auth'), 'who is signed in was not asked with the sign-in\'s own token');
+  await listedGlobus(page);
+  const ls = globus.filter((g) => g.path === '/v0.10/operation/endpoint/' + COLLECTION + '/ls');
+  assert.ok(ls.some((g) => g.query.path === '/home/go2432/'), 'the home folder was not listed: ' + JSON.stringify(ls.map((g) => g.query.path)));
+  for (const g of ls) { assert.equal(g.auth, 'Bearer ' + GL_ACCESS_T); assert.equal(g.query.limit, '2000'); assert.equal(g.query.show_hidden, 'false'); }
+  for (const g of globus) if (!g.https && g.path !== '/v2/oauth2/userinfo' && !/oauth2\/token/.test(g.path)) assert.equal(g.auth, 'Bearer ' + GL_ACCESS_T, 'another token than the Transfer API\'s reached ' + g.path);
+  assert.match(await page.textContent('#fd-connect-note'), /Connected to Globus, wsugrid#globus, as go2432@wayne\.edu, read-only, kept on this browser for tester\./);
+  assert.equal(await page.textContent('#fd-forget'), 'Forget Globus');
+  assert.equal(await page.isHidden('#fd-forget'), false);
+  assert.deepEqual(await keptGlobus(page), { provider: 'globus', refresh: GL_REFRESH_T, connected: today, owner: 'go2432@wayne.edu', id: COLLECTION, type: 'globus', tokens: { 'auth.globus.org': { refresh: 'AgREFRESH-auth' }, 'transfer.api.globus.org': { refresh: GL_REFRESH_T }, [COLLECTION]: { refresh: GL_REFRESH_H } }, name: 'wsugrid#globus', https: HTTPS_SERVER, home: '/home/go2432/' });
+  for (const t of [GL_ACCESS_T, GL_ACCESS_H, 'AgACCESS-auth']) assert.equal(await storageHolds(page, t), false, 'an access token is in storage');
+  assert.equal(await page.evaluate(() => JSON.stringify(localStorage.getItem('symphony_panel_drive_kept')).indexOf('AgACCESS') >= 0), false, 'an access token is kept with the connection');
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('symphony_panel_drive_state')), null, 'the pending state was not cleared');
+  assert.deepEqual(await page.$$eval('#fd-browser .fx__address button', (l) => l.map((b) => b.textContent)), ['wsugrid#globus', 'home', 'go2432'], 'the address does not walk the home folder');
+  assert.deepEqual(await page.$$eval('#fd-items [data-name]', (l) => l.map((n) => n.textContent)), ['data', HOSTILE, 'notes.txt', 'preview.mp4']);
+  assert.equal(await page.$$eval('#fd-items input[data-id]', (l) => l.length), 0, 'ticks are drawn on a drive Track never records');
+  assert.equal(await page.evaluate(() => window.__hostile), undefined, 'the hostile name ran');
+  assert.deepEqual(await page.$$eval('#tab-folders .fx__cmds .fx__tool', (l) => l.filter((b) => b.disabled).map((b) => b.textContent)), ['New folder', 'Upload', 'Cut', 'Copy', 'Paste', 'Rename', 'Share', 'Delete', 'Download', 'Properties']);
+  await page.click('#fd-items [data-item="/home/go2432/notes.txt"]');
+  assert.deepEqual(await page.$$eval('#tab-folders .fx__cmds .fx__tool', (l) => l.filter((b) => !b.disabled).map((b) => b.textContent)), ['Download', 'Properties', 'View ▾', 'Preview'], 'a writing verb can be pressed on Globus');
+  assert.match(await page.textContent('#fd-status'), /Read-only\./);
+  assert.equal(await page.evaluate(() => document.getElementById('fd-track').classList.contains('console__primary')), false, 'Track is the filled button on a drive it never records');
+  assert.deepEqual(await page.$$eval('#fd-tree .fx__nodename', (l) => l.map((n) => n.textContent)), ['wsugrid#globus', 'data'], 'the tree does not show the home folder\'s folders under the collection');
+  assert.equal(await page.evaluate(() => document.getElementById('fd-connect-note').classList.contains('folders__who--globus')), true);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('GL2: on Globus a double click opens a file in a new tab at the collection\'s own HTTPS address, a folder opens and Up comes back, a path typed opens that folder, Enter asks the folder for the names, Download asks the address with ?download, the preview pane fetches a text with the collection\'s token and plays a video from the address, Properties says the path and the permissions, and the menu offers nothing that writes', async () => {
+  const env = await open({ globusClient: 'gl-client-id' });
+  const { context, page, globus, errors } = env;
+  await pressGlobus(env);
+  await listedGlobus(page);
+  await recordOpens(page);
+  await page.dblclick('#fd-items [data-item="/home/go2432/preview.mp4"]');
+  await page.waitForFunction(() => (window.__msgs || []).some((t) => /Opening preview\.mp4 from wsugrid#globus in a new tab/.test(t)), null, { timeout: 15000 });
+  assert.deepEqual(await page.evaluate(() => window.__opened), ['window:' + HTTPS_SERVER + '/home/go2432/preview.mp4'], 'the file did not open at the collection\'s address');
+  assert.equal(globus.some((g) => g.https), false, 'the page itself fetched the file on a double click');
+  // a folder
+  await page.dblclick('#fd-items [data-item="/home/go2432/data/"]');
+  await page.waitForFunction(() => document.querySelector('#fd-items [data-item="/home/go2432/data/clip one.mkv"]'), null, { timeout: 15000 });
+  assert.deepEqual(await page.$$eval('#fd-browser .fx__address button', (l) => l.map((b) => b.textContent)), ['wsugrid#globus', 'home', 'go2432', 'data']);
+  await page.evaluate(() => { window.__opened = []; });
+  await page.dblclick('#fd-items [data-item="/home/go2432/data/clip one.mkv"]');
+  await sleep(400);
+  assert.deepEqual(await page.evaluate(() => window.__opened), ['window:' + HTTPS_SERVER + '/home/go2432/data/clip%20one.mkv'], 'a name with a blank was not encoded once');
+  await page.click('#tab-folders .fx__bar .fx__tool[title^="Up"]');
+  await page.waitForFunction(() => document.querySelector('#fd-items [data-item="/home/go2432/notes.txt"]'), null, { timeout: 15000 });
+  // a path typed into the search box
+  await page.fill('#fd-search', '/rs/');
+  await page.press('#fd-search', 'Enter');
+  await page.waitForFunction(() => /This folder is empty/.test(document.getElementById('fd-main').textContent), null, { timeout: 15000 });
+  assert.deepEqual(await page.$$eval('#fd-browser .fx__address button', (l) => l.map((b) => b.textContent)), ['wsugrid#globus', 'rs']);
+  assert.ok(globus.some((g) => g.query && g.query.path === '/rs/'), '/rs/ was not asked for');
+  // a word asks the folder shown for its names
+  await page.click('#tab-folders .fx__bar .fx__tool[title^="Back"]');
+  await page.waitForFunction(() => document.querySelector('#fd-items [data-item="/home/go2432/notes.txt"]'), null, { timeout: 15000 });
+  await page.fill('#fd-search', 'notes');
+  await page.press('#fd-search', 'Enter');
+  await page.waitForFunction(() => /Names matching "notes" in go2432/.test(document.querySelector('#fd-browser .fx__address').textContent), null, { timeout: 15000 });
+  const filtered = globus.find((g) => g.query && g.query.filter);
+  assert.ok(filtered, 'no filtered listing was asked for');
+  assert.equal(filtered.query.filter, 'name:~*notes*');
+  assert.equal(filtered.query.path, '/home/go2432/');
+  await page.click('#tab-folders .fx__bar .fx__tool[title^="Back"]');
+  await page.waitForFunction(() => document.querySelector('#fd-items [data-item="/home/go2432/notes.txt"]') && !/Names matching/.test(document.querySelector('#fd-browser .fx__address').textContent), null, { timeout: 15000 });
+  // the menu, Download and Properties
+  await page.click('#fd-items [data-item="/home/go2432/notes.txt"]', { button: 'right' });
+  await page.waitForSelector('#fd-menu');
+  assert.deepEqual(await page.$$eval('#fd-menu button', (l) => l.map((b) => b.textContent)), ['Open in a new tab', 'Download', 'Properties']);
+  await page.evaluate(() => { window.__opened = []; });
+  await page.click('#fd-menu button:has-text("Download")');
+  await sleep(400);
+  assert.deepEqual(await page.evaluate(() => window.__opened), ['window:' + HTTPS_SERVER + '/home/go2432/notes.txt?download']);
+  await page.click('#fd-items [data-item="/home/go2432/notes.txt"]', { button: 'right' });
+  await page.click('#fd-menu button:has-text("Properties")');
+  await page.waitForSelector('#fx-props');
+  const props = await page.textContent('#fx-props');
+  assert.match(props, /Path:\s*\/home\/go2432\/notes\.txt/);
+  assert.match(props, /Permissions:\s*0644\s+go2432 osc/);
+  assert.match(props, /Location:\s*wsugrid#globus\/home\/go2432/);
+  assert.equal(globus.filter((g) => g.https).length, 0, 'Properties fetched the file');
+  await page.keyboard.press('Escape');
+  // the preview pane: a text fetched into the page, a video played from the address
+  await page.click('#fx-cmd-pane');
+  await page.click('#fd-items [data-item="/home/go2432/notes.txt"]');
+  await page.waitForFunction(() => /hello from the grid/.test(document.getElementById('fd-preview').textContent), null, { timeout: 15000 });
+  const got = globus.find((g) => g.https && g.path === '/home/go2432/notes.txt');
+  assert.ok(got, 'the text was not fetched');
+  assert.equal(got.auth, 'Bearer ' + GL_ACCESS_H, 'the text was not fetched with the collection\'s own token');
+  // the video is asked from its address by the browser's own player, with no token; this
+  // headless browser cannot play the stand-in's bytes, so the pane offers the new tab instead
+  await page.click('#fd-items [data-item="/home/go2432/preview.mp4"]');
+  await page.waitForFunction(() => document.querySelector('#fd-preview video') || /could not play it here/.test(document.getElementById('fd-preview').textContent), null, { timeout: 15000 });
+  await page.waitForFunction(() => (window.__fetched || true) && true);
+  const played = globus.filter((g) => g.https && /preview\.mp4/.test(g.path));
+  assert.ok(played.length >= 1, 'the video was not asked from the collection\'s address');
+  for (const g of played) assert.equal(g.auth, '', 'the video was fetched into the page with a token instead of played from its address');
+  if (/could not play it here/.test(await page.textContent('#fd-preview'))) assert.equal(await page.$('#fd-preview button:has-text("Open in a new tab")') !== null, true, 'a video the browser cannot play here has no way out');
+  // the list's own menu writes nothing
+  await page.$eval('#fd-main', (m) => m.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 300, clientY: 400 })));
+  await page.waitForSelector('#fd-menu');
+  assert.deepEqual(await page.$$eval('#fd-menu button', (l) => l.map((b) => b.textContent)), ['Select all', 'Refresh']);
+  await page.keyboard.press('Escape');
+  assert.deepEqual(errors.filter((e) => !/media|MEDIA|video/i.test(e)), []);
+  await context.close();
+});
+
+await check('GL3: a collection that asks for its own consent sends the page once more to Globus Auth, at once after Connect, with the scopes it named and the collection\'s HTTPS scope, and the list follows; a kept connection asks with a button instead', async () => {
+  // the collection refuses every list until one more consent has been exchanged, as Globus does
+  let consents = 2;
+  const table = transferRoutes();
+  const plain = table['/v0.10/operation/endpoint/' + COLLECTION + '/ls'];
+  table['/v0.10/operation/endpoint/' + COLLECTION + '/ls'] = (call) => {
+    const exchanged = env.globus.filter((g) => g.path === '/v2/oauth2/token' && g.body.grant_type === 'authorization_code').length;
+    if (exchanged < consents) return { status: 403, body: { code: 'ConsentRequired', message: 'Missing required data_access consent', required_scopes: ['urn:globus:auth:scope:transfer.api.globus.org:all[*https://auth.globus.org/scopes/' + COLLECTION + '/data_access]'] } };
+    return plain(call);
+  };
+  const env = await open({ globusClient: 'gl-client-id', transfer: table });
+  const { context, page, authorize, globus, errors } = env;
+  await pressGlobus(env);
+  await listedGlobus(page);
+  assert.equal(authorize.length, 2, 'the consent did not send the page to Globus once more');
+  assert.equal(authorize[1].searchParams.get('scope'), 'openid profile urn:globus:auth:scope:transfer.api.globus.org:all[*https://auth.globus.org/scopes/' + COLLECTION + '/data_access] https://auth.globus.org/scopes/' + COLLECTION + '/https');
+  assert.equal(authorize[1].searchParams.get('redirect_uri'), CONSOLE);
+  assert.equal(globus.filter((g) => g.path === '/v2/oauth2/token' && g.body.grant_type === 'authorization_code').length, 2);
+  assert.equal(globus.filter((g) => g.path === '/v0.10/endpoint_search').length, 1, 'the collection was looked up again after the consent');
+  assert.deepEqual(await page.$$eval('#fd-items [data-name]', (l) => l.map((n) => n.textContent)), ['data', HOSTILE, 'notes.txt', 'preview.mp4']);
+  assert.equal((await keptGlobus(page)).id, COLLECTION);
+  // the connection kept, its consent gone again: the list asks with a button, and the page stays
+  consents = 3;
+  authorize.length = 0;
+  await page.reload();
+  await ready(page);
+  await page.click('#rail-folders');
+  await page.waitForSelector('#fd-main button:has-text("Allow it at Globus")', { timeout: 15000 });
+  assert.equal(authorize.length, 0, 'the page left for Globus on its own');
+  assert.match(await page.textContent('#fd-main'), /wsugrid#globus needs your consent/);
+  await page.click('#fd-main button:has-text("Allow it at Globus")');
+  await page.waitForFunction(() => /Connected to Globus/.test((document.getElementById('fd-connect-note') || {}).textContent || ''), null, { timeout: 20000 });
+  await listedGlobus(page);
+  assert.equal(authorize.length, 1);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('GL4: Globus stays connected on this browser through a reload, its access tokens renewed from the kept refresh tokens; with OneDrive connected too each is a root in the tree, a press switches, and Forget Globus leaves OneDrive in place', async () => {
+  const env = await open({ globusClient: 'gl-client-id' });
+  const { context, page, authorize, globus, errors } = env;
+  await pressGlobus(env);
+  await listedGlobus(page);
+  globus.length = 0;
+  await page.reload();
+  await ready(page);
+  await page.click('#rail-folders');
+  await listedGlobus(page);
+  assert.equal(authorize.length, 1, 'the reload went to Globus again');
+  const renewals = globus.filter((g) => g.path === '/v2/oauth2/token' && g.body.grant_type === 'refresh_token');
+  assert.ok(renewals.some((g) => g.body.refresh_token === GL_REFRESH_T && g.body.client_id === 'gl-client-id'), 'the Transfer API\'s token was not renewed from its refresh token');
+  assert.ok(globus.some((g) => g.path === '/v0.10/operation/endpoint/' + COLLECTION + '/ls' && g.auth === 'Bearer AG-renewed-' + GL_REFRESH_T), 'the renewed token was not the one used');
+  assert.equal(globus.filter((g) => g.path === '/v0.10/endpoint_search').length, 0, 'the collection was looked up again after a reload');
+  assert.deepEqual(await page.$$eval('#fd-browser .fx__address button', (l) => l.map((b) => b.textContent)), ['wsugrid#globus', 'home', 'go2432'], 'the home folder was not opened again from what was kept');
+  // OneDrive beside it
+  await openClouds(page);
+  await page.click('#fd-connect');
+  await page.waitForFunction(() => /Connected to OneDrive/.test((document.getElementById('fd-connect-note') || {}).textContent || ''), null, { timeout: 15000 });
+  await listed(page);
+  assert.match(await page.textContent('#fd-connect-note'), /Globus is connected too: press wsugrid#globus in the folder tree\./);
+  assert.equal(await page.textContent('#fd-other-root'), 'wsugrid#globus');
+  assert.deepEqual(await page.$$eval('#fd-browser .fx__address button', (l) => l.map((b) => b.textContent)), ['OneDrive']);
+  assert.ok(await keptGlobus(page), 'connecting OneDrive forgot Globus');
+  assert.ok(await keptDrive(page), 'OneDrive is not kept beside Globus');
+  await page.click('#fd-other-root');
+  await page.waitForFunction(() => /Connected to Globus/.test(document.getElementById('fd-connect-note').textContent), null, { timeout: 15000 });
+  await listedGlobus(page);
+  assert.equal(await page.textContent('#fd-other-root'), 'OneDrive');
+  assert.deepEqual(await page.$$eval('#fd-browser .fx__address button', (l) => l.map((b) => b.textContent)), ['wsugrid#globus', 'home', 'go2432']);
+  assert.equal(await page.textContent('#fd-forget'), 'Forget Globus');
+  // Track is OneDrive's
+  await page.click('#fd-track-open');
+  await page.click('#fd-track');
+  await page.waitForFunction(() => (window.__msgs || []).some((t) => /Track records folders of OneDrive/.test(t)), null, { timeout: 15000 });
+  assert.equal(env.calls.filter((c) => c.key.indexOf('PUT ') === 0).length, 0, 'Track wrote something for a Globus collection');
+  // the reload remembers which drive was shown
+  await page.reload();
+  await ready(page);
+  await page.click('#rail-folders');
+  await listedGlobus(page);
+  assert.match(await page.textContent('#fd-connect-note'), /Connected to Globus/);
+  await page.click('#fd-forget');
+  await page.waitForFunction(() => /Connected to OneDrive/.test(document.getElementById('fd-connect-note').textContent), null, { timeout: 15000 });
+  assert.equal(await keptGlobus(page), null, 'Forget Globus kept it');
+  assert.ok(await keptDrive(page), 'Forget Globus forgot OneDrive');
+  assert.equal(await page.$('#fd-other-root'), null, 'a forgotten drive is still a root');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('GL5: a sign-in refused at Globus, or come back with another state, connects nothing, exchanges nothing and says so with the word Globus', async () => {
+  for (const o of [{ denied: true }, { wrongState: true }]) {
+    const env = await open(Object.assign({ globusClient: 'gl-client-id' }, o));
+    const { context, page, globus, errors } = env;
+    await ready(page);
+    await page.click('#rail-folders');
+    await openClouds(page);
+    await page.click('#fd-globus');
+    await page.waitForFunction(() => (window.__msgs || []).some((t) => /Globus did not connect the drive|Globus connection did not come back the way it left/.test(t)), null, { timeout: 15000 });
+    await page.waitForFunction(() => location.hash === '#folders', null, { timeout: 15000 });
+    assert.equal(globus.length, 0, 'something was exchanged or read: ' + JSON.stringify(globus.map((g) => g.path)));
+    assert.equal(await keptGlobus(page), null);
+    assert.equal(await page.evaluate(() => sessionStorage.getItem('symphony_panel_drive_state')), null);
+    assert.ok(await page.$('#fd-add-tile'), 'the empty tab is not drawn');
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+});
+
+await check('GL6: a collection that will not list says why with the fixes linked (Globus\'s file manager at the folder, a fresh sign-in, the consents, the status, and Beethoven for a shell on the grid), and a search that finds only a lookalike names no collection', async () => {
+  const table = transferRoutes();
+  table['/v0.10/operation/endpoint/' + COLLECTION + '/ls'] = () => ({ status: 502, body: { code: 'ExternalError.DirListingFailed.GCDisconnected', message: 'The collection is not connected' } });
+  const env = await open({ globusClient: 'gl-client-id', transfer: table });
+  const { context, page, errors } = env;
+  await pressGlobus(env);
+  await page.waitForSelector('#fd-main .fx__trouble', { timeout: 15000 });
+  assert.match(await page.textContent('#fd-main'), /could not be read: Globus answered 502: The collection is not connected\./);
+  const links = await page.$$eval('#fd-main .fx__trouble a', (l) => l.map((a) => [a.textContent, a.href]));
+  assert.deepEqual(links.map((l) => l[0]), ['Globus\'s own file manager', 'your Globus consents', 'Globus\'s status', 'what Beethoven does', 'install Beethoven in Chrome', 'OnDemand']);
+  assert.equal(links[0][1], 'https://app.globus.org/file-manager?origin_id=' + COLLECTION + '&origin_path=' + encodeURIComponent('/home/go2432/'));
+  assert.match(links[4][1], /^https:\/\/chromewebstore\.google\.com\/detail\/beethoven\//);
+  assert.equal(await page.$('#fd-main .fx__trouble button:has-text("Connect Globus again")') !== null, true, 'no fresh sign-in is offered');
+  assert.deepEqual(errors, []);
+  await context.close();
+  // a lookalike alone: no collection is taken, since the person would open a stranger's files
+  const table2 = transferRoutes();
+  table2['/v0.10/endpoint_search'] = { DATA: [{ id: 'other-id', display_name: 'wsugrid#globus-old', canonical_name: 'x' }] };
+  const env2 = await open({ globusClient: 'gl-client-id', transfer: table2 });
+  await ready(env2.page);
+  await env2.page.click('#rail-folders');
+  await openClouds(env2.page);
+  await env2.page.waitForFunction(() => !document.getElementById('fd-globus').disabled, null, { timeout: 15000 });
+  await env2.page.click('#fd-globus');
+  await env2.page.waitForFunction(() => /found no collection named wsugrid#globus/.test((document.getElementById('fd-main') || {}).textContent || ''), null, { timeout: 20000 });
+  assert.equal(env2.globus.some((g) => g.path === '/v0.10/endpoint/other-id'), false, 'the lookalike was read');
+  assert.deepEqual(env2.errors, []);
+  await env2.context.close();
+});
+
 await browser.close();
 console.log('\n' + results.join('\n'));
 if (results.some((r) => r.startsWith('FAIL'))) process.exit(1);

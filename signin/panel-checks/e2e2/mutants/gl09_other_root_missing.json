@@ -1,0 +1,1 @@
+[["var other = otherKept();\n    if (!other) return;", "return;"]]
