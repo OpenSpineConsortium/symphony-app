@@ -101,9 +101,7 @@ By hand, at `https://github.com/organizations/<org>/settings/apps/new`:
   read and write, Secrets read and write (the control panel's Folders tab,
   and the Tokens tab on a personal account's repository); Metadata
   read-only comes with them.
-- Organization permissions: Administration read and write, for the box
-  "Allow GitHub Actions to create and approve pull requests" a new
-  organization holds off; Secrets read and write, Variables read and
+- Organization permissions: Secrets read and write, Variables read and
   write, for the control panel's Tokens page.
 - Events: Issues, Issue comment, Pull request, Push, Check suite. GitHub
   delivers them only once the webhook is active; if the form hides them
@@ -198,8 +196,8 @@ and, since the owner's rule of 2026-10-20 that the App he built applies
 the settings itself and Symphony Setup is only the fallback, for the
 settings of every repository made from the template: the template's
 .github/workflows/settings.yml runs scripts/setup-repo.sh with the main
-App's token (symphony-template#287), with Pages and the organization's
-Administration added for the documentation site and the Actions box. The
+App's token (symphony-template#287), with Pages added for the
+documentation site. The
 front door's adoption run still applies them with the setup App,
 so the setup App holds Administration (write) and Metadata
 (read) and, on an organization, the organization's Administration

@@ -46,9 +46,8 @@ class ManifestTest(unittest.TestCase):
         # Variables, for that same Tokens tab, which holds a slot's settings and the account list as
         # the repository's own Actions variables; Codespaces and Codespaces user secrets, which it
         # says the App no longer uses, are not asked for again; and, since the owner's rule of
-        # 2026-10-20 that the App applies a copy's settings itself, Pages and the organization's
-        # Administration, for the documentation site and the box "Allow GitHub Actions to create
-        # and approve pull requests" that a new organization holds off
+        # 2026-10-20 that the App applies a copy's settings itself, Pages, for the documentation
+        # site
         self.assertEqual(manifest["default_permissions"], {"contents": "write", "issues": "write",
                                                            "pull_requests": "write", "checks": "write",
                                                            "workflows": "write", "actions": "write",
@@ -56,7 +55,6 @@ class ManifestTest(unittest.TestCase):
                                                            "secrets": "write",
                                                            "actions_variables": "write",
                                                            "metadata": "read",
-                                                           "organization_administration": "write",
                                                            "organization_secrets": "write",
                                                            "organization_actions_variables": "write"})
         self.assertEqual(manifest["default_events"], ["issues", "issue_comment", "pull_request", "push",
