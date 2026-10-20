@@ -1,1 +1,1 @@
-[["      if (first) exIn(Number(tile.getAttribute('data-ex')), tile);", "      exIn(Number(tile.getAttribute('data-ex')), tile);"]]
+[["      if (explore.wheelMoved) return true;\n", ""]]

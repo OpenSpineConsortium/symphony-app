@@ -1,0 +1,1 @@
+[["return l.text.replace(/^##\\[(group|endgroup|error|warning)\\]/, ''); }).join", "return l.text; }).join"]]

@@ -100,6 +100,8 @@ const LOG = [
   '2026-10-18T10:00:30.2000000Z ##[group]Run post',
   '2026-10-18T10:00:31.0000000Z post line',
 ].join('\n');
+// a step's log far taller than any window, with one error in its middle
+const LONG_LOG = ['2026-10-18T10:00:05.2000000Z ##[group]Run claude'].concat(Array.from({ length: 400 }, (_, i) => '2026-10-18T10:00:06.0000000Z ' + (i === 200 ? '##[error]the one error' : 'line ' + i))).join('\n');
 
 // the routes; the runs list answers by branch, so the console's own Runs read gets none
 function routes(opts) {
@@ -113,7 +115,7 @@ function routes(opts) {
     'GET /repos/acme/demo/pulls': PULLS,
     'GET /repos/acme/demo/actions/runs': (url) => ({ workflow_runs: url.searchParams.get('branch') === 'claude/22' ? [RUN] : [] }),
     'GET /repos/acme/demo/actions/runs/501/jobs': { jobs: [job(opts.jobUrl)] },
-    'GET /repos/acme/demo/actions/jobs/601/logs': opts.log === 'abort' ? { __abort: true } : opts.log === 'redirect' ? { __redirect: STORAGE + '/job-logs/601?sig=x' } : { __text: LOG },
+    'GET /repos/acme/demo/actions/jobs/601/logs': opts.log === 'abort' ? { __abort: true } : opts.log === 'redirect' ? { __redirect: STORAGE + '/job-logs/601?sig=x' } : { __text: opts.log === 'long' ? LONG_LOG : LOG },
   };
   for (const n of Object.keys(SUB_ISSUES)) r['GET /repos/acme/demo/issues/' + n + '/sub_issues'] = SUB_ISSUES[n];
   // the Dependencies tab's last read, the goal's, says how many calls are left, so the reads after
@@ -126,9 +128,14 @@ function routes(opts) {
 // a public page; GitHub's storage is public, so the checks are switched off for this suite alone
 const browser = await chromium.launch({ args: ['--disable-features=BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights,LocalNetworkAccessChecks'] });
 await consoleTabs(browser);
-const VIEW = { width: 1366, height: 657 };
-async function open(rt, storage) {
-  const context = await browser.newContext({ viewport: VIEW });
+// VIEW=WxH runs the checks in another window, as the screenshots for a person do
+const VIEW = process.env.VIEW ? { width: Number(process.env.VIEW.split('x')[0]), height: Number(process.env.VIEW.split('x')[1]) } : { width: 1366, height: 657 };
+// a phone is a window with touch, as Chromium plays an iPhone held upright or sideways
+const PHONE = { width: 390, height: 844 }, SIDEWAYS = { width: 844, height: 390 }, WIDE = { width: 1440, height: 900 };
+async function open(rt, storage, view) {
+  view = view || VIEW;
+  const phone = view.width <= 900 || view.height <= 520;
+  const context = await browser.newContext(phone ? { viewport: view, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : { viewport: view });
   const calls = [];
   await context.route('https://api.github.com/**', async (route) => {
     const req = route.request();
@@ -248,7 +255,7 @@ await check('XP3: a task leads to its pull request, the runs on its branch, a ru
     // Read again reads the level afresh
     await page.click('#ex-path .ex__crumb >> nth=5');
     await page.waitForFunction(() => document.querySelectorAll('#ex-path > :not(.ex__sep)').length === 6);
-    await page.click('#ex-stage .ex__again');
+    await page.click('#ex-head .ex__again');
     await settled(page);
     assert.equal(below(calls).length, 3, 'Read again did not read the jobs: ' + JSON.stringify(below(calls)));
     assert.deepEqual(errors, []);
@@ -297,26 +304,36 @@ await check('XP4: a step shows its own lines of the job\'s log, by time, as text
   } finally { await context.close(); }
 });
 
-await check('XP5: the wheel goes in over a tile and out again, Enter and Backspace do the same, and a task with no pull request leads to its claim branch', async () => {
+await check('XP5: zooming out past the whole level comes out one level for one turn of the wheel, the wheel over a card zooms and never goes in, Enter, Escape and Backspace move, and a task with no pull request leads to its claim branch', async () => {
   const { context, page, calls, errors } = await open(routes());
   try {
     await toExplore(page);
+    await goIn(page, '#30 Ship the graph');
+    await goIn(page, '#20 Draw the board');
     await page.hover('#ex-stage .ex__tile[data-ex="0"]');
-    // a glide: one gesture of many events, which goes in one level and no more
-    for (let i = 0; i < 12; i++) { await page.mouse.wheel(0, -40); await sleep(30); }
+    // a glide inward over a card zooms about it and goes into nothing
+    for (let i = 0; i < 6; i++) { await page.mouse.wheel(0, -60); await sleep(30); }
     await sleep(400);
-    assert.equal((await trail(page)).length, 2, 'one gesture went more than one level: ' + JSON.stringify(await trail(page)));
+    assert.equal((await trail(page)).length, 3, 'a turn inward moved a level: ' + JSON.stringify(await trail(page)));
+    assert.ok(await page.evaluate(() => { const m = /scale\(([0-9.]+)\)/.exec(document.querySelector('#ex-stage .ex__sheet').style.transform); return m && Number(m[1]) > 1.05; }), 'the wheel did not zoom in');
+    // a glide outward: back to the whole level, then out of it, one level and no more
+    for (let i = 0; i < 40; i++) { await page.mouse.wheel(0, 80); await sleep(30); }
     await sleep(400);
-    await page.mouse.wheel(0, 120);
-    await page.waitForFunction(() => document.querySelectorAll('#ex-path > :not(.ex__sep)').length === 1, null, { timeout: 4000 });
+    assert.equal((await trail(page)).length, 2, 'one gesture outward did not move exactly one level: ' + JSON.stringify(await trail(page)));
     await page.focus('#ex-stage .ex__tile[data-ex="0"]');
-    await page.keyboard.press('ArrowRight');
-    assert.equal(await page.evaluate(() => document.activeElement.getAttribute('data-ex')), '1');
-    await page.keyboard.press('ArrowLeft');
     await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.querySelectorAll('#ex-path > :not(.ex__sep)').length === 3, null, { timeout: 4000 });
+    await page.keyboard.press('Escape');
     await page.waitForFunction(() => document.querySelectorAll('#ex-path > :not(.ex__sep)').length === 2, null, { timeout: 4000 });
     await page.keyboard.press('Backspace');
     await page.waitForFunction(() => document.querySelectorAll('#ex-path > :not(.ex__sep)').length === 1, null, { timeout: 4000 });
+    await page.focus('#ex-stage .ex__tile[data-ex="0"]');
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await page.evaluate(() => document.activeElement.getAttribute('data-ex')), '1', 'the right arrow did not move to the next card');
+    await page.keyboard.press('ArrowLeft');
+    assert.equal(await page.evaluate(() => document.activeElement.getAttribute('data-ex')), '0');
+    await page.keyboard.press('End');
+    assert.equal(await page.evaluate(() => document.activeElement.getAttribute('data-ex')), '1');
     await goIn(page, '#30 Ship the graph');
     await goIn(page, '#20 Draw the board');
     await goIn(page, '#23 Write the body');
@@ -394,6 +411,10 @@ await check('XP9: choosing another repository while the tab is open shows that r
   try {
     await toExplore(page);
     await goIn(page, '#30 Ship the graph');
+    // the side column is folded while the tab is shown; a press on it brings the repository's box back
+    const side = await page.$eval('.console__side', (n) => ({ w: n.clientWidth, h: n.clientHeight }));
+    await page.click('.console__side', { position: { x: Math.floor(side.w / 2), y: side.h - 12 } });
+    await page.waitForFunction(() => !document.getElementById('console').classList.contains('console--exwide'), null, { timeout: 4000 });
     await page.selectOption('#cp-repo', 'acme/beta');
     await sleep(800);
     assert.ok(!/acme\/demo|Ship the graph/.test(await page.textContent('#tab-explore')), 'the first repository is shown under the second while its issues are read');
@@ -418,6 +439,291 @@ await check('XP10: where the Dependencies tab could not read the sub-issues, an 
     const text = await page.textContent('#ex-stage');
     assert.match(text, /Its sub-issues could not be read/);
     assert.ok(!/add tasks on the issue/.test(text), 'an epic whose sub-issues were not read was called empty');
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+// the scale the stage draws the level's cards at, from the sheet's transform
+const scaleOf = (page) => page.evaluate(() => { const sh = document.querySelector('#ex-stage .ex__sheet'); const m = sh && /translate\(([-0-9.]+)px, ([-0-9.]+)px\) scale\(([0-9.]+)\)/.exec(sh.style.transform); return m ? { x: Number(m[1]), y: Number(m[2]), k: Number(m[3]) } : null; });
+// what of the tab overflows: a box of it that scrolls or could, a card outside the stage, and the
+// window scrolled sideways
+const overflow = (page) => page.evaluate(() => {
+  const out = [], stage = document.getElementById('ex-stage').getBoundingClientRect();
+  for (const n of document.querySelectorAll('#tab-explore, #tab-explore *')) {
+    const cs = getComputedStyle(n);
+    if (/(auto|scroll)/.test(cs.overflowY + cs.overflowX) && (n.scrollHeight > n.clientHeight + 1 || n.scrollWidth > n.clientWidth + 1)) out.push('scrolls: ' + (n.id || n.className));
+  }
+  for (const t of document.querySelectorAll('#ex-stage .ex__tile')) {
+    const r = t.getBoundingClientRect();
+    if (r.left < stage.left - 1 || r.right > stage.right + 1 || r.top < stage.top - 1 || r.bottom > stage.bottom + 1) out.push('outside the stage: ' + t.textContent.slice(0, 30));
+  }
+  if (document.scrollingElement.scrollWidth > innerWidth + 1) out.push('the window pans sideways');
+  return out;
+});
+const settle = () => sleep(450);
+
+await check('XP11: at 1440 x 900, on a phone upright and on one sideways, the level is drawn whole with no box that scrolls, the tab taking most of the panel on a computer and the whole screen on a phone', async () => {
+  for (const [name, view] of [['wide', WIDE], ['phone', PHONE], ['sideways', SIDEWAYS]]) {
+    const { context, page, errors } = await open(routes(), null, view);
+    try {
+      await toExplore(page);
+      await goIn(page, '#30 Ship the graph');
+      await goIn(page, '#20 Draw the board');
+      await settle();
+      await shot(page, 'explore-' + name);
+      assert.deepEqual(await overflow(page), [], name);
+      const m = await page.evaluate(() => {
+        const tab = document.getElementById('tab-explore').getBoundingClientRect(), side = document.querySelector('.console__side').getBoundingClientRect(), ask = document.getElementById('cp-askbar').getBoundingClientRect();
+        return { tab: [tab.left, tab.top, tab.right, tab.bottom], side: side.width, ask: ask.height, w: innerWidth, h: innerHeight, stage: document.getElementById('ex-stage').getBoundingClientRect().height };
+      });
+      if (name === 'wide') {
+        assert.ok(m.side < 80, 'the side column did not fold: ' + m.side);
+        assert.equal(m.ask, 0, 'the Ask Claude bar did not fold');
+        assert.ok(m.tab[2] - m.tab[0] > 0.9 * m.w && m.stage > 0.6 * m.h, 'the tab takes too little of the window: ' + JSON.stringify(m));
+      } else {
+        assert.ok(Math.abs(m.tab[0]) <= 1 && Math.abs(m.tab[1]) <= 1 && Math.abs(m.tab[2] - m.w) <= 1 && Math.abs(m.tab[3] - m.h) <= 1, name + ': the tab does not take the whole screen: ' + JSON.stringify(m));
+        assert.ok(m.stage > 0.5 * m.h, name + ': the stage is small: ' + JSON.stringify(m));
+        // the site bar's handle is over no control of the tab
+        const under = await page.evaluate(() => {
+          const h = document.querySelector('.console__barhandle');
+          if (!h || !h.getClientRects().length) return 'no handle';
+          const r = h.getBoundingClientRect();
+          return Array.from(document.querySelectorAll('#tab-explore button, #tab-explore a')).filter((b) => { const q = b.getBoundingClientRect(); return q.width && q.left < r.right && q.right > r.left && q.top < r.bottom && q.bottom > r.top; }).map((b) => b.textContent);
+        });
+        assert.deepEqual(under, [], name + ': the handle lies over a control');
+      }
+      assert.deepEqual(errors, []);
+    } finally { await context.close(); }
+  }
+});
+
+await check('XP12: Panel, or a press on the folded side column or foot, brings them back; Panel folds them again, and another tab shows the console as it was', async () => {
+  const { context, page, errors } = await open(routes());
+  try {
+    await toExplore(page);
+    const sideW = () => page.$eval('.console__side', (n) => n.getBoundingClientRect().width);
+    assert.ok(await sideW() < 80);
+    assert.equal(await page.getAttribute('#ex-wide', 'aria-pressed'), 'false');
+    await page.click('#ex-wide');
+    assert.ok(await sideW() > 150, 'Panel did not bring the side column back');
+    assert.ok(await page.isVisible('#cp-repo-shown'), 'the repository\'s box is not back');
+    assert.equal(await page.getAttribute('#ex-wide', 'aria-pressed'), 'true');
+    await page.click('#ex-wide');
+    assert.ok(await sideW() < 80, 'Panel did not fold the side column again');
+    // a press on the foot's empty part
+    const foot = await page.$eval('.console__status', (n) => { const r = n.getBoundingClientRect(); return { x: r.right - 6, y: r.top + r.height / 2 }; });
+    await page.mouse.click(foot.x, foot.y);
+    assert.ok(await sideW() > 150, 'a press on the folded foot did not bring the panel back');
+    await page.click('#ex-wide');
+    await page.click('#rail-board');
+    await page.waitForFunction(() => location.hash === '#board');
+    assert.ok(await sideW() > 150, 'another tab kept the side column folded');
+    assert.ok(await page.isVisible('#cp-refresh'), 'another tab kept the foot folded');
+    await page.click('#rail-explore');
+    await page.waitForFunction(() => location.hash === '#explore');
+    assert.ok(await sideW() < 80, 'coming back to Explore did not fold the side column');
+    // a press on the folded side column's grip unfolds and drags nothing
+    const before = await page.evaluate(() => document.getElementById('console').style.getPropertyValue('--side-w'));
+    const grip = await page.$eval('.console__split[data-split="side"]', (n) => { const r = n.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+    await page.mouse.move(grip.x, grip.y);
+    await page.mouse.down();
+    await page.mouse.move(grip.x + 120, grip.y, { steps: 4 });
+    await page.mouse.up();
+    assert.ok(await sideW() > 150, 'a press on the folded grip did not bring the panel back');
+    assert.equal(await page.evaluate(() => document.getElementById('console').style.getPropertyValue('--side-w')), before, 'the press that unfolded also dragged the grip');
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+  const p = await open(routes(), null, PHONE);
+  try {
+    await toExplore(p.page);
+    assert.equal(await p.page.$eval('#tab-explore', (n) => getComputedStyle(n).position), 'fixed');
+    await p.page.click('#ex-wide');
+    assert.equal(await p.page.$eval('#tab-explore', (n) => getComputedStyle(n).position), 'static', 'Panel did not give the phone its page back');
+    assert.deepEqual(await overflow(p.page), []);
+    assert.deepEqual(p.errors, []);
+  } finally { await p.context.close(); }
+});
+
+await check('XP13: + and Whole zoom and draw the level whole again, - past the whole level comes out of it, a double click zooms, and the right arrow on the stage or a swipe goes to the level beside', async () => {
+  const { context, page, errors } = await open(routes());
+  try {
+    await toExplore(page);
+    await goIn(page, '#30 Ship the graph');
+    await goIn(page, '#20 Draw the board');
+    await settle();
+    const k0 = (await scaleOf(page)).k;
+    await page.click('#ex-zoom-in');
+    await settle();
+    assert.ok((await scaleOf(page)).k > k0 * 1.2, '+ did not zoom in');
+    await page.click('#ex-zoom-whole');
+    await settle();
+    assert.ok(Math.abs((await scaleOf(page)).k - k0) < 1e-3, 'Whole did not draw the level whole');
+    const box = await page.$eval('#ex-stage', (n) => { const r = n.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; });
+    await page.mouse.dblclick(box.r - 20, box.b - 20);
+    await settle();
+    assert.ok((await scaleOf(page)).k > k0 * 1.5, 'a double click did not zoom in');
+    await page.click('#ex-zoom-whole');
+    await settle();
+    await goIn(page, '#22 Render the section');
+    await settled(page);
+    await page.focus('#ex-stage');
+    await page.keyboard.press('ArrowRight');
+    await page.waitForFunction(() => /#23 Write the body/.test(document.querySelector('#ex-path .ex__here').textContent), null, { timeout: 4000 });
+    await page.keyboard.press('ArrowLeft');
+    await page.waitForFunction(() => /#22 Render the section/.test(document.querySelector('#ex-path .ex__here').textContent), null, { timeout: 4000 });
+    // a swipe to the left, on the stage's ground, brings the next task in
+    await settled(page);
+    await page.mouse.move(box.r - 30, box.t + 30);
+    await page.mouse.down();
+    await page.mouse.move(box.l + 60, box.t + 34, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForFunction(() => /#23 Write the body/.test(document.querySelector('#ex-path .ex__here').textContent), null, { timeout: 4000 });
+    assert.equal((await trail(page)).length, 4);
+    await page.click('#ex-zoom-out');
+    await page.waitForFunction(() => document.querySelectorAll('#ex-path > :not(.ex__sep)').length === 3, null, { timeout: 4000 });
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+await check('XP14: a log taller than the window opens at a size to read, on its error, and the wheel moves along it without leaving it', async () => {
+  const { context, page, errors } = await open(routes({ log: 'long' }));
+  try {
+    await toJob(page);
+    await goIn(page, '2. Run Claude');
+    await page.waitForSelector('#ex-stage .ex__line', { timeout: 8000 });
+    await settle();
+    await shot(page, 'explore-long-log');
+    const at = await scaleOf(page);
+    assert.ok(at && Math.abs(at.k - 1) < 0.01, 'the log is not drawn at its own size: ' + JSON.stringify(at));
+    const seen = await page.evaluate(() => { const e = document.querySelector('#ex-stage .ex__error').getBoundingClientRect(), s = document.getElementById('ex-stage').getBoundingClientRect(); return e.top >= s.top && e.bottom <= s.bottom; });
+    assert.ok(seen, 'the error is not in view');
+    await page.hover('#ex-stage');
+    await page.mouse.wheel(0, 300);
+    await settle();
+    const after = await scaleOf(page);
+    assert.ok(after.y < at.y - 100 && Math.abs(after.k - 1) < 0.01, 'the wheel did not move along the log: ' + JSON.stringify([at, after]));
+    assert.equal((await trail(page)).length, 8, 'the wheel left the log');
+    assert.deepEqual(await overflow(page), []);
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+await check('XP15: a level of few cards grows to fill the stage, and a level of many is drawn whole in more columns', async () => {
+  const many = routes();
+  const lots = Array.from({ length: 40 }, (_, i) => issue(200 + i, 'Task number ' + (200 + i), ['todo']));
+  many['GET /repos/acme/demo/issues'] = OPEN.concat(lots);
+  const { context, page, errors } = await open(many, null, WIDE);
+  try {
+    await toExplore(page);
+    await goIn(page, '#30 Ship the graph');
+    await settle();
+    const one = await page.$eval('#ex-stage .ex__tile', (t) => t.getBoundingClientRect().width);
+    assert.ok(one > 232 * 1.3, 'one card was not grown: ' + one);
+    await page.click('#ex-path .ex__crumb >> nth=0');
+    await page.waitForFunction(() => document.querySelectorAll('#ex-path > :not(.ex__sep)').length === 1);
+    await goIn(page, 'Not in an epic');
+    await settle();
+    await shot(page, 'explore-many');
+    assert.equal((await tiles(page)).length, 43);
+    assert.ok(Number(await page.$eval('#ex-stage .ex__grid', (g) => g.style.getPropertyValue('--ex-cols'))) >= 6, 'many cards kept few columns');
+    assert.deepEqual(await overflow(page), []);
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+
+await check('XP16: a short log keeps its place under the wheel, which never takes the person out of it, and its lines are copied whole from a button', async () => {
+  const { context, page, errors } = await open(routes());
+  try {
+    await toJob(page);
+    await goIn(page, '2. Run Claude');
+    await page.waitForSelector('#ex-stage .ex__line', { timeout: 8000 });
+    await settle();
+    await page.hover('#ex-stage');
+    for (let i = 0; i < 4; i++) { await page.mouse.wheel(0, 200); await sleep(80); }
+    await settle();
+    assert.equal((await trail(page)).length, 8, 'the wheel left a short log');
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.click('#ex-head button:has-text("Copy the lines")');
+    await page.waitForFunction(() => /Copied/.test(document.getElementById('ex-status').textContent), null, { timeout: 4000 });
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    assert.match(copied, /^Run claude/m);
+    assert.doesNotMatch(copied, /##\[/);
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+await check('XP17: a double click on a card goes one level, the arrows move between cards while zoomed in, and a held arrow on the stage steps sideways once', async () => {
+  const { context, page, calls, errors } = await open(routes());
+  try {
+    await toExplore(page);
+    const i = (await tiles(page)).findIndex((t) => t.title === '#30 Ship the graph');
+    // a double click's two clicks, the second landing where the first was, on the next level's card
+    await page.evaluate((i) => {
+      const at = (n) => document.querySelector('#ex-stage .ex__tile[data-ex="' + n + '"]');
+      at(i).dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+      at(0).dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2 }));
+    }, i);
+    await settle();
+    assert.equal((await trail(page)).length, 2, 'a double click went past the card it was on');
+    await goIn(page, '#20 Draw the board');
+    await settle();
+    await page.focus('#ex-stage .ex__tile[data-ex="0"]');
+    await page.click('#ex-zoom-in');
+    await page.click('#ex-zoom-in');
+    await settle();
+    await page.focus('#ex-stage .ex__tile[data-ex="0"]');
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await page.evaluate(() => document.activeElement.getAttribute('data-ex')), '1', 'an arrow panned in place of moving to the next card');
+    await page.click('#ex-zoom-whole');
+    await page.click('#ex-path .ex__crumb >> nth=0');
+    await page.waitForFunction(() => document.querySelectorAll('#ex-path > :not(.ex__sep)').length === 1);
+    await goIn(page, 'Not in an epic');
+    await settle();
+    const loose = (await tiles(page)).map((t) => t.title);
+    assert.ok(loose.length >= 3, 'too few loose tasks to hold an arrow over: ' + JSON.stringify(loose));
+    await goIn(page, loose[0]);
+    await settled(page);
+    calls.length = 0;
+    await page.focus('#ex-stage');
+    await page.keyboard.down('ArrowRight');
+    await page.keyboard.down('ArrowRight');
+    await page.keyboard.down('ArrowRight');
+    await page.keyboard.up('ArrowRight');
+    await settle();
+    assert.equal(await page.textContent('#ex-path .ex__here'), loose[1], 'a held arrow stepped more than once');
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+await check('XP18: a log follows its box when Panel brings the side column back, its lines never running past the stage', async () => {
+  const { context, page, errors } = await open(routes({ log: 'long' }), null, WIDE);
+  try {
+    await toJob(page);
+    await goIn(page, '2. Run Claude');
+    await page.waitForSelector('#ex-stage .ex__line', { timeout: 8000 });
+    await settle();
+    await page.click('#ex-wide');
+    await settle();
+    const m = await page.evaluate(() => { const s = document.getElementById('ex-stage').getBoundingClientRect(), h = document.querySelector('#ex-stage .ex__sheet--log').getBoundingClientRect(); return { stageR: s.right, sheetR: h.right }; });
+    assert.ok(m.sheetR <= m.stageR + 1, 'the log runs past the stage: ' + JSON.stringify(m));
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+await check('XP19: signed out, a phone at the address #explore scrolls as the sign-in page always does, and nothing of the fold applies', async () => {
+  const context = await browser.newContext({ viewport: PHONE, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  try {
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await page.route('**/assets/js/symphony-panel.js*', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: script }));
+    await page.goto(BASE + '/symphony/control/#explore');
+    await sleep(500);
+    const m = await page.evaluate(() => ({ body: getComputedStyle(document.body).overflow, fixed: getComputedStyle(document.getElementById('tab-explore')).position, gate: !document.getElementById('cp-app').classList.contains('hidden') }));
+    assert.equal(m.gate, false);
+    assert.notEqual(m.body, 'hidden', 'the sign-in page cannot scroll');
+    assert.notEqual(m.fixed, 'fixed');
     assert.deepEqual(errors, []);
   } finally { await context.close(); }
 });

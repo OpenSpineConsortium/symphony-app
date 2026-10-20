@@ -1,0 +1,1 @@
+[["for (var c = 1; c <= Math.min(n, EXPLORE_COLS); c++) {", "for (var c = 1; c <= 1; c++) {"]]

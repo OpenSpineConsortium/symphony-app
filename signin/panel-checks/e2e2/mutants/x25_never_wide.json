@@ -1,0 +1,1 @@
+[["    exWide(true);\n    consoleOnOpen.explore = openExplore;", "    exWide(false);\n    consoleOnOpen.explore = openExplore;"]]
