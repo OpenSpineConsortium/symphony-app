@@ -268,10 +268,15 @@ async function open(opts) {
     return route.fulfill({ status: 200, contentType: 'application/json', headers, body: JSON.stringify(r) });
   });
   if (controlCss !== null) await context.route('**/assets/css/control.css*', (route) => route.fulfill({ status: 200, contentType: 'text/css', body: controlCss }));
-  // the page knows the collection's id; the checks blank it so the search by name is exercised,
-  // and one check keeps it as the stand-in's to see the first sign-in carry the collection's consents
-  let script = o.script || (o.globusClient ? configured.replace("var GLOBUS_CLIENT = '';", "var GLOBUS_CLIENT = '" + o.globusClient + "';") : configured);
+  // the page is registered at Globus and knows the collection's id; the checks blank both, so the
+  // tile reads as unregistered where a check expects that and the search by name is exercised, and
+  // put the stand-in's in where a check signs in or keeps the collection to see the first sign-in
+  // carry its consents
+  let script = o.script || configured;
   if (!o.script) {
+    const client = /var GLOBUS_CLIENT = '[0-9a-f-]*';/;
+    assert.ok(client.test(script), 'the Globus client id is not where the checks look for it');
+    script = script.replace(client, "var GLOBUS_CLIENT = '" + (o.globusClient || '') + "';");
     const known = /var GLOBUS_KNOWN = \[\{ name: 'wsugrid#globus', label: 'WSU grid', id: '[0-9a-f-]*' \}\];/;
     assert.ok(known.test(script), 'the known collection is not where the checks look for it');
     script = script.replace(known, "var GLOBUS_KNOWN = [{ name: 'wsugrid#globus', label: 'WSU grid', id: '" + (o.globusKnown || '') + "' }];");
