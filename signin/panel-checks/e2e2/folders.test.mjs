@@ -3212,7 +3212,7 @@ await check('GL8: the drives kept on this browser are cards in the head, in the 
     return { provider: c.getAttribute('data-provider'), on: c.classList.contains('acct--on'), current: pick.getAttribute('aria-current'), name: c.querySelector('.acct__name').textContent, sub: c.querySelector('.acct__sub').textContent, shadow: cs.boxShadow, border: cs.borderTopColor, radius: cs.borderTopLeftRadius, eject: !!c.querySelector('#fd-forget') };
   }));
   let cards = await read();
-  assert.deepEqual(cards.map((c) => [c.provider, c.on, c.current, c.name, c.sub, c.eject]), [['microsoft', true, 'true', 'OneDrive', 'Greg (personal)', true], ['globus', false, null, 'wsugrid#globus', 'go2432@wayne.edu · read-only', false]]);
+  assert.deepEqual(cards.map((c) => [c.provider, c.on, c.current, c.name, c.sub, c.eject]), [['microsoft', true, 'true', 'OneDrive', 'Greg (personal)', true], ['globus', false, null, 'wsugrid#globus', 'go2432@wayne.edu \u00B7 read-only', false]]);
   assert.ok(cards[0].shadow.indexOf(teal) >= 0 && cards[0].border === teal, 'the lit card is not lit in teal: ' + cards[0].shadow + ' / ' + cards[0].border);
   assert.ok(cards[1].shadow.indexOf(teal) < 0, 'the dimmed card carries the teal accent');
   assert.equal(cards[0].radius, '12px', 'the card has not the console card\'s shape');
@@ -3223,7 +3223,7 @@ await check('GL8: the drives kept on this browser are cards in the head, in the 
   assert.equal(await page.textContent('#fd-connect-note'), 'Connected to OneDrive as Greg (personal), kept on this browser for tester. Globus is connected too: press wsugrid#globus to switch.');
   // the eject: the Forget button, its words for a screen reader, the eject mark drawn
   const eject = await page.evaluate(() => { const b = document.getElementById('fd-forget'); return { text: b.textContent, title: b.title, mark: getComputedStyle(b, '::before').content, wordsWide: b.querySelector('.admin__sr').getBoundingClientRect().width, hidden: b.hidden }; });
-  assert.deepEqual(eject, { text: 'Forget OneDrive', title: 'Forget OneDrive', mark: '"⏏"', wordsWide: 1, hidden: false });
+  assert.deepEqual(eject, { text: 'Forget OneDrive', title: 'Forget OneDrive', mark: '"\u23CF"', wordsWide: 1, hidden: false });
   assert.deepEqual(await page.$$eval('#fd-accounts > *', (l) => l.map((n) => n.id || n.className)), ['acct acct--on', 'acct', 'fd-add'], 'the dashed card is not the last of the strip');
   assert.equal(await page.textContent('#fd-add'), '+ Add a cloud drive');
   // a redraw of the state that changes no card (the tab left and opened again) leaves the cards
@@ -3249,7 +3249,7 @@ await check('GL8: the drives kept on this browser are cards in the head, in the 
   // the add dialog: rows, a chevron on the ones that can be pressed and none on a disabled one
   await openClouds(page);
   const rows = await page.$$eval('#dlg-cloud .clouds__tile', (l) => l.map((t) => [t.tagName, t.disabled === true, getComputedStyle(t, '::after').content, getComputedStyle(t).textAlign, getComputedStyle(t).width === getComputedStyle(t.parentNode).width]));
-  assert.deepEqual(rows, [['BUTTON', false, '"›"', 'left', true], ['BUTTON', false, '"›"', 'left', true], ['DIV', false, 'none', 'left', true], ['DIV', false, 'none', 'left', true]]);
+  assert.deepEqual(rows, [['BUTTON', false, '"\u203A"', 'left', true], ['BUTTON', false, '"\u203A"', 'left', true], ['DIV', false, 'none', 'left', true], ['DIV', false, 'none', 'left', true]]);
   await page.keyboard.press('Escape');
   // the eject from the keyboard: Globus is forgotten, OneDrive takes the tab and the keyboard stays on its card
   await page.focus('#fd-forget');
