@@ -39,7 +39,7 @@ function list(extra) {
 const browser = await chromium.launch();
 // one fresh browser, the token kept for acme/demo, the Grid tab opened; state.accounts is what the
 // branch grid holds now, and each dispatch is recorded and may change it
-async function open(state, viewport) {
+async function open(state, viewport, opts = {}) {
   const context = await browser.newContext({ viewport: viewport || { width: 1280, height: 900 } });
   const calls = [], dispatched = [];
   // nothing leaves for any other host: a link the page should never offer is never fetched either
@@ -54,9 +54,12 @@ async function open(state, viewport) {
     const raw = (obj) => route.fulfill({ status: 200, contentType: 'application/vnd.github.raw+json', body: JSON.stringify(obj) });
     if (key === 'GET /user') return json(200, { login: 'tester' });
     if (key === 'GET /repos/acme/demo') return json(200, { full_name: 'acme/demo', default_branch: 'main', private: true, topics: ['symphony'], id: 123, owner: { id: 77, login: 'acme' }, permissions: { admin: true, push: true, pull: true } });
+    if (key === 'GET /repos/OpenSpineConsortium/symphony-template') return json(200, { full_name: 'OpenSpineConsortium/symphony-template', default_branch: 'main', private: false, id: 9, owner: { id: 8, login: 'OpenSpineConsortium' } });
+    if (opts.home && key === 'GET /repos/OpenSpineConsortium/symphony-template/contents/accounts.json') return raw(state.accounts);
     if (key === 'GET /repos/acme/demo/contents/accounts.json') return state.accounts ? raw(state.accounts) : json(404, { message: 'Not Found' });
     if (key === 'GET /repos/acme/demo/contents/link.json') return state.link ? raw(state.link) : json(404, { message: 'Not Found' });
-    if (key === 'POST /repos/acme/demo/actions/workflows/grid-accounts.yml/dispatches') {
+    if (key === 'POST /repos/acme/demo/actions/workflows/grid-accounts.yml/dispatches' || (opts.home && key === 'POST /repos/OpenSpineConsortium/symphony-template/actions/workflows/grid-accounts.yml/dispatches')) {
+      if (opts.home) calls[calls.length - 1].home = true;
       const body = req.postDataJSON();
       dispatched.push(body);
       if (state.onDispatch) await state.onDispatch(body);
@@ -66,12 +69,13 @@ async function open(state, viewport) {
     if (key === 'GET /repos/acme/demo/actions/runs') return json(200, { workflow_runs: [] });
     return json(404, { message: 'Not Found' });
   });
-  await context.addInitScript(() => {
+  await context.addInitScript((noGridRepo) => {
     if (sessionStorage.getItem('seeded')) return;
     localStorage.setItem('symphony_panel_token', 'github_pat_TESTER');
     localStorage.setItem('symphony_panel_repos', JSON.stringify(['acme/demo']));
+    if (!noGridRepo) localStorage.setItem('symphony_grid_repo', 'acme/demo');
     sessionStorage.setItem('seeded', '1');
-  });
+  }, !!opts.home);
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
@@ -222,6 +226,21 @@ await check('G7: on a phone the tab fits the window, tiles and side panel alike'
   const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth, side: document.getElementById('gr-side').getBoundingClientRect().width }));
   assert.ok(m.sw <= m.iw, 'the page is wider than the phone: ' + m.sw + '/' + m.iw);
   assert.ok(m.side > 0 && m.side <= m.iw, 'the side panel does not fit: ' + m.side);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G8: the grid is the same whatever repository the panel has open: with acme/demo open and nothing kept, the tab reads and presses OpenSpineConsortium/symphony-template, and says so', async () => {
+  const state = { accounts: answer('', list()) };
+  state.onDispatch = async (body) => { state.accounts = answer(body.inputs.request, list({ auto: true })); };
+  const { context, page, calls, dispatched, errors } = await open(state, null, { home: true });
+  await page.waitForSelector('#gr-tile-2');
+  assert.ok(!calls.some((c) => c.key === 'GET /repos/acme/demo/contents/accounts.json'), 'the open repository was read for the grid');
+  assert.match(await page.textContent('#gr-tiles'), /through OpenSpineConsortium\/symphony-template\./);
+  await page.click('#gr-auto');
+  await page.waitForFunction(() => document.getElementById('gr-auto').textContent === 'Auto mode: on', null, { timeout: 15000 });
+  assert.equal(dispatched.length, 1);
+  assert.ok(calls.some((c) => c.home && /symphony-template\/actions\/workflows\/grid-accounts\.yml\/dispatches$/.test(c.key)), 'the press did not go to symphony-template');
   assert.deepEqual(errors, []);
   await context.close();
 });
