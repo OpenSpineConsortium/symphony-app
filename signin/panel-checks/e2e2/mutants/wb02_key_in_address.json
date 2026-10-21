@@ -1,0 +1,1 @@
+[["input.value = '';\n      wb.login = wbLogin();", "input.value = '';\n      try { history.replaceState(null, '', location.pathname + location.search + '&k=' + key + location.hash); } catch (e) {}\n      wb.login = wbLogin();"]]

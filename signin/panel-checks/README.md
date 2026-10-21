@@ -598,7 +598,17 @@ ghu_TEST or github_pat_X.
   another key, is never offered (G5, the link sealed here with Node's crypto as
   scripts/grid-accounts.sh seals it with openssl); and the tab fits a phone (G7); the grid is OpenSpineConsortium/symphony-template whatever repository the panel has open, unless this browser keeps another under symphony_grid_repo (G8); every worker the grid lists shows with its account, its session and its own Stop, and Start a worker on an account sends that slot and the name and shows the new worker once the grid answers (G9, hpcworker framework 22, the owner's "multiple claude codes running locally on the grid"); Stop asks first and sends the name alone, and a name the gate would refuse is never sent (G10); a run another overtook on accounts.json is still followed to its end through its own answer under answers/ (G11, docs/research/grid-and-cloud-workers-review.md rank 1); Start with a count sends the count and a stem of at most 21, and a count of one sends none (G12, rank 2); a running worker the grid has not heard from in a quarter of an hour, counted from the grid's last answer, is flagged (G13, rank 4); each account says how many live workers it carries, and one already carrying a worker still offers Start, saying the window is shared (G14, rank 7); Console shows what a grid job printed, a sign-in's output from the account, a worker's from its line and the usage job's from the Console, as text and never as markup (G15, hpcworker framework 23); the Workers tab lists every worker at work, the grid's with the issues it holds and the cloud's runs of workers.yml, each with its way to stop, and never an ended worker or a finished run (G16, rank 9). Its nineteen mutants,
   `mutants/gr*.json`, are each killed. signin.test.mjs's P6 walks the Grid tab on a phone too.
-- `e2e2/mutants/`: 653 mutants. Each `.json` is a list of [text, replacement] pairs applied to
+- `e2e2/wandb.test.mjs`: 15 checks of the console's W&B tab, /symphony/control/#wandb (site branch
+  claude/project-thread-wxs74i, 2026-10-21), with the sign-in service mocked at
+  https://signin.example.test and answering as W&B's GraphQL API does: Connect with the key from
+  wandb.ai/authorize, kept under the GitHub login and never in the address (W1, W2, W8); the runs,
+  their state and last numbers, a run's charts and chips (W2, W3); a running run read again and
+  nothing read with the tab hidden (W4), the keyboard kept on its tile or chip (W12); a refused key
+  forgotten, an outage not (W5, W6); Forget W&B and Forget the token (W7); the project kept and a
+  project left never drawn under the next (W9, W13); names as text and run links escaped (W10); and
+  the tab fitting a laptop, a phone and a phone held sideways with a run open (W11). Mutants wb01 to
+  wb20 (no wb16 or wb18) are killed by them.
+- `e2e2/mutants/`: 671 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
   `e2e2/run-mutants.sh` runs them. The seven of the Claude dialog's button "Ask in claude.ai"

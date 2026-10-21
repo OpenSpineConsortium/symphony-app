@@ -1,0 +1,1 @@
+[["var k = wbKeptAll()[wbLogin()];", "var all = wbKeptAll(); var k = all[wbLogin()] || all[Object.keys(all)[0]];"]]

@@ -31,7 +31,7 @@ const granted = { access_token: 'ghu_token', token_type: 'bearer', expires_in: 2
 test('the service describes itself and keeps nothing', async () => {
   const r = await handle(new Request(SERVICE + '/'), env);
   assert.equal(r.status, 200);
-  assert.deepEqual(await r.json(), { service: 'symphony-signin', routes: ['/exchange', '/refresh', '/revoke', '/device', '/device/token', '/drive/config', '/drive/connect', '/drive/token'], keeps: 'nothing' });
+  assert.deepEqual(await r.json(), { service: 'symphony-signin', routes: ['/exchange', '/refresh', '/revoke', '/device', '/device/token', '/drive/config', '/drive/connect', '/drive/token', '/wandb/graphql'], keeps: 'nothing' });
   assert.equal(r.headers.get('Cache-Control'), 'no-store');
 });
 
@@ -615,4 +615,94 @@ test('the wait before asking again follows Retry-After, bounded so the page\'s 2
   await handle(post('/refresh', { refresh_token: 'ghr' }), env, long.fetchImpl);
   assert.ok(Date.now() - start < 8000, 'bounded');
   assert.equal(long.calls.length, 3);
+});
+
+/** a fake W&B that records what it was asked and answers as api.wandb.ai does */
+function wandb(answerBody, status, headers) {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init, body: JSON.parse(init.body) });
+    if (answerBody instanceof Error) throw answerBody;
+    return new Response(typeof answerBody === 'string' ? answerBody : JSON.stringify(answerBody), { status: status || 200, headers: Object.assign({ 'Content-Type': 'application/json' }, headers || {}) });
+  };
+  return { calls, fetchImpl };
+}
+const WB_QUERY = 'query Viewer { viewer { entity username } }';
+// the W&B route needs none of the GitHub settings, as the drive routes need none
+const wbEnv = { ALLOWED_ORIGIN: ORIGIN };
+
+test('/wandb/graphql passes a reading query and its variables to W&B with the key as Basic api:<key>, and returns W&B\'s answer', async () => {
+  const wb = wandb({ data: { viewer: { entity: 'greg', username: 'greg' } } });
+  const r = await handle(post('/wandb/graphql', { key: 'k'.repeat(40), query: WB_QUERY, variables: { a: 1 } }), wbEnv, wb.fetchImpl);
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), { data: { viewer: { entity: 'greg', username: 'greg' } } });
+  assert.equal(wb.calls.length, 1);
+  assert.equal(wb.calls[0].url, 'https://api.wandb.ai/graphql');
+  assert.equal(wb.calls[0].init.headers.Authorization, 'Basic ' + Buffer.from('api:' + 'k'.repeat(40)).toString('base64'));
+  assert.deepEqual(wb.calls[0].body, { query: WB_QUERY, variables: { a: 1 } });
+  assert.equal(r.headers.get('Access-Control-Allow-Origin'), ORIGIN);
+  assert.equal(r.headers.get('Cache-Control'), 'no-store');
+});
+
+test('/wandb/graphql refuses another origin and a call with none, and asks W&B nothing', async () => {
+  const wb = wandb({ data: {} });
+  for (const origin of ['https://evil.example', null]) {
+    const r = await handle(post('/wandb/graphql', { key: 'k'.repeat(40), query: WB_QUERY }, origin), wbEnv, wb.fetchImpl);
+    assert.equal(r.status, 403);
+  }
+  assert.equal(wb.calls.length, 0);
+});
+
+test('/wandb/graphql refuses a mutation or a subscription anywhere, a missing key and variables that are no object', async () => {
+  const wb = wandb({ data: {} });
+  const bad = [
+    { key: 'k'.repeat(40), query: 'mutation { deleteRun(input: {id: "x"}) { clientMutationId } }' },
+    { key: 'k'.repeat(40), query: 'query A { viewer { id } } mutation B { x }' },
+    { key: 'k'.repeat(40), query: '{ viewer { id } } # MUTATION' },
+    { key: 'k'.repeat(40), query: 'subscription { x }' },
+    { key: 'k'.repeat(40), query: 'fragment F on User { id }' },
+    { query: WB_QUERY },
+    { key: 'has a space', query: WB_QUERY },
+    { key: 'k'.repeat(40), query: WB_QUERY, variables: [1] },
+    { key: 'k'.repeat(40), query: WB_QUERY, variables: 'x' },
+  ];
+  for (const body of bad) {
+    const r = await handle(post('/wandb/graphql', body), wbEnv, wb.fetchImpl);
+    assert.equal(r.status, 400, JSON.stringify(body));
+  }
+  assert.equal(wb.calls.length, 0);
+});
+
+test('/wandb/graphql says W&B refused the key on a 401 alone, passes a 4xx GraphQL answer on, and makes 5xx, 429 and an unreachable W&B a 502', async () => {
+  let r = await handle(post('/wandb/graphql', { key: 'bad', query: WB_QUERY }), wbEnv, wandb('{"errors":[{"message":"unauthorized"}]}', 401).fetchImpl);
+  assert.equal(r.status, 401);
+  assert.equal((await r.json()).error, 'wandb_refused_key');
+  r = await handle(post('/wandb/graphql', { key: 'k'.repeat(40), query: WB_QUERY }), wbEnv, wandb({ errors: [{ message: 'permission denied' }] }, 403).fetchImpl);
+  assert.equal(r.status, 403, 'a 403 is no word on the key');
+  assert.deepEqual(await r.json(), { errors: [{ message: 'permission denied' }] });
+  r = await handle(post('/wandb/graphql', { key: 'k'.repeat(40), query: WB_QUERY }), wbEnv, wandb({ errors: [{ message: 'project not found' }] }, 400).fetchImpl);
+  assert.equal(r.status, 400);
+  assert.deepEqual(await r.json(), { errors: [{ message: 'project not found' }] });
+  for (const [b, s] of [['oops', 500], [{ errors: [] }, 429], ['<html>', 200]]) {
+    r = await handle(post('/wandb/graphql', { key: 'k'.repeat(40), query: WB_QUERY }), wbEnv, wandb(b, s).fetchImpl);
+    assert.equal(r.status, 502, String(s));
+    assert.equal((await r.json()).error, 'wandb_unreachable');
+  }
+  r = await handle(post('/wandb/graphql', { key: 'k'.repeat(40), query: WB_QUERY }), wbEnv, wandb(new Error('down')).fetchImpl);
+  assert.equal(r.status, 502);
+});
+
+test('/wandb/graphql refuses a body over 16 KB and passes on no answer over 4 MB', async () => {
+  const wb = wandb({ data: {} });
+  let r = await handle(post('/wandb/graphql', { key: 'k'.repeat(40), query: WB_QUERY, variables: { pad: 'x'.repeat(17000) } }), wbEnv, wb.fetchImpl);
+  assert.equal(r.status, 400);
+  assert.equal(wb.calls.length, 0);
+  r = await handle(post('/wandb/graphql', { key: 'k'.repeat(40), query: WB_QUERY }), wbEnv, wandb(JSON.stringify({ data: { x: 'y'.repeat(4 * 1024 * 1024) } })).fetchImpl);
+  assert.equal(r.status, 502);
+  assert.equal((await r.json()).error, 'wandb_too_long');
+  // a long answer that names no length is cut off as it streams
+  const streamed = async () => new Response(new ReadableStream({ start(c) { for (let i = 0; i < 5; i++) c.enqueue(new Uint8Array(1024 * 1024)); c.close(); } }), { status: 200 });
+  r = await handle(post('/wandb/graphql', { key: 'k'.repeat(40), query: WB_QUERY }), wbEnv, streamed);
+  assert.equal(r.status, 502);
+  assert.equal((await r.json()).error, 'wandb_too_long');
 });

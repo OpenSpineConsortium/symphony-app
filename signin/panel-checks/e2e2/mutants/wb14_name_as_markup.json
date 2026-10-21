@@ -1,0 +1,1 @@
+[["add(open, icon, el('span', 'tok__name', r.displayName || r.name),", "var nm = el('span', 'tok__name'); nm.innerHTML = r.displayName || r.name; add(open, icon, nm,"]]

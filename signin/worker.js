@@ -33,9 +33,18 @@
 // takes (2026-10-18), so Google Drive waits for a way that needs none, and a request naming any
 // other provider is answered 400 unknown_provider.
 //
+// The W&B route serves the panel's W&B tab (/symphony/control/#wandb), which shows a person's
+// Weights and Biases projects, runs and charts in the panel's own look. W&B's GraphQL API
+// (api.wandb.ai/graphql) is what W&B's own Python client reads, and nothing W&B publishes says
+// it answers a browser on another origin, so the page asks through here: POST /wandb/graphql
+// takes the person's W&B API key, which the page keeps in that browser alone, a GraphQL query and
+// its variables, and passes them to W&B with the key as W&B's own client sends it (HTTP Basic,
+// user api). It keeps neither the key nor the answer, reads only (a query naming a mutation or a
+// subscription anywhere is refused before W&B is asked), and calls no other address.
+//
 // What it never does: it never sees a Claude token, never reads a repository, never calls anything
-// but GitHub's token endpoint, its device-code endpoint and its token-revocation endpoint and
-// Microsoft's token endpoint, and
+// but GitHub's token endpoint, its device-code endpoint and its token-revocation endpoint,
+// Microsoft's token endpoint and W&B's GraphQL endpoint, and
 // answers only the page's origin (ALLOWED_ORIGIN), except that /drive/token takes a call with no
 // Origin at all, the repository's run, which is no browser. The Origin header is the browser's
 // word, which a script elsewhere cannot forge but a program can; what binds a code to the page
@@ -74,7 +83,13 @@ const MAX_BODY = 4096;
 // a drive's consent code and refresh token run to a few thousand characters, so the drive routes
 // read twice as much
 const MAX_DRIVE_BODY = 8192;
-const ROUTES = ['/exchange', '/refresh', '/revoke', '/device', '/device/token', '/drive/config', '/drive/connect', '/drive/token'];
+const ROUTES = ['/exchange', '/refresh', '/revoke', '/device', '/device/token', '/drive/config', '/drive/connect', '/drive/token', '/wandb/graphql'];
+// W&B's one address this service asks, the GraphQL endpoint W&B's Python client reads
+// (wandb/apis/public); a query with its variables fits in 16 KB, and an answer the panel asks for
+// (a page of runs, a run's sampled history) in a few hundred KB, so 4 MB is a ceiling, not a size
+const WANDB_GRAPHQL = 'https://api.wandb.ai/graphql';
+const MAX_WANDB_BODY = 16384;
+const MAX_WANDB_ANSWER = 4 * 1024 * 1024;
 // the one address a drive's consent may come back to: the control panel's own page, the same one
 // GitHub's sign-in returns to, which tells the two returns apart by the state each left with and
 // then opens its Folders tab; the trailing slash is part of it, since Microsoft matches the
@@ -407,6 +422,7 @@ export async function handle(request, env, fetchImpl) {
   // the drive routes: a public reading of what is set up, and the two exchanges
   if (request.method === 'GET' && url.pathname === '/drive/config') return answer(env, 200, driveConfig(env));
   if (request.method !== 'POST') return answer(env, 405, { error: 'method_not_allowed' });
+  if (url.pathname === '/wandb/graphql') return handleWandb(request, env, fetchImpl);
   if (url.pathname.indexOf('/drive/') === 0) return handleDrive(request, env, url.pathname, fetchImpl);
   if (!env || !env.GITHUB_CLIENT_ID || !env.GITHUB_CLIENT_SECRET) return answer(env, 503, { error: 'not_configured' });
   if (!sameOrigin(request, env)) return answer(env, 403, { error: 'origin_refused' });
@@ -478,6 +494,74 @@ async function handleDrive(request, env, path, fetchImpl) {
   const out = await askProvider(provider, { grant_type: 'refresh_token', refresh_token: refresh, scope: provider.scope },
     ['access_token', 'expires_in'], fetchImpl);
   return answer(env, out.status, out.body);
+}
+
+/** A query that only reads. The word mutation or subscription anywhere in the text refuses it,
+ * strings and comments included, since telling them apart is a parser's work and a query of the
+ * panel's never names either; a document that does not open with a query is refused too. */
+function readingQuery(value) {
+  if (typeof value !== 'string' || !value || value.length > 8192) return null;
+  if (/mutation|subscription/i.test(value)) return null;
+  return /^\s*(query\b|\{)/.test(value) ? value : null;
+}
+
+/** An answer's text, read at most `max` bytes, whatever length it declares or leaves out; null past it */
+async function readCapped(r, max) {
+  const declared = r.headers.get('Content-Length');
+  if (declared !== null && Number(declared) > max) return null;
+  if (!r.body) return '';
+  const reader = r.body.getReader();
+  const chunks = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const next = await reader.read();
+      if (next.done) break;
+      size += next.value.byteLength;
+      if (size > max) { await reader.cancel(); return null; }
+      chunks.push(next.value);
+    }
+  } catch (e) { return ''; }
+  const bytes = new Uint8Array(size);
+  let at = 0;
+  for (const chunk of chunks) { bytes.set(chunk, at); at += chunk.byteLength; }
+  return new TextDecoder().decode(bytes);
+}
+
+/** The W&B tab's one route: the page's origin alone, a reading query, the person's key passed on
+ * as W&B's client sends it and never kept; W&B's answer comes back with its status where it is
+ * W&B's word on the request (2xx or 4xx), and as 502 otherwise. */
+async function handleWandb(request, env, fetchImpl) {
+  if (!sameOrigin(request, env)) return answer(env, 403, { error: 'origin_refused' });
+  if (!(await withinLimit(request, env))) return answer(env, 429, { error: 'too_many_requests' });
+  let body;
+  try { body = await readBody(request, MAX_WANDB_BODY); } catch (e) { return answer(env, 400, { error: 'bad_body' }); }
+  const key = credential(body.key, 256);
+  const query = readingQuery(body.query);
+  const variables = body.variables === undefined ? {} : body.variables;
+  if (!key || !query || typeof variables !== 'object' || variables === null || Array.isArray(variables)) {
+    return answer(env, 400, { error: 'bad_request', error_description: 'key, a query that only reads, and variables as an object are needed' });
+  }
+  let r;
+  try {
+    r = await (fetchImpl || fetch)(WANDB_GRAPHQL, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': 'Basic ' + btoa('api:' + key), 'User-Agent': 'symphony-signin' },
+      body: JSON.stringify({ query, variables })
+    });
+  } catch (e) {
+    return answer(env, 502, { error: 'wandb_unreachable', error_description: 'W&B could not be reached; try again' });
+  }
+  const text = await readCapped(r, MAX_WANDB_ANSWER);
+  if (text === null) return answer(env, 502, { error: 'wandb_too_long', error_description: 'W&B\'s answer is too long to pass on; ask for fewer runs or samples' });
+  let data;
+  try { data = JSON.parse(text); } catch (e) { data = null; }
+  // a 401 is W&B refusing the key itself; a 403 may be a project the key may not read, or a guard
+  // in front of W&B, so it is passed on as W&B's word and never said as a bad key
+  if (r.status === 401) return answer(env, 401, { error: 'wandb_refused_key', error_description: 'W&B refused the key (it answered 401); copy it again from https://wandb.ai/authorize' });
+  if (r.status >= 200 && r.status < 500 && r.status !== 429 && data && typeof data === 'object') return answer(env, r.status, data);
+  const why = r.status === 429 ? 'W&B is limiting requests for the moment (it answered 429); wait a minute' : 'W&B answered ' + r.status + ' for the moment; try again';
+  return answer(env, 502, { error: 'wandb_unreachable', error_description: why });
 }
 
 export default {
