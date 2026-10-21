@@ -1,1 +1,1 @@
-[["if (!GRID_NAME.test(name)) { gridNote('A worker\\'s name is up to 24 letters, digits, _ or -.'); return; }", ""]]
+[["if (!GRID_NAME.test(name) || (n > 1 && name.length > 21))", "if (n > 1 && name.length > 21)"]]

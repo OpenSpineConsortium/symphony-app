@@ -69,7 +69,11 @@ async function open(state, viewport, opts = {}) {
       if (state.onDispatch) await state.onDispatch(body);
       return route.fulfill({ status: 204, body: '' });
     }
-    if (key === 'GET /repos/acme/demo/issues' || key === 'GET /repos/acme/demo/pulls') return json(200, []);
+    if (key === 'GET /repos/acme/demo/issues') return json(200, state.issues || []);
+    if (key === 'GET /repos/acme/demo/pulls') return json(200, []);
+    if (key === 'GET /repos/acme/demo/actions/workflows/workers.yml/runs') return json(200, { workflow_runs: state.runs || [] });
+    const cancelled = key.match(/^POST \/repos\/acme\/demo\/actions\/runs\/(\d+)\/cancel$/);
+    if (cancelled) { state.cancelled = (state.cancelled || []).concat(cancelled[1]); return route.fulfill({ status: 202, body: '' }); }
     if (key === 'GET /repos/acme/demo/actions/runs') return json(200, { workflow_runs: [] });
     return json(404, { message: 'Not Found' });
   });
@@ -114,7 +118,7 @@ await check('G1: the tab draws each account with its e-mail, plan, five-hour and
   const facts = await page.evaluate(() => ({
     current: document.querySelector('#gr-tile-1').parentElement.classList.contains('gr--current'),
     full: document.querySelectorAll('#gr-tile-1 .tok__bar--full').length,
-    worker: document.querySelector('.gr__worker').textContent.replace(/\s+/g, ' ').trim(),
+    worker: document.querySelector('#gr-tiles .gr__worker').textContent.replace(/\s+/g, ' ').trim(),
     auto: document.getElementById('gr-auto').textContent,
     query: null,
   }));
@@ -425,6 +429,33 @@ await check('G15: Console shows what a grid job printed: a sign-in\'s output fro
   await page.waitForFunction(() => /out of usage/.test((document.getElementById('gr-log') || {}).textContent || ''), null, { timeout: 15000 });
   assert.deepEqual([dispatched[2].inputs.action, dispatched[2].inputs.slot, dispatched[2].inputs.name], ['log', '', undefined]);
   assert.match(await page.textContent('#gr-console'), /Usage job, read/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G16: the Workers tab lists every worker at work, the grid\'s with what it holds and the cloud\'s runs, each with its way to stop', async () => {
+  const l = list({ workers: [
+    { name: 'teamb', state: 'online', account: '2', pinned: '2', node: 'asx3', link: 'https://claude.ai/code?environment=env_x', age_s: 5 },
+    { name: 'gone', state: 'stopped', account: '2', pinned: '2', node: '', link: '', age_s: 5 },
+  ] });
+  const state = { accounts: answer('', l),
+    issues: [{ number: 7, title: 'Seven', html_url: 'https://github.com/acme/demo/issues/7', labels: [{ name: 'claimed' }, { name: 'worker:grid-teamb' }] }],
+    runs: [{ id: 555, name: 'Workers', display_title: 'Workers', status: 'in_progress', html_url: 'https://github.com/acme/demo/actions/runs/555', run_started_at: now },
+      { id: 556, name: 'Workers', display_title: 'Workers', status: 'completed', conclusion: 'success', html_url: 'https://github.com/acme/demo/actions/runs/556', run_started_at: now }] };
+  const { context, page, errors } = await open(state);
+  await page.click('.console__rail [data-tab="workers"]');
+  await page.waitForSelector('#cp-live-run-555');
+  await page.waitForSelector('#cp-live-grid-teamb');
+  const text = await page.textContent('#cp-live');
+  assert.match(text, /Grid: teamb, online on asx3, account 2 holds #7/, text);
+  assert.doesNotMatch(text, /gone|556/, 'an ended worker or a finished run is listed as running');
+  assert.match(await page.textContent('#cp-live-run-555'), /Cloud: Workers, in progress since/);
+  page.once('dialog', (d) => d.accept());
+  await page.click('#cp-live-cancel-555');
+  await page.waitForFunction(() => true);
+  await sleep(500);
+  assert.deepEqual(state.cancelled, ['555']);
+  assert.equal(await page.locator('#cp-live-stop-teamb').count(), 1);
   assert.deepEqual(errors, []);
   await context.close();
 });
