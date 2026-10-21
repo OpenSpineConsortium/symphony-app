@@ -1,0 +1,1 @@
+[["    else if (held) { var same = strip.querySelector('.acct[data-provider=\"' + held.slice(5) + '\"] .acct__pick'); focusLater(held.indexOf('card:') === 0 && same ? same : lit.firstChild); }", ""]]

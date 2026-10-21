@@ -2811,6 +2811,8 @@ await check('FS1: with no drive the tab is one dashed "+ Add a cloud drive" tile
   assert.deepEqual(await page.$$eval('#dlg-cloud .clouds__tile', (l) => l.map((t) => [(t.querySelector('.clouds__name') || t).textContent.trim(), t.tagName === 'BUTTON', t.getAttribute('aria-label')])),
     [['Connect OneDrive', true, null], ['Connect Globus', true, null], ['Google Drive', false, 'Google Drive, coming later'], ['Dropbox', false, 'Dropbox, coming later']]);
   assert.equal(await page.evaluate(() => document.getElementById('fd-globus').disabled), true, 'Globus can be pressed while the page is not registered there');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('fd-globus'), '::after').content), 'none', 'a row that cannot be pressed carries the chevron');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('fd-connect'), '::after').content), '"\u203A"', 'the row that can be pressed has no chevron');
   assert.equal((await page.textContent('#fd-globus .clouds__sub')).trim(), 'Not registered at Globus yet');
   assert.equal(await page.textContent('#fd-cloud-note'), '', 'the dialog gives a reason for a button that can be pressed');
   await page.waitForFunction(() => !document.getElementById('fd-connect').disabled, null, { timeout: 15000 });
@@ -3097,7 +3099,7 @@ await check('GL4: Globus stays connected on this browser through a reload, its a
   await page.click('#fd-connect');
   await page.waitForFunction(() => /Connected to OneDrive/.test((document.getElementById('fd-connect-note') || {}).textContent || ''), null, { timeout: 15000 });
   await listed(page);
-  assert.match(await page.textContent('#fd-connect-note'), /Globus is connected too: press wsugrid#globus in the folder tree\./);
+  assert.match(await page.textContent('#fd-connect-note'), /Globus is connected too: press wsugrid#globus to switch\./);
   assert.equal(await page.textContent('#fd-other-root'), 'wsugrid#globus');
   assert.deepEqual(await page.$$eval('#fd-browser .fx__address button', (l) => l.map((b) => b.textContent)), ['OneDrive']);
   assert.ok(await keptGlobus(page), 'connecting OneDrive forgot Globus');
@@ -3188,6 +3190,82 @@ await check('GL7: with the collection\'s id known to the page, the first sign-in
   assert.ok(globus.find((g) => g.path === '/v0.10/endpoint/' + COLLECTION), 'the collection was not read by its id');
   assert.equal((await keptGlobus(page)).id, COLLECTION);
   assert.deepEqual(await page.$$eval('#fd-items [data-name]', (l) => l.map((n) => n.textContent)), ['data', HOSTILE, 'notes.txt', 'preview.mp4']);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+await check('GL8: the drives kept on this browser are cards in the head, in the console\'s card shape: the one shown lit with the teal accent and marked current, the other pressable to switch, the eject on the lit card named Forget with its words out of sight, + Add a cloud drive the dashed card after them, the keyboard kept on the strip through a switch and a forget, no card while nothing is connected, and the add dialog\'s rows with a chevron only where a press does something', async () => {
+  const env = await open({ globusClient: 'gl-client-id' });
+  const { context, page, errors } = env;
+  await page.click('#rail-folders');
+  await ready(page);
+  assert.equal(await page.isHidden('#fd-accounts'), true, 'the strip is drawn with nothing connected');
+  await pressGlobus(env);
+  await listedGlobus(page);
+  await openClouds(page);
+  await page.click('#fd-connect');
+  await page.waitForFunction(() => /Connected to OneDrive/.test((document.getElementById('fd-connect-note') || {}).textContent || ''), null, { timeout: 15000 });
+  await listed(page);
+  await page.waitForFunction(() => /as Greg/.test(document.getElementById('fd-connect-note').textContent), null, { timeout: 15000 });
+  const teal = 'rgb(60, 194, 177)';
+  const read = () => page.$$eval('#fd-accounts .acct', (l) => l.map((c) => {
+    const pick = c.querySelector('.acct__pick'), cs = getComputedStyle(c);
+    return { provider: c.getAttribute('data-provider'), on: c.classList.contains('acct--on'), current: pick.getAttribute('aria-current'), name: c.querySelector('.acct__name').textContent, sub: c.querySelector('.acct__sub').textContent, shadow: cs.boxShadow, border: cs.borderTopColor, radius: cs.borderTopLeftRadius, eject: !!c.querySelector('#fd-forget') };
+  }));
+  let cards = await read();
+  assert.deepEqual(cards.map((c) => [c.provider, c.on, c.current, c.name, c.sub, c.eject]), [['microsoft', true, 'true', 'OneDrive', 'Greg (personal)', true], ['globus', false, null, 'wsugrid#globus', 'go2432@wayne.edu · read-only', false]]);
+  assert.ok(cards[0].shadow.indexOf(teal) >= 0 && cards[0].border === teal, 'the lit card is not lit in teal: ' + cards[0].shadow + ' / ' + cards[0].border);
+  assert.ok(cards[1].shadow.indexOf(teal) < 0, 'the dimmed card carries the teal accent');
+  assert.equal(cards[0].radius, '12px', 'the card has not the console card\'s shape');
+  // the head stays one line, the words read aloud but out of sight
+  const head = await page.evaluate(() => { const h = document.querySelector('#tab-folders .folders__head').getBoundingClientRect(); const n = document.getElementById('fd-connect-note').getBoundingClientRect(); return { h: h.height, nw: n.width, quiet: document.getElementById('fd-connect-note').classList.contains('folders__who--quiet') }; });
+  assert.ok(head.h < 60, 'the head takes ' + head.h + 'px with the cards');
+  assert.ok(head.quiet && head.nw <= 1, 'the sentence is shown beside the cards that say the same');
+  assert.equal(await page.textContent('#fd-connect-note'), 'Connected to OneDrive as Greg (personal), kept on this browser for tester. Globus is connected too: press wsugrid#globus to switch.');
+  // the eject: the Forget button, its words for a screen reader, the eject mark drawn
+  const eject = await page.evaluate(() => { const b = document.getElementById('fd-forget'); return { text: b.textContent, title: b.title, mark: getComputedStyle(b, '::before').content, wordsWide: b.querySelector('.admin__sr').getBoundingClientRect().width, hidden: b.hidden }; });
+  assert.deepEqual(eject, { text: 'Forget OneDrive', title: 'Forget OneDrive', mark: '"⏏"', wordsWide: 1, hidden: false });
+  assert.deepEqual(await page.$$eval('#fd-accounts > *', (l) => l.map((n) => n.id || n.className)), ['acct acct--on', 'acct', 'fd-add'], 'the dashed card is not the last of the strip');
+  assert.equal(await page.textContent('#fd-add'), '+ Add a cloud drive');
+  // a redraw of the state that changes no card (the tab left and opened again) leaves the cards
+  // as they are, so a press or the keyboard on one is never taken away by it
+  await page.evaluate(() => { document.querySelector('#fd-accounts .acct:not(.acct--on) .acct__pick').setAttribute('data-was', 'here'); location.hash = '#board'; });
+  await page.waitForFunction(() => location.hash === '#board');
+  await page.evaluate(() => { location.hash = '#folders'; });
+  await page.waitForFunction(() => location.hash === '#folders' && !document.getElementById('tab-folders').hidden);
+  await listed(page);
+  assert.equal(await page.$$eval('#fd-accounts .acct:not(.acct--on) .acct__pick[data-was]', (l) => l.length), 1, 'the cards were drawn anew on a redraw that changed nothing');
+  // a switch from the keyboard: Enter on the dimmed card, and the keyboard stays on the strip
+  await page.focus('#fd-accounts .acct:not(.acct--on) .acct__pick');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => /Connected to Globus/.test(document.getElementById('fd-connect-note').textContent), null, { timeout: 15000 });
+  await listedGlobus(page);
+  cards = await read();
+  assert.deepEqual(cards.map((c) => [c.provider, c.on, c.eject]), [['globus', true, true], ['microsoft', false, false]]);
+  assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.className), 'acct__pick', 'the switch took the keyboard off the strip');
+  assert.equal(await page.evaluate(() => document.activeElement.closest('.acct').classList.contains('acct--on')), true, 'the keyboard is not on the lit card');
+  assert.equal(await page.textContent('#fd-forget'), 'Forget Globus');
+  // the words with something to add are shown: the dimmed card's word is read in the quiet line too
+  assert.equal(await page.textContent('#fd-connect-note'), 'Connected to Globus, wsugrid#globus, as go2432@wayne.edu, read-only, kept on this browser for tester. OneDrive is connected too: press its card to switch.');
+  // the add dialog: rows, a chevron on the ones that can be pressed and none on a disabled one
+  await openClouds(page);
+  const rows = await page.$$eval('#dlg-cloud .clouds__tile', (l) => l.map((t) => [t.tagName, t.disabled === true, getComputedStyle(t, '::after').content, getComputedStyle(t).textAlign, getComputedStyle(t).width === getComputedStyle(t.parentNode).width]));
+  assert.deepEqual(rows, [['BUTTON', false, '"›"', 'left', true], ['BUTTON', false, '"›"', 'left', true], ['DIV', false, 'none', 'left', true], ['DIV', false, 'none', 'left', true]]);
+  await page.keyboard.press('Escape');
+  // the eject from the keyboard: Globus is forgotten, OneDrive takes the tab and the keyboard stays on its card
+  await page.focus('#fd-forget');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => /Connected to OneDrive/.test(document.getElementById('fd-connect-note').textContent), null, { timeout: 15000 });
+  cards = await read();
+  assert.deepEqual(cards.map((c) => [c.provider, c.on, c.eject]), [['microsoft', true, true]]);
+  assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.className), 'acct__pick', 'the forget took the keyboard off the strip');
+  // the last eject: nothing connected, the strip gone, the keyboard on the tab\'s own add tile
+  await page.focus('#fd-forget');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => !!document.getElementById('fd-add-tile'), null, { timeout: 15000 });
+  assert.equal(await page.isHidden('#fd-accounts'), true);
+  assert.equal(await page.$$eval('#fd-accounts .acct', (l) => l.length), 0);
+  assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.id), 'fd-add-tile', 'the keyboard was dropped with the last drive');
+  assert.equal(await page.isHidden('#fd-forget'), true);
   assert.deepEqual(errors, []);
   await context.close();
 });
