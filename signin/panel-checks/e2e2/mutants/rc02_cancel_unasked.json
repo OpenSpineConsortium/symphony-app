@@ -1,0 +1,1 @@
+[["if (!window.confirm('Cancel the run ' + (run.name || run.display_title || run.id) + '? Its jobs stop where they are.')) return;", ""]]
