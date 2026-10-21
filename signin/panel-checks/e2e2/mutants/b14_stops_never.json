@@ -1,0 +1,1 @@
+[["return pr.then(function () { return step(p).then(", "return pr.then(function () { return step(p).catch(function () {}).then("]]

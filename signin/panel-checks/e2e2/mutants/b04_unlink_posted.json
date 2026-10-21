@@ -1,0 +1,1 @@
+[["return gh('DELETE', '/repos/' + repo + '/issues/' + blocked + '/dependencies/blocked_by/' + id,", "return gh('POST', '/repos/' + repo + '/issues/' + blocked + '/dependencies/blocked_by/' + id,"]]

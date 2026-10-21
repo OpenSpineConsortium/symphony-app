@@ -1,1 +1,0 @@
-[["    if (!explore.wide || consoleTab !== 'explore' || !e.target.closest) return;", "    return;"]]

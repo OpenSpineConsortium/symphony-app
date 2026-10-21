@@ -14,6 +14,9 @@ list=("$@")
 for m in "${list[@]}"; do
   only=$(cat "$m.only")
   suite=$(cat "$m.suite" 2>/dev/null || echo signin.test.mjs)
+  # a suite named in PARKED tests a tab the site hides, so its mutants are left out of a run of
+  # every one, and run only when named
+  if [ ${#@} -eq 0 ] && grep -qxF "$suite" PARKED 2>/dev/null; then echo "PARKED   $(basename "$m") ($suite)"; continue; fi
   what=MUTANT
   case "$m" in
     css-mutants/*) what=CSS_MUTANT ;;

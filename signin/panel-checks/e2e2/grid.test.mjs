@@ -1,0 +1,250 @@
+// The Grid tab (site branch claude/grid-accounts, 2026-10-21, the owner's "i want to be able to do
+// everything from the damn contriol board, see my account usasge, reset, intiiate claude swap, turn
+// on auto mode"): the Claude accounts on the grid drawn from the branch grid that symphony-template's
+// grid-accounts.yml writes, each press a dispatch of that workflow, and a sign-in's link sealed for a
+// key the page makes for that one press. GitHub is mocked; the sealed link is made here with Node's
+// crypto the way scripts/grid-accounts.sh makes it with openssl (RSA-OAEP SHA-256 over an AES-256-CBC key).
+import { chromium } from 'playwright';
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+
+const BASE = process.env.BASE || 'http://127.0.0.1:8077';
+const SITE = process.env.SITE || '/home/user/openspineconsortium.github.io';
+let real = fs.readFileSync(SITE + '/assets/js/symphony-panel.js', 'utf8');
+if (process.env.MUTANT) for (const [a, b] of JSON.parse(fs.readFileSync(process.env.MUTANT, 'utf8'))) { assert.ok(real.includes(a), 'mutant text not found: ' + a.slice(0, 60)); real = real.replace(a, b); }
+real = real.replace(/var SIGNIN_SERVICE = '[^']*';/, "var SIGNIN_SERVICE = '';").replace(/var CLIENT_ID = '[^']*';/, "var CLIENT_ID = '';");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const inH = (h) => new Date(Date.now() + h * 3600000).toISOString().replace(/\.\d+Z$/, 'Z');
+const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+
+let passed = 0, failed = 0;
+const ONLY = (process.env.ONLY || '').split(',').filter(Boolean);
+async function check(name, fn) {
+  if (ONLY.length && !ONLY.some((o) => name.startsWith(o + ':'))) return;
+  try { await fn(); passed++; console.log('PASS', name); } catch (e) { failed++; console.log('FAIL', name, '-', String(e && e.message || e).split('\n')[0]); }
+}
+
+function list(extra) {
+  return Object.assign({
+    v: 1, auto: false, usage_job: 'idle',
+    worker: { name: 'phone', state: 'online', account: '1', node: 'asx15', link: 'https://claude.ai/code?environment=env_1' },
+    accounts: [
+      { slot: '1', current: true, who: { signed_in: true, email: 'gr***@gmail.com', plan: 'max' }, use: { windows: { five_hour: { utilization: 0.42, resetsAt: inH(2) }, seven_day: { utilization: 0.95, resetsAt: inH(72) } }, read_at: now }, login: { state: 'none' } },
+      { slot: '2', current: false, who: { signed_in: true, email: 'wo***@wayne.edu', plan: 'pro' }, use: { windows: { five_hour: { utilization: 0.1, resetsAt: inH(4) }, seven_day: { utilization: 0.2, resetsAt: inH(100) } }, read_at: now }, login: { state: 'none' } },
+    ],
+  }, extra || {});
+}
+
+const browser = await chromium.launch();
+// one fresh browser, the token kept for acme/demo, the Grid tab opened; state.accounts is what the
+// branch grid holds now, and each dispatch is recorded and may change it
+async function open(state, viewport, opts = {}) {
+  const context = await browser.newContext({ viewport: viewport || { width: 1280, height: 900 } });
+  const calls = [], dispatched = [];
+  // nothing leaves for any other host: a link the page should never offer is never fetched either
+  await context.route((u) => u.protocol === 'https:' && u.host !== 'api.github.com', (route) => route.abort());
+  await context.route('**/assets/js/symphony-panel.js*', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: real }));
+  await context.route('https://api.github.com/**', async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    const key = req.method() + ' ' + url.pathname;
+    calls.push({ key, query: url.search });
+    const json = (status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    const raw = (obj) => route.fulfill({ status: 200, contentType: 'application/vnd.github.raw+json', body: JSON.stringify(obj) });
+    if (key === 'GET /user') return json(200, { login: 'tester' });
+    if (key === 'GET /repos/acme/demo') return json(200, { full_name: 'acme/demo', default_branch: 'main', private: true, topics: ['symphony'], id: 123, owner: { id: 77, login: 'acme' }, permissions: { admin: true, push: true, pull: true } });
+    if (key === 'GET /repos/OpenSpineConsortium/symphony-template') return json(200, { full_name: 'OpenSpineConsortium/symphony-template', default_branch: 'main', private: false, id: 9, owner: { id: 8, login: 'OpenSpineConsortium' } });
+    if (opts.home && key === 'GET /repos/OpenSpineConsortium/symphony-template/contents/accounts.json') return raw(state.accounts);
+    if (key === 'GET /repos/acme/demo/contents/accounts.json') return state.accounts ? raw(state.accounts) : json(404, { message: 'Not Found' });
+    if (key === 'GET /repos/acme/demo/contents/link.json') return state.link ? raw(state.link) : json(404, { message: 'Not Found' });
+    if (key === 'POST /repos/acme/demo/actions/workflows/grid-accounts.yml/dispatches' || (opts.home && key === 'POST /repos/OpenSpineConsortium/symphony-template/actions/workflows/grid-accounts.yml/dispatches')) {
+      if (opts.home) calls[calls.length - 1].home = true;
+      const body = req.postDataJSON();
+      dispatched.push(body);
+      if (state.onDispatch) await state.onDispatch(body);
+      return route.fulfill({ status: 204, body: '' });
+    }
+    if (key === 'GET /repos/acme/demo/issues' || key === 'GET /repos/acme/demo/pulls') return json(200, []);
+    if (key === 'GET /repos/acme/demo/actions/runs') return json(200, { workflow_runs: [] });
+    return json(404, { message: 'Not Found' });
+  });
+  await context.addInitScript((noGridRepo) => {
+    if (sessionStorage.getItem('seeded')) return;
+    localStorage.setItem('symphony_panel_token', 'github_pat_TESTER');
+    localStorage.setItem('symphony_panel_repos', JSON.stringify(['acme/demo']));
+    if (!noGridRepo) localStorage.setItem('symphony_grid_repo', 'acme/demo');
+    sessionStorage.setItem('seeded', '1');
+  }, !!opts.home);
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
+  await page.goto(BASE + '/symphony/control/?repo=acme/demo#grid');
+  await page.waitForFunction(() => /^acme\/demo, default/.test((document.getElementById('cp-summary') || {}).textContent || ''), null, { timeout: 15000 });
+  if (await page.evaluate(() => document.getElementById('tab-grid').hidden)) await page.click('.console__rail [data-tab="grid"]');
+  return { context, page, calls, dispatched, errors };
+}
+const tiles = (page) => page.evaluate(() => Array.from(document.querySelectorAll('#gr-tiles .tok__open')).map((b) => b.innerText.replace(/\s+/g, ' ').trim()));
+const writes = (calls) => calls.filter((c) => !c.key.startsWith('GET ') && !/dispatches$/.test(c.key));
+
+// the run's answer to a request, as scripts/grid-accounts.sh writes accounts.json
+const answer = (request, l, rc) => ({ v: 1, at: now, request, rc: rc || 0, said: ['HPCW-GRID-GATE accounts ok 0'], list: l });
+
+function seal(url, spkiB64) {
+  const pub = crypto.createPublicKey({ key: Buffer.from(spkiB64, 'base64'), format: 'der', type: 'spki' });
+  const aes = crypto.randomBytes(32), iv = crypto.randomBytes(16);
+  const c = crypto.createCipheriv('aes-256-cbc', aes, iv);
+  const data = Buffer.concat([c.update(url, 'utf8'), c.final()]);
+  const key = crypto.publicEncrypt({ key: pub, padding: crypto.constants.RSA_PKCS1_OAEP_PADDING, oaepHash: 'sha256' }, aes);
+  return { key: key.toString('base64'), iv: iv.toString('base64'), data: data.toString('base64') };
+}
+
+await check('G1: the tab draws each account with its e-mail, plan, five-hour and seven-day use, the one in use ringed, the worker line, and writes nothing', async () => {
+  const { context, page, calls, dispatched, errors } = await open({ accounts: answer('', list()) });
+  await page.waitForSelector('#gr-tile-2');
+  const t = await tiles(page);
+  assert.match(t[0], /^1 gr\*\*\*@gmail\.com Claude max 5h 42% 7d 95% In use$/, t[0]);
+  assert.match(t[1], /^2 wo\*\*\*@wayne\.edu Claude pro 5h 10% 7d 20% Ready$/, t[1]);
+  assert.match(t[2], /Sign in another/);
+  const facts = await page.evaluate(() => ({
+    current: document.querySelector('#gr-tile-1').parentElement.classList.contains('gr--current'),
+    full: document.querySelectorAll('#gr-tile-1 .tok__bar--full').length,
+    worker: document.querySelector('.gr__worker').textContent.replace(/\s+/g, ' ').trim(),
+    auto: document.getElementById('gr-auto').textContent,
+    query: null,
+  }));
+  assert.equal(facts.current, true, 'the account in use is not ringed');
+  assert.equal(facts.full, 1, 'the seven-day window at 95% is not drawn full');
+  assert.match(facts.worker, /Worker phone: online, on account 1, asx15 Open the session/);
+  assert.equal(facts.auto, 'Auto mode: off');
+  assert.ok(calls.some((c) => c.key === 'GET /repos/acme/demo/contents/accounts.json' && /ref=grid/.test(c.query)), 'the branch grid was not read');
+  assert.deepEqual(dispatched, [], 'opening the tab started a run');
+  assert.deepEqual(writes(calls), []);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G2: a tile opens its side panel with each window and when it resets; Use this account starts one run for that slot and ends once the grid answers that request', async () => {
+  const state = { accounts: answer('', list()) };
+  state.onDispatch = async (body) => { await sleep(300); const l = list(); l.accounts[0].current = false; l.accounts[1].current = true; l.worker.account = '2'; state.accounts = answer(body.inputs.request, l); };
+  const { context, page, dispatched, errors } = await open(state);
+  await page.click('#gr-tile-2');
+  const side = await page.evaluate(() => document.getElementById('gr-side').textContent.replace(/\s+/g, ' '));
+  assert.match(side, /Five hours/); assert.match(side, /resets in 4 h/); assert.match(side, /Seven days/); assert.match(side, /resets in 4 days/);
+  await page.click('#gr-use');
+  await page.waitForFunction(() => /In use/.test(document.getElementById('gr-tile-2').textContent), null, { timeout: 15000 });
+  assert.equal(dispatched.length, 1);
+  assert.equal(dispatched[0].ref, 'main');
+  assert.equal(dispatched[0].inputs.action, 'use');
+  assert.equal(dispatched[0].inputs.slot, '2');
+  assert.match(dispatched[0].inputs.request, /^p[a-z0-9]+$/);
+  assert.equal(await page.evaluate(() => document.getElementById('gr-auto').disabled), false, 'the buttons stayed held after the answer');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G3: auto mode turns on with one press and the chip says so once the grid answers; the buttons are held while it runs', async () => {
+  const state = { accounts: answer('', list()) };
+  state.onDispatch = async (body) => { setTimeout(() => { state.accounts = answer(body.inputs.request, list({ auto: true })); }, 2500); };
+  const { context, page, dispatched, errors } = await open(state);
+  await page.click('#gr-auto');
+  await page.waitForFunction(() => document.getElementById('gr-usage').disabled);
+  await page.waitForFunction(() => document.getElementById('gr-auto').textContent === 'Auto mode: on', null, { timeout: 15000 });
+  assert.equal(dispatched.length, 1);
+  assert.equal(dispatched[0].inputs.action, 'auto-on');
+  assert.equal(await page.evaluate(() => document.getElementById('gr-auto').getAttribute('aria-pressed')), 'true');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G4: Sign in another sends a fresh public key, opens only the link sealed for it as Anthropic\'s sign-in, and a code goes back as its own run', async () => {
+  const state = { accounts: answer('', list()) };
+  state.onDispatch = async (body) => {
+    if (body.inputs.action === 'login') {
+      assert.ok(body.inputs.key && body.inputs.key.length > 300, 'no public key was sent');
+      const l = list(); l.accounts.push({ slot: '3', current: false, login: { state: 'link', line: 'Open the link and sign in.' } });
+      state.link = { request: body.inputs.request, sealed: seal('https://claude.ai/oauth/authorize?code=true&state=S', body.inputs.key) };
+      state.accounts = answer(body.inputs.request, l);
+    } else if (body.inputs.action === 'code') {
+      const l = list(); l.accounts.push({ slot: '3', current: false, who: { signed_in: true, email: 'th***@x.org', plan: 'max' }, login: { state: 'signed-in' } });
+      state.accounts = answer(body.inputs.request, l);
+    }
+  };
+  const { context, page, dispatched, errors } = await open(state);
+  await page.click('#gr-add');
+  await page.waitForSelector('#gr-link', { timeout: 15000 });
+  assert.equal(await page.getAttribute('#gr-link', 'href'), 'https://claude.ai/oauth/authorize?code=true&state=S');
+  assert.equal(dispatched[0].inputs.action, 'login');
+  assert.equal(dispatched[0].inputs.slot, '3');
+  assert.ok(!JSON.stringify(dispatched[0]).includes('claude.ai'), 'the link went out in the inputs');
+  await page.fill('#gr-code', 'abcdEFGH1234#state-S');
+  await page.click('#gr-send');
+  await page.waitForFunction(() => /th\*\*\*@x\.org/.test((document.getElementById('gr-tile-3') || {}).textContent || ''), null, { timeout: 15000 });
+  assert.equal(dispatched[1].inputs.action, 'code');
+  assert.equal(dispatched[1].inputs.code, 'abcdEFGH1234#state-S');
+  assert.equal(await page.inputValue('#gr-code').catch(() => ''), '', 'the code stayed in the box');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G5: a sealed link to any page but Anthropic\'s is never offered, and one sealed for another key is not opened', async () => {
+  for (const which of ['host', 'key']) {
+    const state = { accounts: answer('', list()) };
+    state.onDispatch = async (body) => {
+      const other = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 }).publicKey.export({ format: 'der', type: 'spki' }).toString('base64');
+      const l = list(); l.accounts.push({ slot: '3', current: false, login: { state: 'link', line: 'Open the link and sign in.' } });
+      state.link = { request: body.inputs.request, sealed: seal(which === 'host' ? 'https://example.org/oauth' : 'https://claude.ai/oauth/x', which === 'key' ? other : body.inputs.key) };
+      state.accounts = answer(body.inputs.request, l);
+    };
+    const { context, page, errors } = await open(state);
+    await page.click('#gr-add');
+    await sleep(5000);
+    assert.equal(await page.locator('#gr-link').count(), 0, which + ': a link was offered');
+    if (which === 'key') assert.match(await page.textContent('#gr-note'), /could not be opened/);
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+});
+
+await check('G6: with nothing on the branch grid the tab says what to do and Refresh asks the grid', async () => {
+  const state = { accounts: null };
+  state.onDispatch = async (body) => { state.accounts = answer(body.inputs.request, list()); };
+  const { context, page, dispatched, errors } = await open(state);
+  await page.waitForFunction(() => /Nothing read from the grid yet for acme\/demo/.test(document.getElementById('gr-tiles').textContent));
+  await page.click('#gr-refresh');
+  await page.waitForSelector('#gr-tile-1', { timeout: 15000 });
+  assert.equal(dispatched[0].inputs.action, 'list');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G7: on a phone the tab fits the window, tiles and side panel alike', async () => {
+  const { context, page, errors } = await open({ accounts: answer('', list()) }, { width: 390, height: 844 });
+  await page.waitForSelector('#gr-tile-2');
+  await page.click('#gr-tile-2');
+  const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth, side: document.getElementById('gr-side').getBoundingClientRect().width }));
+  assert.ok(m.sw <= m.iw, 'the page is wider than the phone: ' + m.sw + '/' + m.iw);
+  assert.ok(m.side > 0 && m.side <= m.iw, 'the side panel does not fit: ' + m.side);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G8: the grid is the same whatever repository the panel has open: with acme/demo open and nothing kept, the tab reads and presses OpenSpineConsortium/symphony-template, and says so', async () => {
+  const state = { accounts: answer('', list()) };
+  state.onDispatch = async (body) => { state.accounts = answer(body.inputs.request, list({ auto: true })); };
+  const { context, page, calls, dispatched, errors } = await open(state, null, { home: true });
+  await page.waitForSelector('#gr-tile-2');
+  assert.ok(!calls.some((c) => c.key === 'GET /repos/acme/demo/contents/accounts.json'), 'the open repository was read for the grid');
+  assert.match(await page.textContent('#gr-tiles'), /through OpenSpineConsortium\/symphony-template\./);
+  await page.click('#gr-auto');
+  await page.waitForFunction(() => document.getElementById('gr-auto').textContent === 'Auto mode: on', null, { timeout: 15000 });
+  assert.equal(dispatched.length, 1);
+  assert.ok(calls.some((c) => c.home && /symphony-template\/actions\/workflows\/grid-accounts\.yml\/dispatches$/.test(c.key)), 'the press did not go to symphony-template');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await browser.close();
+console.log(failed ? 'FAILED ' + failed + ' of ' + (passed + failed) : 'ALL PASSED (' + passed + ')');
+process.exit(failed ? 1 : 0);

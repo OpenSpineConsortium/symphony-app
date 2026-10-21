@@ -1,1 +1,0 @@
-[["    var held = $('tab-explore').contains(document.activeElement) ? (", "    var held = false ? ("]]

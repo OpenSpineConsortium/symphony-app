@@ -1,0 +1,6 @@
+FAIL BS6: a push GitHub refuses part way stops there, says what was done, keeps the rest to push, and Undo takes back only what was written 
+     Expected values to be strictly deep-equal:
+     + actual - expected
+     
+       [
+0 pass, 1 fail

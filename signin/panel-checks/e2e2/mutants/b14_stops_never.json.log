@@ -1,0 +1,3 @@
+FAIL BS6: a push GitHub refuses part way stops there, says what was done, keeps the rest to push, and Undo takes back only what was written 
+     page.waitForFunction: Timeout 8000ms exceeded.
+0 pass, 1 fail

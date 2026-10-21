@@ -1,1 +1,0 @@
-[["if (!a || e.altKey || e.ctrlKey || e.metaKey || !document.activeElement.classList.contains('ex__tile')) return;", "return;"]]

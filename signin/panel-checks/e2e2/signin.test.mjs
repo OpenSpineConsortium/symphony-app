@@ -2366,7 +2366,7 @@ function phoneRoutes() {
   routes['GET /repos/acme/demo/actions/variables'] = { total_count: 0, variables: [] };
   return routes;
 }
-const PHONE_TABS = ['command', 'board', 'tasks', 'dependencies', 'explore', 'pulls', 'runs', 'workers', 'agents', 'tokens', 'leaders', 'share', 'folders', 'about'];
+const PHONE_TABS = ['command', 'board', 'tasks', 'dependencies', 'explore', 'pulls', 'runs', 'workers', 'agents', 'tokens', 'grid', 'leaders', 'share', 'folders', 'about'];
 const scrollYOf = (p) => p.evaluate(() => Math.round(window.scrollY));
 // on a phone a tab is opened from the home screen's square buttons, the back button first where a
 // tab is open (site branch claude/project-thread-6cxgh2, the owner's ask of 2026-10-20)
