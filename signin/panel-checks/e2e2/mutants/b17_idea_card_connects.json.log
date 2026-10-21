@@ -1,0 +1,6 @@
+FAIL BS10: an idea GitHub already holds is not offered: a task of that title under its epic, or a link on GitHub; and an idea card is accepted before Connect takes it 
+     The input did not match the regular expression /Accept the new task first/. Input:
+     
+     ''
+     
+0 pass, 1 fail

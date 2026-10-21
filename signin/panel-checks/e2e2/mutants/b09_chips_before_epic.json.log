@@ -1,0 +1,6 @@
+FAIL BS1: the tab sits after Dependencies and draws the first epic's tasks and the issue outside it that blocks one, with GitHub's links, writing nothing 
+     Expected values to be strictly deep-equal:
+     + actual - expected
+     
+       [
+0 pass, 1 fail

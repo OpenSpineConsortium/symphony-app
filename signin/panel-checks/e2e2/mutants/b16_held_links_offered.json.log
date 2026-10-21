@@ -1,0 +1,6 @@
+FAIL BS10: an idea GitHub already holds is not offered: a task of that title under its epic, or a link on GitHub; and an idea card is accepted before Connect takes it 
+     a link GitHub holds is offered
+     
+     true !== false
+     
+0 pass, 1 fail

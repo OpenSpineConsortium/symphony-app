@@ -1,1 +1,0 @@
-[["      if (starts[cur].n === step.number) out.push(l);", "      if (starts[cur].n === step.number && !(l.at < starts[0].at * 1000)) out.push(l);"]]

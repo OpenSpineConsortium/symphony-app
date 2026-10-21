@@ -1,0 +1,1 @@
+[["bs.ideas = bsParse(assistantBlock(ans.body));", "bs.ideas = []; bs.pending = bs.pending.concat(bsParse(assistantBlock(ans.body)));"]]

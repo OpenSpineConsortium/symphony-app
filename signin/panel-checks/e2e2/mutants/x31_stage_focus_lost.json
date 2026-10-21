@@ -1,1 +1,0 @@
-[["var tile = held === 'card' ? $('ex-stage').querySelector('.ex__tile') : null;", "var tile = held ? $('ex-stage').querySelector('.ex__tile') : null;"]]

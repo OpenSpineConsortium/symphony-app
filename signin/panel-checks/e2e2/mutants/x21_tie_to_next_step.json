@@ -1,1 +1,0 @@
-[["(sec > starts[cur + 1].at ||", "(sec >= starts[cur + 1].at ||"]]

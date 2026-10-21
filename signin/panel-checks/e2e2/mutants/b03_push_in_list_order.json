@@ -1,0 +1,1 @@
+[["var order = bs.pending.filter(function (p) { return p.kind === 'task'; })\n      .concat(bs.pending.filter(function (p) { return p.kind === 'unlink'; }), bs.pending.filter(function (p) { return p.kind === 'link'; }));", "var order = bs.pending.slice().reverse();"]]

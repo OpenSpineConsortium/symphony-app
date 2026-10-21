@@ -1,1 +1,0 @@
-[["      else n.load = function () { return exBranches(s, repo, r); };", "      else { n.load = function () { return exBranches(s, repo, r); }; exBranches(s, repo, r).then(function (l) { l.forEach(function (b) { if (b.load) b.load(); }); }); }"]]

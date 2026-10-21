@@ -1,1 +1,0 @@
-[["    b.addEventListener('click', function () { forget(); exGo(explore.path.slice()); });", "    b.addEventListener('click', function () { exGo(explore.path.slice()); });"]]

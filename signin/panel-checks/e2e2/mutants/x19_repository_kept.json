@@ -1,1 +1,0 @@
-[["    exploreForget();\n    if (consoleTab === 'explore' && consoleOnOpen.explore) consoleOnOpen.explore();\n", ""]]
