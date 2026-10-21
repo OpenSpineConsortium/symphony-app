@@ -426,7 +426,11 @@ ghu_TEST or github_pat_X.
   in the dialog, and the head's button counts what is ticked (NC4); and on a
   phone the explorer keeps a height under the window's, a long folder scrolling in its list (NC5). CAT1 to CAT9, the saved catalog drawn when no
   drive was connected (claude/folders-catalog, 2026-10-18), were retired with that route.
-- `e2e2/explore.test.mjs`: 19 checks of the console's Explore tab, /symphony/control/#explore
+- `e2e2/explore.test.mjs`: parked since 2026-10-21, when the site hid the Explore tab on the owner's
+  "just hide it" (site branch claude/hide-explore) until it is rebuilt as the dependency brainstorm:
+  no rail button opens the tab, so these checks fail by design, and e2e2/PARKED keeps its `x*`
+  mutants out of a run of every mutant (each still runs when named). What follows is what it held.
+  19 checks of the console's Explore tab, /symphony/control/#explore
   (site branch claude/explore-tab, 2026-10-18), against a mocked GitHub: a goal over an epic over
   three tasks, a draft pull request on one task's claim branch, one run with one job of four steps,
   a skipped one among them, and a log whose lines test the edges of each step by time. XP1 to XP7:
