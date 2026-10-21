@@ -1,0 +1,1 @@
+[["if (e.refused) { wbForget(false); wbNote(e.message); drawWandb(); return; }", "if (e.refused) { wbNote(e.message); drawWandb(); return; }"]]

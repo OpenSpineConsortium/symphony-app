@@ -1,0 +1,1 @@
+[["e.refused = data && data.error === 'wandb_refused_key';", "e.refused = true;"]]
