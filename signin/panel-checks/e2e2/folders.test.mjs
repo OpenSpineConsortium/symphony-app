@@ -268,7 +268,14 @@ async function open(opts) {
     return route.fulfill({ status: 200, contentType: 'application/json', headers, body: JSON.stringify(r) });
   });
   if (controlCss !== null) await context.route('**/assets/css/control.css*', (route) => route.fulfill({ status: 200, contentType: 'text/css', body: controlCss }));
-  const script = o.script || (o.globusClient ? configured.replace("var GLOBUS_CLIENT = '';", "var GLOBUS_CLIENT = '" + o.globusClient + "';") : configured);
+  // the page knows the collection's id; the checks blank it so the search by name is exercised,
+  // and one check keeps it as the stand-in's to see the first sign-in carry the collection's consents
+  let script = o.script || (o.globusClient ? configured.replace("var GLOBUS_CLIENT = '';", "var GLOBUS_CLIENT = '" + o.globusClient + "';") : configured);
+  if (!o.script) {
+    const known = /var GLOBUS_KNOWN = \[\{ name: 'wsugrid#globus', label: 'WSU grid', id: '[0-9a-f-]*' \}\];/;
+    assert.ok(known.test(script), 'the known collection is not where the checks look for it');
+    script = script.replace(known, "var GLOBUS_KNOWN = [{ name: 'wsugrid#globus', label: 'WSU grid', id: '" + (o.globusKnown || '') + "' }];");
+  }
   await context.route('**/assets/js/symphony-panel.js*', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: script }));
   // Globus Auth: its sign-in page straight back with a code and the state, its token endpoint
   // answering the page's own exchange, and its userinfo; the Transfer API by a table; and the
@@ -3163,6 +3170,21 @@ await check('GL6: a collection that will not list says why with the fixes linked
   assert.equal(env2.globus.some((g) => g.path === '/v0.10/endpoint/other-id'), false, 'the lookalike was read');
   assert.deepEqual(env2.errors, []);
   await env2.context.close();
+});
+
+await check('GL7: with the collection\'s id known to the page, the first sign-in asks the Transfer scope with the collection\'s data_access and its HTTPS scope, no search by name is made, the collection is read by its id and the list follows', async () => {
+  const env = await open({ globusClient: 'gl-client-id', globusKnown: COLLECTION });
+  const { context, page, authorize, globus, errors } = env;
+  await pressGlobus(env);
+  await listedGlobus(page);
+  assert.equal(authorize.length, 1);
+  assert.equal(authorize[0].searchParams.get('scope'), 'openid profile urn:globus:auth:scope:transfer.api.globus.org:all[*https://auth.globus.org/scopes/' + COLLECTION + '/data_access] https://auth.globus.org/scopes/' + COLLECTION + '/https');
+  assert.equal(globus.some((g) => g.path === '/v0.10/endpoint_search'), false, 'the collection was searched for by name although its id is known');
+  assert.ok(globus.find((g) => g.path === '/v0.10/endpoint/' + COLLECTION), 'the collection was not read by its id');
+  assert.equal((await keptGlobus(page)).id, COLLECTION);
+  assert.deepEqual(await page.$$eval('#fd-items [data-name]', (l) => l.map((n) => n.textContent)), ['data', HOSTILE, 'notes.txt', 'preview.mp4']);
+  assert.deepEqual(errors, []);
+  await context.close();
 });
 
 await browser.close();
