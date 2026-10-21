@@ -1,0 +1,1 @@
+[["    var grid = gr.rec && gr.rec.list ? gridWorkers(gr.rec.list).filter(function (w) { return w.state !== 'stopped' && w.state !== 'error'; }) : [];\n", "    var grid = gr.rec && gr.rec.list ? gridWorkers(gr.rec.list) : [];\n"]]
