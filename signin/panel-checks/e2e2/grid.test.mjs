@@ -460,6 +460,35 @@ await check('G16: the Workers tab lists every worker at work, the grid\'s with w
   await context.close();
 });
 
+await check('G17: Lab jobs send the gate one fixed job word each, a start only once asked, and the Console shows what it printed as text', async () => {
+  const state = { accounts: answer('', list()), logs: {} };
+  state.onDispatch = async (body) => {
+    await sleep(200);
+    const i = body.inputs;
+    state.logs['job-' + i.job] = { v: 1, what: i.job, request: i.request, rc: 0, at: now, lines: ['said ' + i.job, '<img src=x onerror=alert(1)>'], said: [] };
+    state.accounts = answer(i.request, list());
+  };
+  const { context, page, dispatched, errors } = await open(state);
+  await page.waitForSelector('#gr-console');
+  await page.click('#gr-console summary');
+  await page.click('#gr-job-promoter-status');
+  await page.waitForFunction(() => /said promoter-status/.test((document.getElementById('gr-log') || {}).textContent || ''), null, { timeout: 15000 });
+  assert.deepEqual([dispatched[0].inputs.action, dispatched[0].inputs.job, dispatched[0].inputs.slot], ['job', 'promoter-status', '']);
+  assert.match(await page.textContent('#gr-console'), /Grid job promoter status, read/);
+  assert.equal(await page.locator('#gr-log img').count(), 0, 'a line of output became markup');
+  assert.equal(await page.locator('#gr-log-again').count(), 0, 'a job offered Read again, which would run it again');
+  page.once('dialog', (d) => d.dismiss());
+  await page.click('#gr-job-schwingnet-start');
+  await sleep(500);
+  assert.equal(dispatched.length, 1, 'a start dismissed at its question was sent');
+  page.once('dialog', (d) => d.accept());
+  await page.click('#gr-job-schwingnet-start');
+  await page.waitForFunction(() => /said schwingnet-start/.test((document.getElementById('gr-log') || {}).textContent || ''), null, { timeout: 15000 });
+  assert.deepEqual([dispatched[1].inputs.action, dispatched[1].inputs.job], ['job', 'schwingnet-start']);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 await browser.close();
 console.log(failed ? 'FAILED ' + failed + ' of ' + (passed + failed) : 'ALL PASSED (' + passed + ')');
 process.exit(failed ? 1 : 0);
