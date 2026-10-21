@@ -334,7 +334,11 @@ const radii = await page.evaluate(() => {
 for (const r of radii) assert.match(r, / 12px$/, 'DS6: every card has the Workers card\'s corner: ' + r);
 const mark = await page.evaluate(() => { const p = document.querySelector('#cp-claude .claudemark'); return p ? getComputedStyle(p).fill : ''; });
 assert.equal(mark, 'rgb(217, 119, 87)', 'DS7: the Claude button wears the orange mark');
-console.log('PASS DS1-DS7: the Tasks sub-tabs, the kept choice, a readout\'s list, the worker\'s name, the cards\' corner and the Claude mark');
+assert.equal(await page.evaluate(() => localStorage.getItem('symphony_panel_tasks_view')), 'review', 'DS8: a readout opens its list without replacing the choice kept');
+const accent = await page.evaluate(() => { document.querySelector('.console__rail [data-tab="tasks"]').click(); const r = document.querySelector('#cp-claimed tbody tr:not(.card--add)'); return getComputedStyle(r).getPropertyValue('--card-accent').trim(); });
+assert.equal(accent.toUpperCase(), '#3CC2B1', 'DS9: a task card keeps its list\'s colour');
+assert.ok(await page.evaluate(() => { const o = document.getElementById('cp-other'); return o.textContent.trim() !== '' && o.offsetParent !== null; }), 'DS10: the line of other open issues shows under a single list');
+console.log('PASS DS1-DS10: the Tasks sub-tabs, the kept choice, a readout\'s list, the worker\'s name, the cards\' corner and the Claude mark');
 
 assert.deepEqual(errors, [], 'no page errors');
 console.log('ALL PASSED');
