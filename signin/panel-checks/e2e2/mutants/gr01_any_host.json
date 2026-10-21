@@ -1,0 +1,1 @@
+[["return /^https:\\/\\/(claude\\.ai|claude\\.com)\\//.test(url) ? url : '';", "return url;"]]
