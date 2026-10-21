@@ -8,7 +8,11 @@ const METHODS = ['click', 'dblclick', 'fill', 'type', 'press', 'check', 'uncheck
 
 function reveal(selector) {
   let node = null;
-  try { node = document.querySelector(selector); } catch (e) { return; }
+  try {
+    if (/^(xpath=|\/\/)/.test(selector)) {
+      node = document.evaluate(selector.replace(/^xpath=/, ''), document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+    } else node = document.querySelector(selector);
+  } catch (e) { return; }
   if (!node || !node.closest) return;
   // since the + style (site #61) a task, a worker and an agent are made in a dialog that opens from
   // a "+" button, so a selector in a closed dialog presses the button that opens it, and one
@@ -40,6 +44,14 @@ function reveal(selector) {
     return;
   }
   openTab(node);
+  // since the design system (site, 2026-10-21) the Tasks tab shows one list at a time, so a row in
+  // another list is reached by pressing its sub-tab, as a person would
+  const col = node.closest('.console__kanban [data-col]');
+  const board = col && col.closest('.console__kanban');
+  if (board && board.getAttribute('data-view') !== 'all' && board.getAttribute('data-view') !== col.getAttribute('data-col')) {
+    const chip = document.querySelector('#tab-tasks [data-taskview="' + col.getAttribute('data-col') + '"]');
+    if (chip) chip.click();
+  }
 }
 
 let patched = false;
@@ -53,7 +65,7 @@ export async function consoleTabs(browser) {
     const original = proto[name];
     if (typeof original !== 'function') continue;
     proto[name] = async function (selector, ...rest) {
-      if (typeof selector === 'string' && !/^(text=|xpath=|\/\/)/.test(selector)) {
+      if (typeof selector === 'string' && !/^text=/.test(selector)) {
         try { await this.evaluate(reveal, selector); } catch (e) { /* a page between documents keeps its tab */ }
       }
       return original.call(this, selector, ...rest);

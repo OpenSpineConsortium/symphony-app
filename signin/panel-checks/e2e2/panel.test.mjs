@@ -288,6 +288,54 @@ await page.click('#cp-open');
 await page.waitForFunction(() => /refused the token \(401\)/.test(document.getElementById('msg').textContent));
 assert.ok(await page.isVisible('#cp-gate'));
 
+// The design system (site claude/panel-design-system, 2026-10-21, after the owner's "make sure all
+// panels are shaped like that" and "tasks can be split into tabs"): the Tasks tab shows one list at
+// a time behind its head's chips, All side by side, the choice kept in this browser; a readout opens
+// its own list; every card is the Workers card's shape; a worker's name stays on one line; and the
+// Claude button wears Claude's orange mark
+await page.unroute('https://api.github.com/user');
+await page.evaluate(() => localStorage.removeItem('symphony_panel_tasks_view'));
+await page.goto(BASE + '/symphony/control/?repo=acme/demo#tasks');
+await page.fill('#cp-token', 'github_pat_TEST');
+await page.click('#cp-open');
+await page.waitForFunction(() => /Last run:/.test(document.getElementById('cp-summary').textContent));
+const shown = () => page.evaluate(() => Array.from(document.querySelectorAll('#tab-tasks .console__kanban > h3')).filter((h) => h.offsetParent !== null).map((h) => h.getAttribute('data-col')));
+const pressed = () => page.evaluate(() => Array.from(document.querySelectorAll('#tab-tasks [data-taskview][aria-pressed="true"]')).map((b) => b.getAttribute('data-taskview')));
+await page.evaluate(() => document.querySelector('.console__rail [data-tab="tasks"]').click());
+assert.deepEqual(await shown(), ['queue'], 'DS1: Tasks opens on the Queue alone');
+assert.deepEqual(await pressed(), ['queue'], 'DS1: the Queue chip is the pressed one');
+await page.evaluate(() => document.querySelector('#tab-tasks [data-taskview="given"]').click());
+assert.deepEqual(await shown(), ['given'], 'DS2: a chip shows its own list alone');
+assert.equal(await page.evaluate(() => localStorage.getItem('symphony_panel_tasks_view')), 'given', 'DS2: the choice is kept');
+assert.ok(await page.evaluate(() => { const r = document.querySelector('#cp-given tr[data-number="6"], #cp-given tbody tr'); return !!r && r.offsetParent !== null; }), 'DS2: its cards show');
+await page.evaluate(() => document.querySelector('#tab-tasks [data-taskview="all"]').click());
+assert.deepEqual(await shown(), ['queue', 'given', 'claimed', 'review', 'blocked', 'epics'], 'DS2: All shows the six lists');
+await page.evaluate(() => document.querySelector('#tab-tasks [data-taskview="review"]').click());
+await page.reload();
+await page.waitForFunction(() => /Last run:/.test(document.getElementById('cp-summary').textContent));
+await page.evaluate(() => document.querySelector('.console__rail [data-tab="tasks"]').click());
+assert.deepEqual(await shown(), ['review'], 'DS3: a reload opens the list chosen last');
+await page.evaluate(() => document.querySelector('.console__rail [data-tab="command"]').click());
+await page.evaluate(() => document.querySelector('#tab-command .readout[data-jump="cp-claimed"]').click());
+assert.ok(await page.isVisible('#tab-tasks'), 'DS4: a readout opens the Tasks tab');
+assert.deepEqual(await shown(), ['claimed'], 'DS4: at its own list');
+await page.evaluate(() => document.querySelector('.console__rail [data-tab="workers"]').click());
+const nameLines = await page.evaluate(() => { const td = document.querySelector('#cp-workers td.cell--name'); return td.getBoundingClientRect().height / parseFloat(getComputedStyle(td).lineHeight || '20'); });
+assert.ok(nameLines < 1.6, 'DS5: a worker\'s name keeps to one line (' + nameLines.toFixed(2) + ' lines)');
+const radii = await page.evaluate(() => {
+  const out = [];
+  for (const [tab, sel] of [['workers', '#cp-workers tbody tr:not(.card--add)'], ['pulls', '#cp-pulls tbody tr:not(.card--add)'], ['command', 'button.launch'], ['command', 'button.readout']]) {
+    document.querySelector('.console__rail [data-tab="' + tab + '"]').click();
+    const n = document.querySelector(sel);
+    out.push(sel + ' ' + getComputedStyle(n).borderTopLeftRadius);
+  }
+  return out;
+});
+for (const r of radii) assert.match(r, / 12px$/, 'DS6: every card has the Workers card\'s corner: ' + r);
+const mark = await page.evaluate(() => { const p = document.querySelector('#cp-claude .claudemark'); return p ? getComputedStyle(p).fill : ''; });
+assert.equal(mark, 'rgb(217, 119, 87)', 'DS7: the Claude button wears the orange mark');
+console.log('PASS DS1-DS7: the Tasks sub-tabs, the kept choice, a readout\'s list, the worker\'s name, the cards\' corner and the Claude mark');
+
 assert.deepEqual(errors, [], 'no page errors');
 console.log('ALL PASSED');
 await browser.close();
