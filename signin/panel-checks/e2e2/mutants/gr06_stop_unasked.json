@@ -1,0 +1,1 @@
+[["if (!window.confirm('Stop worker ' + w.name + ' on the grid? Its job ends and queues no successor; its session and files stay.')) return;", ""]]
