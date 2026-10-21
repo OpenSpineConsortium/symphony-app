@@ -8,6 +8,7 @@ import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import { legacyHome } from './legacy-home.mjs';
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8077';
 const SITE = process.env.SITE || '/home/user/openspineconsortium.github.io';
@@ -41,6 +42,7 @@ const browser = await chromium.launch();
 // branch grid holds now, and each dispatch is recorded and may change it
 async function open(state, viewport, opts = {}) {
   const context = await browser.newContext({ viewport: viewport || { width: 1280, height: 900 } });
+  await legacyHome(context);
   const calls = [], dispatched = [];
   // nothing leaves for any other host: a link the page should never offer is never fetched either
   await context.route((u) => u.protocol === 'https:' && u.host !== 'api.github.com', (route) => route.abort());

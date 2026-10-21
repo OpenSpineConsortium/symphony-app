@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { legacyHome } from './legacy-home.mjs';
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8077';
 const SITE = process.env.SITE || '/home/user/openspineconsortium.github.io';
@@ -241,6 +242,7 @@ await consoleTabs(browser);
 async function open(opts) {
   const o = opts || {};
   const context = await browser.newContext({ viewport: o.viewport || { width: 1280, height: 1000 } });
+  await legacyHome(context);
   const calls = [];
   const service = [];
   const authorize = [];

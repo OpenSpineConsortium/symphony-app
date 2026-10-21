@@ -4,6 +4,7 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { legacyHome } from './legacy-home.mjs';
 
 const BASE = process.env.BASE || 'http://localhost:8077';
 const SITE = process.env.SITE || '/home/user/openspineconsortium.github.io';
@@ -32,6 +33,7 @@ const browser = await chromium.launch();
 // status, or a promise of one), and the storage given set before the page runs
 async function fresh({ list = LISTED, kept = null, hash = '' } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await legacyHome(context);
   const seen = [];
   await context.route('**/assets/js/symphony-panel.js*', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: UNCONFIGURED }));
   await context.route('https://api.github.com/**', async (route) => {

@@ -53,6 +53,7 @@ import { consoleTabs } from './console-tabs.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { legacyHome } from './legacy-home.mjs';
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8077';
 const SITE = process.env.SITE || '/home/user/openspineconsortium.github.io';
@@ -282,6 +283,7 @@ async function open(routes, opts) {
   // a phone (opts.mobile) is a narrow window with touch, as Playwright emulates one, so the console's
   // phone layout and its finger-sized buttons show, and a check can send touches of two fingers
   const context = await browser.newContext({ viewport: opts.viewport || VIEW, hasTouch: !!opts.mobile, isMobile: !!opts.mobile, reducedMotion: opts.reducedMotion || 'no-preference' });
+  await legacyHome(context);
   const calls = [];
   await context.route('https://api.github.com/**', async (route) => {
     const req = route.request();

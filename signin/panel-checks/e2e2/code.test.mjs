@@ -19,6 +19,7 @@ import { chromium } from 'playwright';
 import { consoleTabs } from './console-tabs.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { legacyHome } from './legacy-home.mjs';
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8077';
 const SITE = process.env.SITE || '/home/user/openspineconsortium.github.io';
@@ -92,6 +93,7 @@ await consoleTabs(browser);
 async function open(opts) {
   const phone = opts.phone ? { deviceScaleFactor: 3, isMobile: true, hasTouch: true } : {};
   const context = await browser.newContext(Object.assign({ viewport: opts.viewport || (opts.phone ? { width: 390, height: 844 } : { width: 1280, height: 900 }) }, phone));
+  await legacyHome(context);
   if (opts.clipboard) await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: ORIGIN });
   const calls = [];
   const service = [];

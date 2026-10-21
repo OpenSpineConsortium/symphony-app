@@ -1,0 +1,1 @@
+[["return { layout: kept.layout === 'legacy' ? 'legacy' : 'buttons', order: order };", "return { layout: kept.layout === 'buttons' ? 'buttons' : 'legacy', order: order };"]]

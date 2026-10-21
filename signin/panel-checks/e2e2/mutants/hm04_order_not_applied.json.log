@@ -1,0 +1,3 @@
+FAIL H5: a mouse drags Tasks to the first place; the others make room, the order is kept in the profile and on the legacy rail, the drag opens no tab, and a reload keeps it - the reload lost the order
+FAIL H10: a phone shows the buttons even where the profile chose Legacy, in the order the profile kept - Expected values to be strictly deep-equal:
+0 passed, 2 failed

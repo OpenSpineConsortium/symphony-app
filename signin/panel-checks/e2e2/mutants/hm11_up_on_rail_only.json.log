@@ -1,0 +1,2 @@
+FAIL H16: a mouse pressed on a button and let go outside the rail ends the press, so hovering later drags nothing - a button follows the pointer with nothing pressed
+0 passed, 1 failed

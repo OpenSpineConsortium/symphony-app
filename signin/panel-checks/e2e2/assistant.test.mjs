@@ -26,6 +26,7 @@ import { chromium } from 'playwright';
 import { consoleTabs } from './console-tabs.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { legacyHome } from './legacy-home.mjs';
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8077';
 const SITE = process.env.SITE || '/home/user/openspineconsortium.github.io';
@@ -153,6 +154,7 @@ async function open(routes, opts) {
   opts = opts || {};
   const served = opts.constants ? withConstants(script, opts.constants) : script;
   const context = await browser.newContext(Object.assign({ viewport: opts.viewport || { width: 1280, height: 900 } }, opts.mobile ? { isMobile: true, hasTouch: true } : {}));
+  await legacyHome(context);
   const calls = [];
   await context.route('https://api.github.com/**', async (route) => {
     const req = route.request();

@@ -22,6 +22,7 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { legacyHome } from './legacy-home.mjs';
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8077';
 const SITE = process.env.SITE || '/home/user/openspineconsortium.github.io';
@@ -44,6 +45,7 @@ const origin = new URL(BASE).origin;
 // init runs in the page before any of its scripts
 async function open(viewport, insets, mobile, init) {
   const context = await browser.newContext(Object.assign({ viewport }, mobile ? { deviceScaleFactor: 3, isMobile: true, hasTouch: true } : {}));
+  await legacyHome(context);
   await context.route('**/*', (r) => (new URL(r.request().url()).origin === origin ? r.continue() : r.abort()));
   await context.route('**/assets/js/symphony-panel.js*', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: script }));
   if (init) await context.addInitScript(init);

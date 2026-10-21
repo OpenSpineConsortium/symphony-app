@@ -1,0 +1,2 @@
+FAIL H8: Alt and the arrow keys move the focused button a place, a row, or to the ends, and say where it is; the arrows alone still only move the focus - Expected values to be strictly deep-equal:
+0 passed, 1 failed

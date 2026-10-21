@@ -4,6 +4,7 @@ import { chromium } from 'playwright';
 import { consoleTabs } from './console-tabs.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { legacyHome } from './legacy-home.mjs';
 
 const BASE = process.env.BASE || 'http://localhost:8077';
 // These checks paste a token, which the page shows open only while the sign-in is off, so the
@@ -36,6 +37,7 @@ await consoleTabs(browser);
 async function open(routes, opts) {
   opts = opts || {};
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await legacyHome(context);
   const calls = [];
   await context.route('https://api.github.com/**', async (route) => {
     const req = route.request();

@@ -5,6 +5,7 @@ import { consoleTabs } from './console-tabs.mjs';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import { legacyHome } from './legacy-home.mjs';
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8077';
 const SITE = process.env.SITE || '/home/user/openspineconsortium.github.io';
@@ -58,6 +59,7 @@ await consoleTabs(browser);
 async function open(opts) {
   // a phone (opts.mobile) is a narrow window with touch, as Playwright emulates one
   const context = await browser.newContext({ viewport: opts.viewport || { width: 1280, height: 900 }, hasTouch: !!opts.mobile, isMobile: !!opts.mobile });
+  await legacyHome(context);
   const calls = [];
   const service = [];
   const authorize = [];
