@@ -1,0 +1,1 @@
+[["var min = Math.floor((Date.now() - at + age * 1000) / 60000);", "var min = Math.floor(age / 60);"]]
