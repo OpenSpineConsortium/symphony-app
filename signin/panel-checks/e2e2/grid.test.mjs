@@ -106,7 +106,7 @@ await check('G1: the tab draws each account with its e-mail, plan, five-hour and
   const { context, page, calls, dispatched, errors } = await open({ accounts: answer('', list()) });
   await page.waitForSelector('#gr-tile-2');
   const t = await tiles(page);
-  assert.match(t[0], /^1 gr\*\*\*@gmail\.com Claude max 5h 42% 7d 95% In use$/, t[0]);
+  assert.match(t[0], /^1 gr\*\*\*@gmail\.com Claude max, 1 worker 5h 42% 7d 95% In use$/, t[0]);
   assert.match(t[1], /^2 wo\*\*\*@wayne\.edu Claude pro 5h 10% 7d 20% Ready$/, t[1]);
   assert.match(t[2], /Sign in another/);
   const facts = await page.evaluate(() => ({
@@ -375,6 +375,26 @@ await check('G13: a running worker the grid has not heard from in a quarter of a
   assert.match(await second.page.textContent('#gr-worker-fresh'), /not heard from in 20 min/);
   assert.deepEqual(errors.concat(second.errors), []);
   await second.context.close();
+});
+
+await check('G14: each account says how many live workers it carries, and one already carrying a worker still offers Start, saying the window is shared', async () => {
+  const l = list({ workers: [
+    { name: 'main', state: 'online', account: null, pinned: null, node: 'asx1', link: '', age_s: 5 },
+    { name: 'b1', state: 'online', account: '2', pinned: '2', node: 'asx2', link: '', age_s: 5 },
+    { name: 'b2', state: 'queued', account: '2', pinned: '2', node: '', link: '', age_s: 5 },
+    { name: 'gone', state: 'stopped', account: '2', pinned: '2', node: '', link: '', age_s: 5 },
+  ] });
+  const state = { accounts: answer('', l) };
+  const { context, page, errors } = await open(state);
+  await page.waitForSelector('#gr-tile-2');
+  const t = await tiles(page);
+  assert.match(t[0], /Claude max, 1 worker /, t[0]);
+  assert.match(t[1], /Claude pro, 2 workers /, t[1]);
+  await page.click('#gr-tile-2');
+  await page.waitForSelector('#gr-start');
+  assert.match(await page.textContent('#gr-side'), /shares this account's five-hour window/);
+  assert.deepEqual(errors, []);
+  await context.close();
 });
 
 await browser.close();
