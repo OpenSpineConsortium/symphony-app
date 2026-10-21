@@ -1,3 +1,0 @@
-FAIL H1: a computer opens on the home screen of buttons: no side rail beside a tab, no tab, the buttons in a grid that fits with nothing scrolling - not on the home screen
-FAIL H2: a button opens its tab across the whole console under the back bar, its name in the bar; the back button and the browser's back return to the buttons - page.click: Timeout 30000ms exceeded.
-0 passed, 2 failed

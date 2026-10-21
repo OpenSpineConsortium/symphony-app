@@ -1,2 +1,0 @@
-FAIL H5: a mouse drags Tasks to the first place; the others make room, the order is kept in the profile and on the legacy rail, the drag opens no tab, and a reload keeps it - Reset order did not put them back
-0 passed, 1 failed

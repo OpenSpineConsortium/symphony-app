@@ -1,4 +1,0 @@
-FAIL H8: the Full screen button is offered only where the browser can make a page full screen: hidden where neither requestFullscreen nor webkitRequestFullscreen is there, as on an iPhone, and shown on a computer and on a phone that has them, or WebKit's older call alone, as Safari before 16.4 has 
-     a browser with no full screen for a page offers the button at 390 px
-
-0 passed, 1 failed

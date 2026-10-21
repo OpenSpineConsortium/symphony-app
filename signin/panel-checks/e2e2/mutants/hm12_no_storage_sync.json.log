@@ -1,2 +1,0 @@
-FAIL H13: storage that is not the page's own shape is read as the default, and another tab of the profile choosing Legacy changes this one too - the first tab kept the buttons
-0 passed, 1 failed

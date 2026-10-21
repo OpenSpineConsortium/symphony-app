@@ -1,2 +1,0 @@
-FAIL H7: Escape during a drag puts every button back and keeps nothing - Expected values to be strictly deep-equal:
-0 passed, 1 failed

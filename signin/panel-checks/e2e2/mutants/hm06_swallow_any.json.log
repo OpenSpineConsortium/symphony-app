@@ -1,3 +1,0 @@
-FAIL H5: a mouse drags Tasks to the first place; the others make room, the order is kept in the profile and on the legacy rail, the drag opens no tab, and a reload keeps it - a press after a drag opens nothing
-FAIL H9: on a phone a finger held on a button drags it; a finger that moves at once only scrolls, and a short tap opens the tab - a tap did not open the tab
-0 passed, 2 failed
