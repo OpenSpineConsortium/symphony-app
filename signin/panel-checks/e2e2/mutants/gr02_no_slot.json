@@ -1,0 +1,1 @@
+[["var inputs = { action: action, slot: slot || '', request: request };", "var inputs = { action: action, slot: '', request: request };"]]
