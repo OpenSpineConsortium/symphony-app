@@ -128,6 +128,54 @@ def recent_calls(token, hours):
     return lines
 
 
+def ask_json(token, method, path, body=None):
+    request = urllib.request.Request(API + path, data=json.dumps(body).encode() if body is not None else None, method=method)
+    request.add_header("Authorization", "Bearer " + token)
+    request.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(request, timeout=30) as answer:
+            return json.loads(answer.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        return {"http_error": error.code, "body": error.read().decode("utf-8", "replace")[:400]}
+
+
+def pick(event, *path):
+    for key in path:
+        if not isinstance(event, dict):
+            return None
+        event = event.get(key)
+    return event
+
+
+def recent_events(token, hours):
+    """each recent call's time, route, answer and the Origin it came with, from Workers Logs; no body,
+    no query and no address is printed"""
+    import time
+    now = int(time.time() * 1000)
+    try:
+        account = cloudflare_account(token)
+        data = ask_json(token, "POST", f"/accounts/{account}/workers/observability/telemetry/query", {
+            "queryId": "signin-health", "view": "events", "limit": 100,
+            "timeframe": {"from": now - hours * 3600 * 1000, "to": now},
+            "parameters": {"filters": [{"key": "$metadata.service", "operation": "eq", "type": "string", "value": SCRIPT}]}})
+    except (urllib.error.URLError, ValueError, KeyError, TimeoutError) as error:
+        return ["?     the Worker's logs could not be read: " + type(error).__name__]
+    events = pick(data, "result", "events", "events")
+    if not isinstance(events, list):
+        return ["?     the Worker's logs could not be read: " + json.dumps(data)[:400]]
+    lines = [f"the Worker's logged calls of the last {hours} hours ({len(events)}):"]
+    for event in sorted(events, key=lambda e: e.get("timestamp") or 0):
+        request = pick(event, "$workers", "event", "request") or {}
+        headers = request.get("headers") or {}
+        url = str(request.get("url") or pick(event, "$metadata", "url") or "")
+        route = url.split("?")[0].split("workers.dev")[-1]
+        stamp = time.strftime("%H:%M:%S", time.gmtime((event.get("timestamp") or 0) / 1000))
+        lines.append(f"      {stamp} {request.get('method') or ''} {route} -> "
+                     f"{pick(event, '$workers', 'event', 'response', 'status')} {pick(event, '$workers', 'outcome')}"
+                     f" wall {pick(event, '$workers', 'wallTimeMs')} ms origin {headers.get('origin')}")
+    return lines
+
+
 def main():
     good = True
     for what, ok, seen in readings():
@@ -138,7 +186,8 @@ def main():
         enabled, seen = cloudflare_subdomain(token)
         print(("ok    " if enabled else "WRONG " if enabled is False else "?     ") + "Cloudflare serves it on workers.dev: " + seen)
         good = good and enabled is not False
-        for line in recent_calls(token, int(os.environ.get("SIGNIN_HOURS", "6"))):
+        hours = int(os.environ.get("SIGNIN_HOURS", "6"))
+        for line in recent_calls(token, hours) + recent_events(token, hours):
             print(line)
     return 0 if good else 1
 
