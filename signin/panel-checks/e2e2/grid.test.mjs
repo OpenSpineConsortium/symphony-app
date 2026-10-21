@@ -57,6 +57,8 @@ async function open(state, viewport, opts = {}) {
     if (key === 'GET /repos/OpenSpineConsortium/symphony-template') return json(200, { full_name: 'OpenSpineConsortium/symphony-template', default_branch: 'main', private: false, id: 9, owner: { id: 8, login: 'OpenSpineConsortium' } });
     if (opts.home && key === 'GET /repos/OpenSpineConsortium/symphony-template/contents/accounts.json') return raw(state.accounts);
     if (key === 'GET /repos/acme/demo/contents/accounts.json') return state.accounts ? raw(state.accounts) : json(404, { message: 'Not Found' });
+    const own = key.match(/^GET \/repos\/acme\/demo\/contents\/answers\/([A-Za-z0-9_-]+)\.json$/);
+    if (own) return state.answers && state.answers[own[1]] ? raw(state.answers[own[1]]) : json(404, { message: 'Not Found' });
     if (key === 'GET /repos/acme/demo/contents/link.json') return state.link ? raw(state.link) : json(404, { message: 'Not Found' });
     if (key === 'POST /repos/acme/demo/actions/workflows/grid-accounts.yml/dispatches' || (opts.home && key === 'POST /repos/OpenSpineConsortium/symphony-template/actions/workflows/grid-accounts.yml/dispatches')) {
       if (opts.home) calls[calls.length - 1].home = true;
@@ -297,6 +299,82 @@ await check('G10: Stop asks first and sends the worker\'s name alone; a name the
   assert.equal(dispatched.length, 1, 'a bad name was sent');
   assert.deepEqual(errors, []);
   await context.close();
+});
+
+await check('G11: a run another overtook on accounts.json is still followed to its end, through its own answer under answers/', async () => {
+  const l = list({ workers: [] });
+  const state = { accounts: answer('', l), answers: {} };
+  state.onDispatch = async (body) => {
+    await sleep(300);
+    const m = list({ workers: [{ name: 'teamc', state: 'queued', account: body.inputs.slot, pinned: body.inputs.slot, node: '', link: '', age_s: 1 }] });
+    // another page's run wrote accounts.json last; this run's answer is only under answers/
+    state.accounts = answer('someone-else', l);
+    state.answers[body.inputs.request] = answer(body.inputs.request, m);
+  };
+  const { context, page, dispatched, errors } = await open(state);
+  await page.waitForSelector('#gr-tile-2');
+  await page.click('#gr-tile-2');
+  await page.fill('#gr-wname', 'teamc');
+  await page.click('#gr-start');
+  await page.waitForSelector('#gr-worker-teamc', { timeout: 15000 });
+  assert.equal(dispatched.length, 1);
+  assert.match(await page.textContent('#gr-worker-teamc'), /on account 2/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G12: Start with a count sends the count and the stem, a count of one sends none, and a stem too long for the numbers is never sent', async () => {
+  const state = { accounts: answer('', list({ workers: [] })) };
+  state.onDispatch = async (body) => { await sleep(200); state.accounts = answer(body.inputs.request, list({ workers: [] })); };
+  const { context, page, dispatched, errors } = await open(state);
+  await page.waitForSelector('#gr-tile-2');
+  await page.click('#gr-tile-2');
+  await page.fill('#gr-wname', 'team');
+  await page.selectOption('#gr-wcount', '3');
+  await page.click('#gr-start');
+  await page.waitForFunction(() => !document.getElementById('gr-start') || !document.getElementById('gr-start').disabled, null, { timeout: 15000 });
+  assert.equal(dispatched.length, 1);
+  assert.deepEqual([dispatched[0].inputs.action, dispatched[0].inputs.slot, dispatched[0].inputs.name, dispatched[0].inputs.count], ['worker-start', '2', 'team', '3']);
+  await sleep(300);
+  await page.fill('#gr-wname', 'x'.repeat(22));
+  await page.selectOption('#gr-wcount', '2');
+  await page.click('#gr-start');
+  await sleep(300);
+  assert.equal(dispatched.length, 1, 'a stem of 22 was sent for several workers');
+  await page.selectOption('#gr-wcount', '1');
+  await page.fill('#gr-wname', 'solo');
+  await page.click('#gr-start');
+  await page.waitForFunction(() => document.getElementById('gr-start') && !document.getElementById('gr-start').disabled, null, { timeout: 15000 });
+  assert.equal(dispatched.length, 2);
+  assert.equal(dispatched[1].inputs.count, undefined, 'a count of one was sent');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G13: a running worker the grid has not heard from in a quarter of an hour is flagged, counted from when the grid last answered; a fresh one and a stopped one are not', async () => {
+  const old = new Date(Date.now() - 20 * 60000).toISOString().replace(/\.\d+Z$/, 'Z');
+  const l = list({ workers: [
+    { name: 'fresh', state: 'online', account: '1', pinned: null, node: 'asx1', link: '', age_s: 10 },
+    { name: 'silent', state: 'online', account: '2', pinned: '2', node: 'asx2', link: '', age_s: 30 },
+    { name: 'ended', state: 'stopped', account: '2', pinned: '2', node: '', link: '', age_s: 99999 },
+  ] });
+  const state = { accounts: Object.assign(answer('', l), { at: now }) };
+  state.accounts.list.workers[1].age_s = 16 * 60;
+  const { context, page, errors } = await open(state);
+  await page.waitForSelector('#gr-worker-silent');
+  assert.match(await page.textContent('#gr-worker-silent'), /not heard from in 16 min/);
+  assert.ok(await page.locator('#gr-worker-silent .gr__dot--warn').count() === 1, 'the silent worker is not flagged');
+  assert.doesNotMatch(await page.textContent('#gr-worker-fresh'), /not heard/);
+  assert.ok(await page.locator('#gr-worker-fresh .gr__dot--go').count() === 1);
+  assert.doesNotMatch(await page.textContent('#gr-worker-ended'), /not heard/);
+  await context.close();
+  // an answer read twenty minutes ago counts its age on top of the worker's own
+  state.accounts = Object.assign(answer('', list({ workers: [{ name: 'fresh', state: 'online', account: '1', pinned: null, node: 'asx1', link: '', age_s: 10 }] })), { at: old });
+  const second = await open(state);
+  await second.page.waitForSelector('#gr-worker-fresh');
+  assert.match(await second.page.textContent('#gr-worker-fresh'), /not heard from in 20 min/);
+  assert.deepEqual(errors.concat(second.errors), []);
+  await second.context.close();
 });
 
 await browser.close();
