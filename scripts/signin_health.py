@@ -6,7 +6,9 @@ page, which is what a Worker that throws sends. So this reads the service as the
 outside Cloudflare: its index, the preflight of a sign-in with the page's Origin, and a sign-in
 with no code, which the Worker must refuse in JSON, with the header, and before asking GitHub.
 With CLOUDFLARE_API_TOKEN it also reads from Cloudflare whether the Worker's workers.dev address
-is switched on. It changes nothing and ends non-zero when the page could not sign in.
+is switched on, and how the Worker's calls of the last hours ended, minute by minute, so a sign-in
+that failed in someone's browser shows whether it reached the Worker at all. It changes nothing and
+ends non-zero when the page could not sign in.
 """
 
 import json
@@ -79,6 +81,53 @@ def cloudflare_subdomain(token):
         return None, type(error).__name__
 
 
+GRAPHQL = """query($account: String!, $since: Time!, $until: Time!) { viewer { accounts(filter: {accountTag: $account}) {
+  workersInvocationsAdaptive(limit: 500, filter: {scriptName: "%s", datetime_geq: $since, datetime_leq: $until},
+                             orderBy: [datetimeMinute_ASC]) {
+    sum { requests errors subrequests } quantiles { cpuTimeP50 wallTimeP99 } dimensions { datetimeMinute status } } } } }""" % SCRIPT
+
+
+def cloudflare_account(token):
+    """the account the token reaches, or None"""
+    named = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "").strip()
+    if named:
+        return named
+    request = urllib.request.Request(API + "/accounts")
+    request.add_header("Authorization", "Bearer " + token)
+    with urllib.request.urlopen(request, timeout=30) as answer:
+        accounts = json.loads(answer.read().decode("utf-8")).get("result") or []
+    return accounts[0]["id"] if len(accounts) == 1 else None
+
+
+def recent_calls(token, hours):
+    """the Worker's calls of the last hours as lines, one per minute and outcome, or why not"""
+    import datetime
+    until = datetime.datetime.now(datetime.timezone.utc)
+    since = until - datetime.timedelta(hours=hours)
+    try:
+        account = cloudflare_account(token)
+        if not account:
+            return ["?     the token reaches no single account"]
+        body = json.dumps({"query": GRAPHQL, "variables": {"account": account, "since": since.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                                            "until": until.strftime("%Y-%m-%dT%H:%M:%SZ")}}).encode()
+        request = urllib.request.Request(API + "/graphql", data=body, method="POST")
+        request.add_header("Authorization", "Bearer " + token)
+        request.add_header("Content-Type", "application/json")
+        with urllib.request.urlopen(request, timeout=30) as answer:
+            data = json.loads(answer.read().decode("utf-8"))
+    except (urllib.error.URLError, ValueError, KeyError, TimeoutError) as error:
+        return ["?     the Worker's recent calls could not be read: " + type(error).__name__ + " " + str(error)[:200]]
+    if data.get("errors"):
+        return ["?     the Worker's recent calls could not be read: " + json.dumps(data["errors"])[:300]]
+    rows = data["data"]["viewer"]["accounts"][0]["workersInvocationsAdaptive"]
+    lines = [f"calls of the last {hours} hours, by minute and outcome ({len(rows)} rows):"]
+    for row in rows:
+        d, s, q = row["dimensions"], row["sum"], row["quantiles"]
+        lines.append(f"      {d['datetimeMinute']} {d['status']:<22} requests {s['requests']:>3} errors {s['errors']:>2}"
+                     f" subrequests {s['subrequests']:>3} wall p99 {q['wallTimeP99'] / 1000:.0f} ms")
+    return lines
+
+
 def main():
     good = True
     for what, ok, seen in readings():
@@ -89,6 +138,8 @@ def main():
         enabled, seen = cloudflare_subdomain(token)
         print(("ok    " if enabled else "WRONG " if enabled is False else "?     ") + "Cloudflare serves it on workers.dev: " + seen)
         good = good and enabled is not False
+        for line in recent_calls(token, int(os.environ.get("SIGNIN_HOURS", "6"))):
+            print(line)
     return 0 if good else 1
 
 
