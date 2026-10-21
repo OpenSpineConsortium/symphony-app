@@ -1,0 +1,38 @@
+name: Sign-in service health
+
+# Reads the live sign-in service as the control panel would (scripts/signin_health.py): its
+# index, the preflight of a sign-in with the page's Origin, and a sign-in with no code, which it
+# must refuse in JSON the page can read. The page says "could not be reached" for any of these
+# going wrong, so this names which one did. It changes nothing. It runs after every deploy, every
+# six hours, by hand, and on a pull request that changes it, and ends red while the page could not
+# sign in.
+
+on:
+  workflow_run:
+    workflows: [Deploy the sign-in service]
+    types: [completed]
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - scripts/signin_health.py
+      - .github/workflows/signin-health.yml
+
+permissions:
+  contents: read
+
+jobs:
+  read:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Ask the service what the page asks it
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: python3 scripts/signin_health.py
