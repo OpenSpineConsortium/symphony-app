@@ -86,7 +86,7 @@ function baseRoutes() {
   return r;
 }
 // the assistant issue #50 the page remembers, and Claude's answer on it once a question is posted
-const FINISHED = '**Claude finished @tester\'s task in 1m 2s** —— [View job](https://github.com/acme/demo/actions/runs/9)\n\n---\n\n';
+const FINISHED = '**Claude finished @tester\'s task in 1m 2s** \u2014\u2014 [View job](https://github.com/acme/demo/actions/runs/9)\n\n---\n\n';
 function withAnswer(routes, blockLines) {
   const asked = [];
   routes['GET /repos/acme/demo/issues/50'] = issue(50, 'Assistant: tester', ['assistant']);

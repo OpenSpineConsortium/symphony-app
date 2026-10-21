@@ -444,8 +444,8 @@ ghu_TEST or github_pat_X.
   number in place of its ref, and Undo taking back only what was written; BS7 a hostile title, an
   issue's or an idea's, drawn as text; BS8 the tab whole on a laptop and a phone with no page
   scroll; BS9 a link of Claude's that would close a loop refused on Accept. The `b*` mutants (14)
-  each break one of these and are killed by the check they name. e2e2/PARKED, read by
-  run-mutants.sh, names no suite now; a suite named there is left out of a run of every mutant.
+  each break one of these and are killed by the check they name. Nothing is parked now:
+  run-mutants.sh leaves out of a run of every mutant a suite named in e2e2/PARKED, when there is one.
 - `e2e2/notebooks.test.mjs`: 36 checks of the console's Notebooks tab, /symphony/control/#notebooks
   (site pull request #82, 2026-10-19), against a mocked GitHub that keeps notebooks.json and
   catalog.json on the branch drive-catalog as GitHub does: read as objects with their sha, a file
