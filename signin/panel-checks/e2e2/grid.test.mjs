@@ -59,6 +59,8 @@ async function open(state, viewport, opts = {}) {
     if (key === 'GET /repos/acme/demo/contents/accounts.json') return state.accounts ? raw(state.accounts) : json(404, { message: 'Not Found' });
     const own = key.match(/^GET \/repos\/acme\/demo\/contents\/answers\/([A-Za-z0-9_-]+)\.json$/);
     if (own) return state.answers && state.answers[own[1]] ? raw(state.answers[own[1]]) : json(404, { message: 'Not Found' });
+    const logged = key.match(/^GET \/repos\/acme\/demo\/contents\/logs\/([A-Za-z0-9_-]+)\.json$/);
+    if (logged) return state.logs && state.logs[logged[1]] ? raw(state.logs[logged[1]]) : json(404, { message: 'Not Found' });
     if (key === 'GET /repos/acme/demo/contents/link.json') return state.link ? raw(state.link) : json(404, { message: 'Not Found' });
     if (key === 'POST /repos/acme/demo/actions/workflows/grid-accounts.yml/dispatches' || (opts.home && key === 'POST /repos/OpenSpineConsortium/symphony-template/actions/workflows/grid-accounts.yml/dispatches')) {
       if (opts.home) calls[calls.length - 1].home = true;
@@ -393,6 +395,36 @@ await check('G14: each account says how many live workers it carries, and one al
   await page.click('#gr-tile-2');
   await page.waitForSelector('#gr-start');
   assert.match(await page.textContent('#gr-side'), /shares this account's five-hour window/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G15: Console shows what a grid job printed: a sign-in\'s output from the account, a worker\'s from its line, the usage job\'s from the Console, each as text and never as markup', async () => {
+  const l = list({ workers: [{ name: 'teamb', state: 'online', account: '2', pinned: '2', node: 'asx3', link: '', age_s: 5 }] });
+  const state = { accounts: answer('', l), logs: {} };
+  state.onDispatch = async (body) => {
+    await sleep(200);
+    const i = body.inputs;
+    const file = i.slot ? 'login-' + i.slot : i.name ? 'worker-' + i.name : 'usage';
+    state.logs[file] = { v: 1, what: file, request: i.request, rc: 0, at: now, lines: ['--- the job\'s output (last 120 lines)', 'out of ' + file, '<img src=x onerror=alert(1)>'], said: [] };
+    state.accounts = answer(i.request, l);
+  };
+  const { context, page, dispatched, errors } = await open(state);
+  await page.waitForSelector('#gr-console');
+  await page.click('#gr-tile-2');
+  await page.click('#gr-log-slot');
+  await page.waitForFunction(() => /out of login-2/.test((document.getElementById('gr-log') || {}).textContent || ''), null, { timeout: 15000 });
+  assert.deepEqual([dispatched[0].inputs.action, dispatched[0].inputs.slot], ['log', '2']);
+  assert.match(await page.textContent('#gr-console'), /Sign-in of account 2, read/);
+  assert.equal(await page.locator('#gr-log img').count(), 0, 'a line of output became markup');
+  assert.ok(await page.evaluate(() => document.getElementById('gr-console').open), 'the Console stayed shut');
+  await page.click('#gr-log-teamb');
+  await page.waitForFunction(() => /out of worker-teamb/.test((document.getElementById('gr-log') || {}).textContent || ''), null, { timeout: 15000 });
+  assert.deepEqual([dispatched[1].inputs.action, dispatched[1].inputs.slot, dispatched[1].inputs.name], ['log', '', 'teamb']);
+  await page.click('#gr-log-usage');
+  await page.waitForFunction(() => /out of usage/.test((document.getElementById('gr-log') || {}).textContent || ''), null, { timeout: 15000 });
+  assert.deepEqual([dispatched[2].inputs.action, dispatched[2].inputs.slot, dispatched[2].inputs.name], ['log', '', undefined]);
+  assert.match(await page.textContent('#gr-console'), /Usage job, read/);
   assert.deepEqual(errors, []);
   await context.close();
 });
