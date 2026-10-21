@@ -1,0 +1,6 @@
+FAIL BS4: Connect joins two cards as a change, a pair joined on GitHub is offered for unlinking, and a link that would close a loop is refused in words 
+     Expected values to be strictly equal:
+     
+     'true' !== 'false'
+     
+0 pass, 1 fail

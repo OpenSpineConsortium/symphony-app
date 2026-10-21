@@ -1,0 +1,6 @@
+FAIL BS4: Connect joins two cards as a change, a pair joined on GitHub is offered for unlinking, and a link that would close a loop is refused in words 
+     The input did not match the regular expression /would close a loop/. Input:
+     
+     ''
+     
+0 pass, 1 fail

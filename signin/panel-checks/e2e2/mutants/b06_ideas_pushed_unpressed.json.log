@@ -1,0 +1,3 @@
+FAIL BS3: the answer's link and node lines are drawn as ideas; Accept moves a node with its links to the changes, Dismiss drops a link, and nothing is written 
+     page.waitForFunction: Timeout 8000ms exceeded.
+0 pass, 1 fail

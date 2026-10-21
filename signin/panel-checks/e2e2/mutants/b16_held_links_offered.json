@@ -1,0 +1,1 @@
+[["return x.kind !== 'link' || (!bsHasLink(x) && bsRefsLive(x));", "return x.kind !== 'link' || bsRefsLive(x);"]]

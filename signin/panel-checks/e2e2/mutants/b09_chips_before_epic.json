@@ -1,0 +1,1 @@
+[["    if (!epics.some(function (e) { return e.number === bs.epic; })) bs.epic = epics[0].number;\n    bsEpicChips(epics);", "    bsEpicChips(epics);\n    if (!epics.some(function (e) { return e.number === bs.epic; })) bs.epic = epics[0].number;"]]

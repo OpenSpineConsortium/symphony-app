@@ -426,43 +426,26 @@ ghu_TEST or github_pat_X.
   in the dialog, and the head's button counts what is ticked (NC4); and on a
   phone the explorer keeps a height under the window's, a long folder scrolling in its list (NC5). CAT1 to CAT9, the saved catalog drawn when no
   drive was connected (claude/folders-catalog, 2026-10-18), were retired with that route.
-- `e2e2/explore.test.mjs`: parked since 2026-10-21, when the site hid the Explore tab on the owner's
-  "just hide it" (site branch claude/hide-explore) until it is rebuilt as the dependency brainstorm:
-  no rail button opens the tab, so these checks fail by design, and e2e2/PARKED keeps its `x*`
-  mutants out of a run of every mutant (each still runs when named). What follows is what it held.
-  19 checks of the console's Explore tab, /symphony/control/#explore
-  (site branch claude/explore-tab, 2026-10-18), against a mocked GitHub: a goal over an epic over
-  three tasks, a draft pull request on one task's claim branch, one run with one job of four steps,
-  a skipped one among them, and a log whose lines test the edges of each step by time. XP1 to XP7:
-  the tab after Dependencies and nothing below a task read until one goes in; the levels down to
-  a task and their states; a pull request, its runs, a job and its steps each read once, and Read
-  again; a step's own lines, the Claude step marked, the colour codes out and every line as text;
-  the wheel, including one long glide moving one level, Enter, Backspace and a claim branch with
-  no pull request; a log the browser cannot read and an address that is not https; a hostile title
-  and the reserve. XP8 serves the log as GitHub does, a redirect to its storage on another origin
-  (a local server of the check's own, so Chromium's checks on private addresses are off for this
-  suite alone), and holds that the storage is asked one plain read with no token and no header of
-  GitHub's. XP9 switches the repository while the tab is open, the folded side column pressed to
-  bring the repository's box back, and XP10 holds that an epic whose sub-issues could not be read
-  says so. Since the tab's modern look (site branch claude/explore-modern, 2026-10-20, after the
-  owner's "the explorer looks janky so work on modernizing it and making it take up most of the
-  panel when using it"), a level is cards on the zoom stage the Dependencies tab uses: XP5 holds
-  that the wheel over a card zooms and goes into nothing, a glide outward comes out one level and
-  no more, Enter, Escape, Backspace and the arrows among the cards; XP11 that at 1440 x 900, on a
-  phone upright and sideways the level is whole with no box that scrolls and no card outside the
-  stage, the side column folded on a computer, the tab the whole screen on a
-  phone with the site bar's handle over none of its controls; XP12 that Panel, a press on the
-  folded side column (the folded foot it pressed went with the foot, 2026-10-20) or on its grip (which drags nothing) brings them back, another
-  tab shows the console as it was, and on a phone Panel gives the page back; XP13 that +, Whole,
-  a double click and - past the whole level work, and the right and left arrows on the stage and a
-  swipe step to the level beside; XP14 that a log of 400 lines opens at its own size on its error
-  and the wheel moves along it without leaving it; XP15 that one card grows to fill the stage and
-  forty-three take six columns or more. After the modern look's adversarial review, XP16 holds that
-  a short log keeps the wheel and its lines copy whole without the log's markers; XP17 that a double
-  click goes one level, the arrows move between cards while zoomed in, and a held arrow steps
-  sideways once; XP18 that a log rewraps when Panel narrows its stage; XP19 that a phone signed out
-  at #explore scrolls and nothing of the fold applies. `VIEW=WxH` runs the checks in another window and `SHOTS=<folder>`
-  keeps a picture of each level a check passes through.
+- `e2e2/explore.test.mjs`: 9 checks of the console's Explore tab, /symphony/control/#explore,
+  rebuilt on 2026-10-21 (site branch claude/explore-brainstorm) as a planning canvas over an epic's
+  native sub-issues and "blocked by" links, after the owner's "have claude suggest new connections
+  between the dependency ... and you should be able to push the alterations in the dependencies to
+  the actual tasks"; the old tab's 19 checks and their `x*` mutants went with it. Against a mocked
+  GitHub with two epics and an outside issue that blocks one task: BS1 the tab after Dependencies,
+  the first epic's chip pressed, its tasks and GitHub's links drawn, nothing written; BS2 Ask
+  Claude for ideas fills the Claude box with a question naming the epic and the two line forms and
+  posts nothing until Ask; BS3 the answer's `link` and `node` lines drawn as dashed ideas, a link of
+  another epic left off the canvas, Accept moving a node with its links to Changes to push, Dismiss
+  dropping a link; BS4 Connect joining two cards, the same pair again taking the change back, a pair
+  linked on GitHub offered for unlinking, a loop refused in words and Escape ending Connect wherever
+  the focus is; BS5 Push as the person, the issue first, then its place under the epic, the unlink,
+  then the links by issue id, and Undo taking each back in reverse with the new issue closed as not
+  planned; BS6 a push GitHub refuses part way stopping there, the rest kept with the new task's
+  number in place of its ref, and Undo taking back only what was written; BS7 a hostile title, an
+  issue's or an idea's, drawn as text; BS8 the tab whole on a laptop and a phone with no page
+  scroll; BS9 a link of Claude's that would close a loop refused on Accept. The `b*` mutants (14)
+  each break one of these and are killed by the check they name. e2e2/PARKED, read by
+  run-mutants.sh, names no suite now; a suite named there is left out of a run of every mutant.
 - `e2e2/notebooks.test.mjs`: 36 checks of the console's Notebooks tab, /symphony/control/#notebooks
   (site pull request #82, 2026-10-19), against a mocked GitHub that keeps notebooks.json and
   catalog.json on the branch drive-catalog as GitHub does: read as objects with their sha, a file

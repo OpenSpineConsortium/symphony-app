@@ -1,1 +1,0 @@
-[["    if (e.ctrlKey || !st || !st.svg || !stage.classList.contains('ex__stage--log')) return;", "    return;"]]

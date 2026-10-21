@@ -1,0 +1,3 @@
+FAIL BS11: a task whose issue was opened but not placed under its epic is placed, not opened again, on the next Push, and one Undo takes back both pushes 
+     the first push's issue was not closed
+0 pass, 1 fail

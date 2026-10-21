@@ -1,1 +1,0 @@
-[["        add(pre, el('span', cls ? 'ex__line ' + cls : 'ex__line', l.text.replace(/^##\\[(group|endgroup|error|warning)\\]/, '')));", "        var sp = el('span', cls ? 'ex__line ' + cls : 'ex__line'); sp.innerHTML = l.text.replace(/^##\\[(group|endgroup|error|warning)\\]/, ''); add(pre, sp);"]]

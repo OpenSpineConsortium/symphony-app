@@ -1,0 +1,1 @@
+[["    if (waiting) bs.pending.splice(bs.pending.indexOf(waiting), 1);\n    else if (onGitHub)", "    if (onGitHub)"]]

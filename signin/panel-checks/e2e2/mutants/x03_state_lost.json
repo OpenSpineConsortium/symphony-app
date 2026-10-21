@@ -1,1 +1,0 @@
-[["{ state: graphClass(r, claimed) || 'open', url: exHttps(r.html_url), number: r.number }", "{ state: 'open', url: exHttps(r.html_url), number: r.number }"]]

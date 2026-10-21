@@ -1,0 +1,1 @@
+[["add(card, head, el('div', 'bs__title', c.issue ? c.issue.title || 'Issue #' + c.issue.number : c.task.title));", "var tt = el('div', 'bs__title'); tt.innerHTML = c.issue ? c.issue.title || 'Issue #' + c.issue.number : c.task.title; add(card, head, tt);"]]
