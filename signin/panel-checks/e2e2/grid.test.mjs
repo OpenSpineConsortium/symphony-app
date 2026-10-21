@@ -245,6 +245,60 @@ await check('G8: the grid is the same whatever repository the panel has open: wi
   await context.close();
 });
 
+await check('G9: every worker shows with its account and its own Stop; Start a worker on an account sends that slot and the name, and the new worker shows once the grid answers', async () => {
+  const two = (extra) => list(Object.assign({ workers: [
+    { name: 'phone', state: 'online', account: '1', pinned: null, node: 'asx15', link: 'https://claude.ai/code?environment=env_1', age_s: 20 },
+  ] }, extra || {}));
+  const state = { accounts: answer('', two()) };
+  state.onDispatch = async (body) => {
+    await sleep(300);
+    const l = two();
+    if (body.inputs.action === 'worker-start') l.workers.unshift({ name: body.inputs.name, state: 'queued', account: body.inputs.slot, pinned: body.inputs.slot, node: '', link: '', age_s: 1 });
+    state.accounts = answer(body.inputs.request, l);
+  };
+  const { context, page, dispatched, errors } = await open(state);
+  await page.waitForSelector('#gr-worker-phone');
+  assert.match(await page.textContent('#gr-worker-phone'), /Worker phone: online, on account 1, asx15/);
+  assert.ok(await page.locator('#gr-stop-phone').count() === 1, 'no Stop for the worker');
+  await page.click('#gr-tile-2');
+  await page.fill('#gr-wname', 'teamb');
+  await page.click('#gr-start');
+  await page.waitForSelector('#gr-worker-teamb', { timeout: 15000 });
+  assert.equal(dispatched.length, 1);
+  assert.equal(dispatched[0].inputs.action, 'worker-start');
+  assert.equal(dispatched[0].inputs.slot, '2');
+  assert.equal(dispatched[0].inputs.name, 'teamb');
+  assert.match(await page.textContent('#gr-worker-teamb'), /on account 2 \(kept there\).*claims as grid-teamb/);
+  assert.match(await page.textContent('#gr-side'), /Worker teamb runs on this account/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G10: Stop asks first and sends the worker\'s name alone; a name the gate would refuse is never sent', async () => {
+  const l = list({ workers: [{ name: 'teamb', state: 'online', account: '2', pinned: '2', node: 'asx3', link: 'https://claude.ai/code?environment=env_2', age_s: 5 }] });
+  const state = { accounts: answer('', l) };
+  state.onDispatch = async (body) => { const m = JSON.parse(JSON.stringify(l)); m.workers[0].state = 'stopped'; state.accounts = answer(body.inputs.request, m); };
+  const { context, page, dispatched, errors } = await open(state);
+  await page.waitForSelector('#gr-stop-teamb');
+  page.once('dialog', (d) => d.dismiss());
+  await page.click('#gr-stop-teamb');
+  await sleep(300);
+  assert.equal(dispatched.length, 0, 'Stop ran without asking');
+  page.once('dialog', (d) => d.accept());
+  await page.click('#gr-stop-teamb');
+  await page.waitForFunction(() => /stopped/.test(document.getElementById('gr-worker-teamb').textContent), null, { timeout: 15000 });
+  assert.equal(dispatched.length, 1);
+  assert.deepEqual([dispatched[0].inputs.action, dispatched[0].inputs.slot, dispatched[0].inputs.name], ['worker-stop', '', 'teamb']);
+  assert.equal(await page.locator('#gr-stop-teamb').count(), 0, 'a stopped worker still offers Stop');
+  await page.click('#gr-tile-1');
+  await page.fill('#gr-wname', 'a b');
+  await page.click('#gr-start');
+  await sleep(300);
+  assert.equal(dispatched.length, 1, 'a bad name was sent');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 await browser.close();
 console.log(failed ? 'FAILED ' + failed + ' of ' + (passed + failed) : 'ALL PASSED (' + passed + ')');
 process.exit(failed ? 1 : 0);

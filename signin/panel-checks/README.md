@@ -585,7 +585,7 @@ ghu_TEST or github_pat_X.
   (signin/README.md, step 9). GitHub's 5xx and 429 while the person types the code are the
   service's to answer, as github_unreachable, which K5 holds the page asks again at the same
   pace; test_worker.mjs holds the service's side.
-- `e2e2/grid.test.mjs`: 8 checks of the console's Grid tab, /symphony/control/#grid (site branch
+- `e2e2/grid.test.mjs`: 10 checks of the console's Grid tab, /symphony/control/#grid (site branch
   claude/grid-accounts, 2026-10-21, the owner's "i want to be able to do everything from the damn
   contriol board, see my account usasge, reset, intiiate claude swap, turn on auto mode"): the
   grid's Claude accounts drawn from the branch grid that symphony-template's grid-accounts.yml
@@ -596,7 +596,7 @@ ghu_TEST or github_pat_X.
   public key and offers only the link sealed for it, as Anthropic's sign-in, the link never in the
   run's inputs, and a code goes back as its own run (G4); a link sealed to any other page, or for
   another key, is never offered (G5, the link sealed here with Node's crypto as
-  scripts/grid-accounts.sh seals it with openssl); and the tab fits a phone (G7); the grid is OpenSpineConsortium/symphony-template whatever repository the panel has open, unless this browser keeps another under symphony_grid_repo (G8). Its four mutants,
+  scripts/grid-accounts.sh seals it with openssl); and the tab fits a phone (G7); the grid is OpenSpineConsortium/symphony-template whatever repository the panel has open, unless this browser keeps another under symphony_grid_repo (G8); every worker the grid lists shows with its account, its session and its own Stop, and Start a worker on an account sends that slot and the name and shows the new worker once the grid answers (G9, hpcworker framework 22, the owner's "multiple claude codes running locally on the grid"); Stop asks first and sends the name alone, and a name the gate would refuse is never sent (G10). Its eight mutants,
   `mutants/gr*.json`, are each killed. signin.test.mjs's P6 walks the Grid tab on a phone too.
 - `e2e2/mutants/`: 639 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
