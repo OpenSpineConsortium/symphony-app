@@ -1,0 +1,1 @@
+[["      if (pending && e.status === 404) return shareInvitationGone(repo, p, e, 'withdrawing the invitation').then(function (r) { say(r.words, !r.gone); });\n", ""]]
