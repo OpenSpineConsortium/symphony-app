@@ -1,0 +1,1 @@
+[["    if ($('cp-layout-legacy')) $('cp-layout-legacy').addEventListener('click', function () { chooseHomeLayout('legacy'); });\n", ""]]

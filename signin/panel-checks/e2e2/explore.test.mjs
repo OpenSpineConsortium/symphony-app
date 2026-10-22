@@ -17,6 +17,7 @@ import { chromium } from 'playwright';
 import { consoleTabs } from './console-tabs.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { legacyHome } from './legacy-home.mjs';
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8077';
 const SITE = process.env.SITE || '/home/user/openspineconsortium.github.io';
@@ -106,6 +107,7 @@ async function open(routes, opts) {
   opts = opts || {};
   const view = opts.view || LAPTOP, phone = view.width <= 900;
   const context = await browser.newContext(phone ? { viewport: view, isMobile: true, hasTouch: true } : { viewport: view });
+  await legacyHome(context);
   const calls = [];
   await context.route('https://api.github.com/**', async (route) => {
     const req = route.request();

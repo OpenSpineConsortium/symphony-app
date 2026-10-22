@@ -1,1 +1,1 @@
-[["    writeKept({});\n    forgetToken();\n", "    forgetToken();\n"]]
+[["    writeKept({});\n    wbForget(true);\n", "    wbForget(true);\n"]]

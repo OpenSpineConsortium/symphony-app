@@ -6,6 +6,7 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { legacyHome } from './legacy-home.mjs';
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8077';
 const SITE = process.env.SITE || '/home/user/openspineconsortium.github.io';
@@ -47,6 +48,7 @@ function wandbState(extra) {
 const browser = await chromium.launch();
 async function open(wb, viewport, opts = {}) {
   const context = await browser.newContext({ viewport: viewport || { width: 1280, height: 900 } });
+  await legacyHome(context);
   const asked = [], hosts = [];
   await context.route((u) => { if (u.protocol === 'https:') hosts.push(u.host); return u.protocol === 'https:' && u.host !== 'api.github.com' && u.host !== 'signin.example.test'; }, (route) => route.abort());
   await context.route('**/assets/js/symphony-panel.js*', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: real }));

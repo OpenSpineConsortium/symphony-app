@@ -1,0 +1,1 @@
+[["    homePrefs().order = sameOrder(now, homeDefault) ? [] : now;\n    keepHomePrefs();", "    homePrefs().order = sameOrder(now, homeDefault) ? [] : now;"]]

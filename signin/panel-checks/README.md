@@ -944,6 +944,11 @@ ghu_TEST or github_pat_X.
   900 x 500 or 1366 x 540 at 170 %; the line stays for a layout that makes the stage short again.
    k40 (the code box not brought into sight, K24) survives on the site before the floating Claude
   (db4141a) as here, and k35 and m7 are STALE there as here; none of the three is this change's.
+  The button home screen on every screen (site branch claude/button-home-default, 2026-10-22)
+  leaves g139, g156, g157, g164 and g183 surviving as on site master at 10297bf, each the
+  equivalent named above, so none is this change's. f134 had gone STALE on master since the W&B
+  tab (#133) put wbForget(true) between the sign-out's writeKept({}) and forgetToken(); it is
+  aimed again at the line as it now reads and caught again (N3).
 - `e2e2/css-mutants/`: 23 lists of pairs for the stylesheet control.css, each with its `.json.only`,
   for the part of the foot and the bar that is the stylesheet's, which no mutant of the script
   reaches; `run-mutants.sh` serves a path under css-mutants/ in place of control.css through

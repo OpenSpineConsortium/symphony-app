@@ -3,6 +3,7 @@ import { chromium } from 'playwright';
 import { consoleTabs } from './console-tabs.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { legacyHome } from './legacy-home.mjs';
 
 const BASE = process.env.BASE || 'http://localhost:8077';
 // These checks paste a token, which the page shows open only while the sign-in is off, so the
@@ -82,6 +83,7 @@ const rawRoutes = {
 const browser = await chromium.launch();
 await consoleTabs(browser);
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+await legacyHome(context);
 await context.route('**/assets/js/symphony-panel.js*', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: UNCONFIGURED }));
 await context.route('https://api.github.com/**', async (route) => {
   const req = route.request();

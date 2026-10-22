@@ -1,0 +1,1 @@
+[["if (s && Date.now() < s.until && s.b.contains(e.target))", "if (s && Date.now() < s.until)"]]
