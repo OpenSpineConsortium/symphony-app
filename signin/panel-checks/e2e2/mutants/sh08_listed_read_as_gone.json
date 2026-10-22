@@ -1,0 +1,1 @@
+[["      return !list.more && !list.some(function (inv) { return inv.id === id; });", "      return true;"]]

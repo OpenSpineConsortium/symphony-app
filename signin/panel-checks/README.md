@@ -88,6 +88,15 @@ ghu_TEST or github_pat_X.
   sign-in stays there, since it is the only word of why the panel is signed out, and I4 that it
   never covers the gate's button. `CSS_MUTANT` names a
   list of pairs for control.css, served in its place, as `MUTANT` names one for the script.
+  S1 to S4 hold the Share tab's invitation and each refusal named by its cause. S5 to S7 (site
+  branch claude/project-thread-gxsm8j, 2026-10-22, after the owner's withdrawn invitation that
+  stayed on the list and a second withdraw that blamed a missing installation): the list read
+  after a withdraw asks GitHub again with fetch's cache no-cache, read from the page's own fetch
+  since Playwright turns the browser's cache off while it routes (S5, mutant sh05), and a 404 on
+  an invitation says it is no longer waiting, accepted (S6, sh06 and sh07) or withdrawn already
+  or declined (S7), never that SymphonyBoard is not installed; and a 404 while GitHub still lists
+  the invitation, as for a sign-in that may not reach it, keeps the row and says GitHub answered
+  404, not that it is gone (S8, sh08).
 - `e2e2/panel.test.mjs`: the panel's walkthrough on both pages.
 - `e2e2/hostile.test.mjs`: 13 hostile-input checks.
 - `e2e2/usual.test.mjs`: 6 checks of the repository a browser that keeps none opens, a new one or
