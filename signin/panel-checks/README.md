@@ -594,6 +594,7 @@ ghu_TEST or github_pat_X.
   (signin/README.md, step 9). GitHub's 5xx and 429 while the person types the code are the
   service's to answer, as github_unreachable, which K5 holds the page asks again at the same
   pace; test_worker.mjs holds the service's side.
+- `e2e2/runs.test.mjs`: 1 check of the console's Runs tab (2026-10-21, the owner's "make sure the jobs can be tracked, launched correctly, cancelled"): a run still going, a worker in Actions among them, offers Cancel, asked first, and calls GitHub's cancel for that run alone; a finished run offers nothing (R1). Its two mutants, `mutants/rc*.json`, are each killed.
 - `e2e2/grid.test.mjs`: 17 checks of the console's Grid tab, /symphony/control/#grid (site branch
   claude/grid-accounts, 2026-10-21, the owner's "i want to be able to do everything from the damn
   contriol board, see my account usasge, reset, intiiate claude swap, turn on auto mode"): the
