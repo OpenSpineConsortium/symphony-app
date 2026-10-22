@@ -1,0 +1,1 @@
+[["      if (list.some(function (c) { return String(c.login).toLowerCase() === lower; })) return", "      if (false) return"]]

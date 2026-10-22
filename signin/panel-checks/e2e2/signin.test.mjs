@@ -73,7 +73,7 @@ async function open(opts) {
     if (typeof r === 'function') r = await r(req);
     const headers = { 'Access-Control-Expose-Headers': 'Link' };
     if (r === undefined) return route.fulfill({ status: 404, contentType: 'application/json', headers, body: JSON.stringify({ message: 'Not Found' }) });
-    if (r && r.status) return route.fulfill({ status: r.status, contentType: 'application/json', headers, body: JSON.stringify(r.body || {}) });
+    if (r && r.status) return route.fulfill({ status: r.status, contentType: 'application/json', headers: Object.assign({}, headers, r.headers || {}), body: JSON.stringify(r.body === undefined ? {} : r.body) });
     if (r && typeof r.raw === 'string') return route.fulfill({ status: 200, contentType: 'application/vnd.github.raw+json', headers, body: r.raw });
     if (r === null) return route.fulfill({ status: 204, headers, body: '' });
     return route.fulfill({ status: 200, contentType: 'application/json', headers, body: JSON.stringify(r) });
@@ -3844,6 +3844,86 @@ await check('S3: a refusal to someone who does not administer the repository say
 await check('S4: a refusal when both hold passes GitHub\'s own words on, and blames neither the role nor the installation', async () => {
   const { context, answer, errors } = await inviteNewbie(shareRoutes(true, { administration: 'write', metadata: 'read' }, { status: 403, body: { message: 'Organization policy forbids outside collaborators' } }));
   assert.match(answer, /\(403\) although you administer acme\/demo and SymphonyBoard holds Administration there: .*Organization policy forbids outside collaborators/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// S5 to S7: withdrawing a waiting invitation (the owner, 2026-10-22: a withdrawn invitation stayed on
+// the list, and a second withdraw blamed a missing installation for GitHub's 404). GitHub answers its
+// reads with Cache-Control: private, max-age=60, so the list read after a change must ask GitHub
+// again; and a 404 on an invitation means it is no longer waiting, which is said as such. Playwright
+// turns the browser's cache off while it routes requests, so S5 reads the cache mode each fetch of the
+// Share tab's lists asked for, as the page handed it to fetch, in place of a stale answer it cannot get.
+const CACHED = { 'Cache-Control': 'private, max-age=60, s-maxage=60', 'ETag': 'W/"inv1"', 'Vary': 'Accept, Authorization' };
+const waitingInvite = { id: 338318854, invitee: { login: 'newbie' }, inviter: { login: 'acme' }, permissions: 'write', created_at: now };
+function withdrawRoutes(answer, collaborators, stays) {
+  const routes = shareRoutes(true, { administration: 'write', metadata: 'read' }, null);
+  let withdrawn = false;
+  routes['GET /repos/acme/demo/invitations'] = () => ({ status: 200, headers: CACHED, body: withdrawn ? [] : [waitingInvite] });
+  routes['GET /repos/acme/demo/collaborators'] = () => ({ status: 200, headers: CACHED, body: withdrawn ? collaborators : [{ login: 'acme', role_name: 'admin' }] });
+  routes['DELETE /repos/acme/demo/invitations/338318854'] = () => { withdrawn = !stays; return answer; };
+  return routes;
+}
+const recordCacheModes = () => {
+  window.__cacheModes = [];
+  const real = window.fetch;
+  window.fetch = function (input, init) {
+    const url = String(input && input.url || input);
+    if (/\/repos\/acme\/demo\/(invitations|collaborators)\?/.test(url)) window.__cacheModes.push(url.replace(/\?.*/, '').replace(/.*\//, '') + ':' + ((init && init.cache) || 'default'));
+    return real.apply(this, arguments);
+  };
+};
+async function withdrawNewbie(routes, stays) {
+  const opened = await open({ script: configured, routes, initScript: recordCacheModes, path: '/symphony/control/?repo=acme/demo', storage: { local: { symphony_panel_oauth: rec('ghu_TOKEN', 'ghr_R', 8 * HOUR), symphony_panel_repos: JSON.stringify(['acme/demo']) } } });
+  const { page } = opened;
+  page.on('dialog', (d) => d.accept());
+  await page.waitForSelector('#cp-app:not(.hidden)', { timeout: 10000 });
+  await page.click('.console__rail [data-tab="share"]');
+  await page.waitForSelector('#sh-people tr.share__pending .card__x', { timeout: 10000 });
+  await page.click('#sh-people tr.share__pending .card__x');
+  await untilFoot(page, 'withdrawn|no longer waiting|refused|answered 404', 10000);
+  if (!stays) await page.waitForFunction(() => !document.querySelector('#sh-people tr.share__pending') && /no invitation waiting/.test(document.getElementById('sh-state').textContent), null, { timeout: 10000 });
+  opened.rowStays = !!(await page.$('#sh-people tr.share__pending'));
+  opened.note = await page.textContent('#msg');
+  opened.modes = await page.evaluate(() => window.__cacheModes);
+  return opened;
+}
+
+await check('S5: a withdrawn invitation leaves the list at once: one DELETE, the list read again from GitHub and not the browser\'s copy', async () => {
+  const { context, calls, note, modes, errors } = await withdrawNewbie(withdrawRoutes(null, [{ login: 'acme', role_name: 'admin' }]));
+  assert.ok(modes.includes('invitations:no-cache') && modes.includes('collaborators:no-cache'), 'the lists were read as ' + JSON.stringify(modes));
+  assert.ok(!modes.some((m) => !/:no-cache$/.test(m)), 'a list was read from the browser\'s copy: ' + JSON.stringify(modes));
+  assert.equal(calls.filter((c) => c.key === 'DELETE /repos/acme/demo/invitations/338318854').length, 1);
+  assert.ok(calls.filter((c) => c.key === 'GET /repos/acme/demo/invitations').length >= 2, 'the invitations were not read again after the withdraw');
+  assert.match(note, /The invitation of newbie is withdrawn\./);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('S6: a withdraw GitHub answers 404 because they accepted says so, blames no installation, and the row goes', async () => {
+  const { context, note, modes, errors } = await withdrawNewbie(withdrawRoutes({ status: 404, body: { message: 'Not Found' } }, [{ login: 'acme', role_name: 'admin' }, { login: 'newbie', role_name: 'write' }]));
+  assert.match(note, /The invitation of newbie is no longer waiting: newbie accepted it and has access to acme\/demo\./);
+  assert.ok(!modes.some((m) => !/:no-cache$/.test(m)), 'a list was read from the browser\'s copy: ' + JSON.stringify(modes));
+  assert.doesNotMatch(note, /not installed|installations\/new|refused/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('S7: a withdraw GitHub answers 404 for an invitation gone otherwise says it was withdrawn already or declined', async () => {
+  const { context, note, modes, errors } = await withdrawNewbie(withdrawRoutes({ status: 404, body: { message: 'Not Found' } }, [{ login: 'acme', role_name: 'admin' }]));
+  assert.match(note, /The invitation of newbie is no longer waiting, and newbie has no access by name: it was withdrawn already or declined, or taken and the access since removed\./);
+  assert.ok(!modes.some((m) => !/:no-cache$/.test(m)), 'a list was read from the browser\'s copy: ' + JSON.stringify(modes));
+  assert.doesNotMatch(note, /not installed|installations\/new|refused/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('S8: a withdraw GitHub answers 404 while the invitation is still listed is not called gone: the row stays and the note says GitHub answered 404, blaming no installation', async () => {
+  const { context, note, rowStays, errors } = await withdrawNewbie(withdrawRoutes({ status: 404, body: { message: 'Not Found' } }, [{ login: 'acme', role_name: 'admin' }], true), true);
+  assert.ok(rowStays, 'the invitation\'s row went although GitHub still lists it');
+  assert.doesNotMatch(note, /no longer waiting|is withdrawn/);
+  assert.match(note, /GitHub answered 404 to withdrawing the invitation, although you administer acme\/demo/);
+  assert.doesNotMatch(note, /not installed|installations\/new/);
   assert.deepEqual(errors, []);
   await context.close();
 });

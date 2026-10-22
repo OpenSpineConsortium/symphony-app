@@ -57,6 +57,10 @@ async function open(state, viewport, opts = {}) {
     if (key === 'GET /repos/OpenSpineConsortium/symphony-template') return json(200, { full_name: 'OpenSpineConsortium/symphony-template', default_branch: 'main', private: false, id: 9, owner: { id: 8, login: 'OpenSpineConsortium' } });
     if (opts.home && key === 'GET /repos/OpenSpineConsortium/symphony-template/contents/accounts.json') return raw(state.accounts);
     if (key === 'GET /repos/acme/demo/contents/accounts.json') return state.accounts ? raw(state.accounts) : json(404, { message: 'Not Found' });
+    const own = key.match(/^GET \/repos\/acme\/demo\/contents\/answers\/([A-Za-z0-9_-]+)\.json$/);
+    if (own) return state.answers && state.answers[own[1]] ? raw(state.answers[own[1]]) : json(404, { message: 'Not Found' });
+    const logged = key.match(/^GET \/repos\/acme\/demo\/contents\/logs\/([A-Za-z0-9_-]+)\.json$/);
+    if (logged) return state.logs && state.logs[logged[1]] ? raw(state.logs[logged[1]]) : json(404, { message: 'Not Found' });
     if (key === 'GET /repos/acme/demo/contents/link.json') return state.link ? raw(state.link) : json(404, { message: 'Not Found' });
     if (key === 'POST /repos/acme/demo/actions/workflows/grid-accounts.yml/dispatches' || (opts.home && key === 'POST /repos/OpenSpineConsortium/symphony-template/actions/workflows/grid-accounts.yml/dispatches')) {
       if (opts.home) calls[calls.length - 1].home = true;
@@ -65,7 +69,11 @@ async function open(state, viewport, opts = {}) {
       if (state.onDispatch) await state.onDispatch(body);
       return route.fulfill({ status: 204, body: '' });
     }
-    if (key === 'GET /repos/acme/demo/issues' || key === 'GET /repos/acme/demo/pulls') return json(200, []);
+    if (key === 'GET /repos/acme/demo/issues') return json(200, state.issues || []);
+    if (key === 'GET /repos/acme/demo/pulls') return json(200, []);
+    if (key === 'GET /repos/acme/demo/actions/workflows/workers.yml/runs') return json(200, { workflow_runs: state.runs || [] });
+    const cancelled = key.match(/^POST \/repos\/acme\/demo\/actions\/runs\/(\d+)\/cancel$/);
+    if (cancelled) { state.cancelled = (state.cancelled || []).concat(cancelled[1]); return route.fulfill({ status: 202, body: '' }); }
     if (key === 'GET /repos/acme/demo/actions/runs') return json(200, { workflow_runs: [] });
     return json(404, { message: 'Not Found' });
   });
@@ -104,13 +112,13 @@ await check('G1: the tab draws each account with its e-mail, plan, five-hour and
   const { context, page, calls, dispatched, errors } = await open({ accounts: answer('', list()) });
   await page.waitForSelector('#gr-tile-2');
   const t = await tiles(page);
-  assert.match(t[0], /^1 gr\*\*\*@gmail\.com Claude max 5h 42% 7d 95% In use$/, t[0]);
+  assert.match(t[0], /^1 gr\*\*\*@gmail\.com Claude max, 1 worker 5h 42% 7d 95% In use$/, t[0]);
   assert.match(t[1], /^2 wo\*\*\*@wayne\.edu Claude pro 5h 10% 7d 20% Ready$/, t[1]);
   assert.match(t[2], /Sign in another/);
   const facts = await page.evaluate(() => ({
     current: document.querySelector('#gr-tile-1').parentElement.classList.contains('gr--current'),
     full: document.querySelectorAll('#gr-tile-1 .tok__bar--full').length,
-    worker: document.querySelector('.gr__worker').textContent.replace(/\s+/g, ' ').trim(),
+    worker: document.querySelector('#gr-tiles .gr__worker').textContent.replace(/\s+/g, ' ').trim(),
     auto: document.getElementById('gr-auto').textContent,
     query: null,
   }));
@@ -241,6 +249,242 @@ await check('G8: the grid is the same whatever repository the panel has open: wi
   await page.waitForFunction(() => document.getElementById('gr-auto').textContent === 'Auto mode: on', null, { timeout: 15000 });
   assert.equal(dispatched.length, 1);
   assert.ok(calls.some((c) => c.home && /symphony-template\/actions\/workflows\/grid-accounts\.yml\/dispatches$/.test(c.key)), 'the press did not go to symphony-template');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G9: every worker shows with its account and its own Stop; Start a worker on an account sends that slot and the name, and the new worker shows once the grid answers', async () => {
+  const two = (extra) => list(Object.assign({ workers: [
+    { name: 'phone', state: 'online', account: '1', pinned: null, node: 'asx15', link: 'https://claude.ai/code?environment=env_1', age_s: 20 },
+  ] }, extra || {}));
+  const state = { accounts: answer('', two()) };
+  state.onDispatch = async (body) => {
+    await sleep(300);
+    const l = two();
+    if (body.inputs.action === 'worker-start') l.workers.unshift({ name: body.inputs.name, state: 'queued', account: body.inputs.slot, pinned: body.inputs.slot, node: '', link: '', age_s: 1 });
+    state.accounts = answer(body.inputs.request, l);
+  };
+  const { context, page, dispatched, errors } = await open(state);
+  await page.waitForSelector('#gr-worker-phone');
+  assert.match(await page.textContent('#gr-worker-phone'), /Worker phone: online, on account 1, asx15/);
+  assert.ok(await page.locator('#gr-stop-phone').count() === 1, 'no Stop for the worker');
+  await page.click('#gr-tile-2');
+  await page.fill('#gr-wname', 'teamb');
+  await page.click('#gr-start');
+  await page.waitForSelector('#gr-worker-teamb', { timeout: 15000 });
+  assert.equal(dispatched.length, 1);
+  assert.equal(dispatched[0].inputs.action, 'worker-start');
+  assert.equal(dispatched[0].inputs.slot, '2');
+  assert.equal(dispatched[0].inputs.name, 'teamb');
+  assert.match(await page.textContent('#gr-worker-teamb'), /on account 2 \(kept there\).*claims as grid-teamb/);
+  assert.match(await page.textContent('#gr-side'), /Worker teamb runs on this account/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G10: Stop asks first and sends the worker\'s name alone; a name the gate would refuse is never sent', async () => {
+  const l = list({ workers: [{ name: 'teamb', state: 'online', account: '2', pinned: '2', node: 'asx3', link: 'https://claude.ai/code?environment=env_2', age_s: 5 }] });
+  const state = { accounts: answer('', l) };
+  state.onDispatch = async (body) => { const m = JSON.parse(JSON.stringify(l)); m.workers[0].state = 'stopped'; state.accounts = answer(body.inputs.request, m); };
+  const { context, page, dispatched, errors } = await open(state);
+  await page.waitForSelector('#gr-stop-teamb');
+  page.once('dialog', (d) => d.dismiss());
+  await page.click('#gr-stop-teamb');
+  await sleep(300);
+  assert.equal(dispatched.length, 0, 'Stop ran without asking');
+  page.once('dialog', (d) => d.accept());
+  await page.click('#gr-stop-teamb');
+  await page.waitForFunction(() => /stopped/.test(document.getElementById('gr-worker-teamb').textContent), null, { timeout: 15000 });
+  assert.equal(dispatched.length, 1);
+  assert.deepEqual([dispatched[0].inputs.action, dispatched[0].inputs.slot, dispatched[0].inputs.name], ['worker-stop', '', 'teamb']);
+  assert.equal(await page.locator('#gr-stop-teamb').count(), 0, 'a stopped worker still offers Stop');
+  await page.click('#gr-tile-1');
+  await page.fill('#gr-wname', 'a b');
+  await page.click('#gr-start');
+  await sleep(300);
+  assert.equal(dispatched.length, 1, 'a bad name was sent');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G11: a run another overtook on accounts.json is still followed to its end, through its own answer under answers/', async () => {
+  const l = list({ workers: [] });
+  const state = { accounts: answer('', l), answers: {} };
+  state.onDispatch = async (body) => {
+    await sleep(300);
+    const m = list({ workers: [{ name: 'teamc', state: 'queued', account: body.inputs.slot, pinned: body.inputs.slot, node: '', link: '', age_s: 1 }] });
+    // another page's run wrote accounts.json last; this run's answer is only under answers/
+    state.accounts = answer('someone-else', l);
+    state.answers[body.inputs.request] = answer(body.inputs.request, m);
+  };
+  const { context, page, dispatched, errors } = await open(state);
+  await page.waitForSelector('#gr-tile-2');
+  await page.click('#gr-tile-2');
+  await page.fill('#gr-wname', 'teamc');
+  await page.click('#gr-start');
+  await page.waitForSelector('#gr-worker-teamc', { timeout: 15000 });
+  assert.equal(dispatched.length, 1);
+  assert.match(await page.textContent('#gr-worker-teamc'), /on account 2/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G12: Start with a count sends the count and the stem, a count of one sends none, and a stem too long for the numbers is never sent', async () => {
+  const state = { accounts: answer('', list({ workers: [] })) };
+  state.onDispatch = async (body) => { await sleep(200); state.accounts = answer(body.inputs.request, list({ workers: [] })); };
+  const { context, page, dispatched, errors } = await open(state);
+  await page.waitForSelector('#gr-tile-2');
+  await page.click('#gr-tile-2');
+  await page.fill('#gr-wname', 'team');
+  await page.selectOption('#gr-wcount', '3');
+  await page.click('#gr-start');
+  await page.waitForFunction(() => !document.getElementById('gr-start') || !document.getElementById('gr-start').disabled, null, { timeout: 15000 });
+  assert.equal(dispatched.length, 1);
+  assert.deepEqual([dispatched[0].inputs.action, dispatched[0].inputs.slot, dispatched[0].inputs.name, dispatched[0].inputs.count], ['worker-start', '2', 'team', '3']);
+  await sleep(300);
+  await page.fill('#gr-wname', 'x'.repeat(22));
+  await page.selectOption('#gr-wcount', '2');
+  await page.click('#gr-start');
+  await sleep(300);
+  assert.equal(dispatched.length, 1, 'a stem of 22 was sent for several workers');
+  await page.selectOption('#gr-wcount', '1');
+  await page.fill('#gr-wname', 'solo');
+  await page.click('#gr-start');
+  await page.waitForFunction(() => document.getElementById('gr-start') && !document.getElementById('gr-start').disabled, null, { timeout: 15000 });
+  assert.equal(dispatched.length, 2);
+  assert.equal(dispatched[1].inputs.count, undefined, 'a count of one was sent');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G13: a running worker the grid has not heard from in a quarter of an hour is flagged, counted from when the grid last answered; a fresh one and a stopped one are not', async () => {
+  const old = new Date(Date.now() - 20 * 60000).toISOString().replace(/\.\d+Z$/, 'Z');
+  const l = list({ workers: [
+    { name: 'fresh', state: 'online', account: '1', pinned: null, node: 'asx1', link: '', age_s: 10 },
+    { name: 'silent', state: 'online', account: '2', pinned: '2', node: 'asx2', link: '', age_s: 30 },
+    { name: 'ended', state: 'stopped', account: '2', pinned: '2', node: '', link: '', age_s: 99999 },
+  ] });
+  const state = { accounts: Object.assign(answer('', l), { at: now }) };
+  state.accounts.list.workers[1].age_s = 16 * 60;
+  const { context, page, errors } = await open(state);
+  await page.waitForSelector('#gr-worker-silent');
+  assert.match(await page.textContent('#gr-worker-silent'), /not heard from in 16 min/);
+  assert.ok(await page.locator('#gr-worker-silent .gr__dot--warn').count() === 1, 'the silent worker is not flagged');
+  assert.doesNotMatch(await page.textContent('#gr-worker-fresh'), /not heard/);
+  assert.ok(await page.locator('#gr-worker-fresh .gr__dot--go').count() === 1);
+  assert.doesNotMatch(await page.textContent('#gr-worker-ended'), /not heard/);
+  await context.close();
+  // an answer read twenty minutes ago counts its age on top of the worker's own
+  state.accounts = Object.assign(answer('', list({ workers: [{ name: 'fresh', state: 'online', account: '1', pinned: null, node: 'asx1', link: '', age_s: 10 }] })), { at: old });
+  const second = await open(state);
+  await second.page.waitForSelector('#gr-worker-fresh');
+  assert.match(await second.page.textContent('#gr-worker-fresh'), /not heard from in 20 min/);
+  assert.deepEqual(errors.concat(second.errors), []);
+  await second.context.close();
+});
+
+await check('G14: each account says how many live workers it carries, and one already carrying a worker still offers Start, saying the window is shared', async () => {
+  const l = list({ workers: [
+    { name: 'main', state: 'online', account: null, pinned: null, node: 'asx1', link: '', age_s: 5 },
+    { name: 'b1', state: 'online', account: '2', pinned: '2', node: 'asx2', link: '', age_s: 5 },
+    { name: 'b2', state: 'queued', account: '2', pinned: '2', node: '', link: '', age_s: 5 },
+    { name: 'gone', state: 'stopped', account: '2', pinned: '2', node: '', link: '', age_s: 5 },
+  ] });
+  const state = { accounts: answer('', l) };
+  const { context, page, errors } = await open(state);
+  await page.waitForSelector('#gr-tile-2');
+  const t = await tiles(page);
+  assert.match(t[0], /Claude max, 1 worker /, t[0]);
+  assert.match(t[1], /Claude pro, 2 workers /, t[1]);
+  await page.click('#gr-tile-2');
+  await page.waitForSelector('#gr-start');
+  assert.match(await page.textContent('#gr-side'), /shares this account's five-hour window/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G15: Console shows what a grid job printed: a sign-in\'s output from the account, a worker\'s from its line, the usage job\'s from the Console, each as text and never as markup', async () => {
+  const l = list({ workers: [{ name: 'teamb', state: 'online', account: '2', pinned: '2', node: 'asx3', link: '', age_s: 5 }] });
+  const state = { accounts: answer('', l), logs: {} };
+  state.onDispatch = async (body) => {
+    await sleep(200);
+    const i = body.inputs;
+    const file = i.slot ? 'login-' + i.slot : i.name ? 'worker-' + i.name : 'usage';
+    state.logs[file] = { v: 1, what: file, request: i.request, rc: 0, at: now, lines: ['--- the job\'s output (last 120 lines)', 'out of ' + file, '<img src=x onerror=alert(1)>'], said: [] };
+    state.accounts = answer(i.request, l);
+  };
+  const { context, page, dispatched, errors } = await open(state);
+  await page.waitForSelector('#gr-console');
+  await page.click('#gr-tile-2');
+  await page.click('#gr-log-slot');
+  await page.waitForFunction(() => /out of login-2/.test((document.getElementById('gr-log') || {}).textContent || ''), null, { timeout: 15000 });
+  assert.deepEqual([dispatched[0].inputs.action, dispatched[0].inputs.slot], ['log', '2']);
+  assert.match(await page.textContent('#gr-console'), /Sign-in of account 2, read/);
+  assert.equal(await page.locator('#gr-log img').count(), 0, 'a line of output became markup');
+  assert.ok(await page.evaluate(() => document.getElementById('gr-console').open), 'the Console stayed shut');
+  await page.click('#gr-log-teamb');
+  await page.waitForFunction(() => /out of worker-teamb/.test((document.getElementById('gr-log') || {}).textContent || ''), null, { timeout: 15000 });
+  assert.deepEqual([dispatched[1].inputs.action, dispatched[1].inputs.slot, dispatched[1].inputs.name], ['log', '', 'teamb']);
+  await page.click('#gr-log-usage');
+  await page.waitForFunction(() => /out of usage/.test((document.getElementById('gr-log') || {}).textContent || ''), null, { timeout: 15000 });
+  assert.deepEqual([dispatched[2].inputs.action, dispatched[2].inputs.slot, dispatched[2].inputs.name], ['log', '', undefined]);
+  assert.match(await page.textContent('#gr-console'), /Usage job, read/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G16: the Workers tab lists every worker at work, the grid\'s with what it holds and the cloud\'s runs, each with its way to stop', async () => {
+  const l = list({ workers: [
+    { name: 'teamb', state: 'online', account: '2', pinned: '2', node: 'asx3', link: 'https://claude.ai/code?environment=env_x', age_s: 5 },
+    { name: 'gone', state: 'stopped', account: '2', pinned: '2', node: '', link: '', age_s: 5 },
+  ] });
+  const state = { accounts: answer('', l),
+    issues: [{ number: 7, title: 'Seven', html_url: 'https://github.com/acme/demo/issues/7', labels: [{ name: 'claimed' }, { name: 'worker:grid-teamb' }] }],
+    runs: [{ id: 555, name: 'Workers', display_title: 'Workers', status: 'in_progress', html_url: 'https://github.com/acme/demo/actions/runs/555', run_started_at: now },
+      { id: 556, name: 'Workers', display_title: 'Workers', status: 'completed', conclusion: 'success', html_url: 'https://github.com/acme/demo/actions/runs/556', run_started_at: now }] };
+  const { context, page, errors } = await open(state);
+  await page.click('.console__rail [data-tab="workers"]');
+  await page.waitForSelector('#cp-live-run-555');
+  await page.waitForSelector('#cp-live-grid-teamb');
+  const text = await page.textContent('#cp-live');
+  assert.match(text, /Grid: teamb, online on asx3, account 2 holds #7/, text);
+  assert.doesNotMatch(text, /gone|556/, 'an ended worker or a finished run is listed as running');
+  assert.match(await page.textContent('#cp-live-run-555'), /Cloud: Workers, in progress since/);
+  page.once('dialog', (d) => d.accept());
+  await page.click('#cp-live-cancel-555');
+  await page.waitForFunction(() => true);
+  await sleep(500);
+  assert.deepEqual(state.cancelled, ['555']);
+  assert.equal(await page.locator('#cp-live-stop-teamb').count(), 1);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('G17: Lab jobs send the gate one fixed job word each, a start only once asked, and the Console shows what it printed as text', async () => {
+  const state = { accounts: answer('', list()), logs: {} };
+  state.onDispatch = async (body) => {
+    await sleep(200);
+    const i = body.inputs;
+    state.logs['job-' + i.job] = { v: 1, what: i.job, request: i.request, rc: 0, at: now, lines: ['said ' + i.job, '<img src=x onerror=alert(1)>'], said: [] };
+    state.accounts = answer(i.request, list());
+  };
+  const { context, page, dispatched, errors } = await open(state);
+  await page.waitForSelector('#gr-console');
+  await page.click('#gr-console summary');
+  await page.click('#gr-job-promoter-status');
+  await page.waitForFunction(() => /said promoter-status/.test((document.getElementById('gr-log') || {}).textContent || ''), null, { timeout: 15000 });
+  assert.deepEqual([dispatched[0].inputs.action, dispatched[0].inputs.job, dispatched[0].inputs.slot], ['job', 'promoter-status', '']);
+  assert.match(await page.textContent('#gr-console'), /Grid job promoter status, read/);
+  assert.equal(await page.locator('#gr-log img').count(), 0, 'a line of output became markup');
+  assert.equal(await page.locator('#gr-log-again').count(), 0, 'a job offered Read again, which would run it again');
+  page.once('dialog', (d) => d.dismiss());
+  await page.click('#gr-job-schwingnet-start');
+  await sleep(500);
+  assert.equal(dispatched.length, 1, 'a start dismissed at its question was sent');
+  page.once('dialog', (d) => d.accept());
+  await page.click('#gr-job-schwingnet-start');
+  await page.waitForFunction(() => /said schwingnet-start/.test((document.getElementById('gr-log') || {}).textContent || ''), null, { timeout: 15000 });
+  assert.deepEqual([dispatched[1].inputs.action, dispatched[1].inputs.job], ['job', 'schwingnet-start']);
   assert.deepEqual(errors, []);
   await context.close();
 });

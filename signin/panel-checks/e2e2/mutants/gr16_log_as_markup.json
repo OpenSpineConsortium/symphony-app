@@ -1,0 +1,1 @@
+[["      pre.textContent = (rec.lines || []).length ? rec.lines.join('\\n') : 'The grid printed nothing for it.';", "      pre.innerHTML = (rec.lines || []).length ? rec.lines.join('\\n') : 'The grid printed nothing for it.';"]]

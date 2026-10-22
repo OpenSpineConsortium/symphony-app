@@ -1,0 +1,1 @@
+[["    if (gr.log && !/^job-/.test(gr.log.file)) {", "    if (gr.log) {"]]

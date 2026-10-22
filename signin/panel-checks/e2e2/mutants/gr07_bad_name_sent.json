@@ -1,0 +1,1 @@
+[["if (!GRID_NAME.test(name) || (n > 1 && name.length > 21))", "if (n > 1 && name.length > 21)"]]

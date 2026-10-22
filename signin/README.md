@@ -247,6 +247,26 @@ to bite them would be felt there first. The drive routes read a body of
 up to 8 KB, twice the GitHub routes' 4 KB, since a Microsoft consent code
 or refresh token runs to a few thousand characters.
 
+## The W&B route, for the W&B tab
+
+The panel's W&B tab (`/symphony/control/#wandb`, the owner's ask of 2026-10-21: his Weights and
+Biases account in the panel's own look) reads a person's W&B projects, runs and metric history
+through W&B's GraphQL API, `https://api.wandb.ai/graphql`, the endpoint W&B's own Python client
+reads (wandb/apis/public in the wandb repository). Nothing W&B publishes says that endpoint answers
+a browser on another origin, and the cloud session that built the tab could not reach W&B to
+measure it, so the page asks through this service: `POST /wandb/graphql` takes `key` (the
+person's W&B API key), `query` and `variables`, and passes the query to W&B with the key as W&B's
+client sends it, HTTP Basic with the user `api`. W&B's answer comes back as W&B gave it, with
+W&B's status where it is W&B's word on the request; a 401 is said as W&B refusing the key (a 403 passes on as W&B said it, since it may be a project the key may not read),
+and a 5xx, a 429 or an answer that is no JSON as 502.
+
+The key is the person's own, kept by the page in that browser's storage under their GitHub login,
+as the drives' connections are, and sent here on each call; the service keeps neither the key nor
+the answer. It answers the site's origin alone, reads only (the word mutation or subscription
+anywhere in the query refuses it before W&B is asked, so a fault of the page cannot change or
+delete a run through here), takes a body of at most 16 KB and passes on an answer of at most 4 MB.
+It needs no setting of its own and goes live with the next deployment, which a merge makes.
+
 ## Deploying it, by hand, once
 
 The owner does these steps once, each on the page
