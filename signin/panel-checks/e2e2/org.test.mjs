@@ -448,16 +448,17 @@ await check('I: at most 40 blockers are read a press, the rest said in words and
   await context.close();
 });
 
-await check('J: under the rate limit\'s reserve the tab reads no blocker and says why, while the listing and the map are shown', async () => {
+await check('J: under the rate limit\'s reserve, reached as the listing answers, the tab reads no blocker and says why, while the listing and the map are shown', async () => {
   const f = fixture();
   const routes = routesOf(f);
-  routes['GET /repos/acme/demo/issues'] = resp(200, f.open, { headers: { 'X-RateLimit-Remaining': '99', 'Access-Control-Expose-Headers': EXPOSE } });
+  routes['GET /orgs/acme/repos'] = resp(200, LISTED, { headers: { 'X-RateLimit-Remaining': '99', 'Access-Control-Expose-Headers': EXPOSE } });
   const { page, context, calls } = await open(routes, { extraRoutes: [stubRoute] });
   await signIn(page);
   const said = await until(page, 'Stopped: GitHub says this token has 99 calls left this hour, and the page keeps the last 100 for the rest of the console.');
   assert.ok(said.startsWith('4 repositories listed for acme as you'), said);
   assert.ok(await page.$eval('#og-state', (p) => p.classList.contains('admin__warn')));
-  assert.deepEqual(blockedByReads(calls), []);
+  // the draw may have read #22's blockers before the listing answered; the tab's own read, #24, never goes out
+  assert.ok(blockedByReads(calls).every((k) => k === '#22'), blockedByReads(calls).join());
   assert.equal(await heading(page, '#og-edges'), 'Interfaces (4)');
   await context.close();
 });
@@ -496,7 +497,7 @@ await check('L: a hostile name in the map is written into the chart as entities 
   await context.close();
 });
 
-await check('M: a listing GitHub refuses is said so, and the map is still drawn with every repository said to be out of reach', async () => {
+await check('M: a listing GitHub refuses is said so, and the map is still drawn with every repository said to be unchecked', async () => {
   const { page, context } = await open(routesOf(fixture(), { listed: resp(403, { message: 'Forbidden' }) }), { extraRoutes: [stubRoute] });
   await signIn(page);
   const said = await until(page, DONE);
@@ -504,7 +505,7 @@ await check('M: a listing GitHub refuses is said so, and the map is still drawn 
   assert.ok(await page.$eval('#og-state', (p) => p.classList.contains('admin__warn')));
   await drawn(page, 1);
   assert.deepEqual(await texts(page, '#og-repos .og__name'), ['acme/demo', 'acme/lib', 'acme/secret', 'acme/hidden']);
-  assert.deepEqual(await page.$$eval('#og-repos .og__gap', (ps) => ps.map((p) => p.textContent)), new Array(4).fill('Not listed by GitHub for you: out of your reach, or renamed.'));
+  assert.deepEqual(await page.$$eval('#og-repos .og__gap', (ps) => ps.map((p) => p.textContent)), new Array(4).fill('Not checked against GitHub: its repositories could not be listed.'));
   assert.deepEqual(await page.$$eval('#og-repos .og__name a', (as) => as.length), 0);
   await context.close();
 });
@@ -525,6 +526,113 @@ await check('N: Refresh reads the listing, the map and the blockers again; a tab
   const after = calls.slice(before).map((c) => c.key);
   assert.deepEqual(after.sort(), ['GET /orgs/acme/repos', 'GET /repos/acme/demo/contents/.github/symphony/organization.json', 'GET /repos/acme/demo/issues/24/dependencies/blocked_by']);
   assert.equal(await heading(page, '#og-cross'), 'Task links that cross repositories (3)');
+  await context.close();
+});
+
+await check('O: the console\'s Refresh on a repository with no map reads it again and says so again, with no fault', async () => {
+  const { page, context, calls, errors } = await open(routesOf(fixture(), { map: null }), { extraRoutes: [stubRoute] });
+  await signIn(page);
+  await until(page, 'No map: acme/demo has no .github/symphony/organization.json on main');
+  const before = calls.length;
+  await page.click('#cp-refresh');
+  await page.waitForFunction((n) => performance.now() > n, 0);
+  await until(page, 'No map: acme/demo has no .github/symphony/organization.json on main');
+  await page.waitForFunction((n) => (window.__calls || 0) >= 0 && document.querySelectorAll('#og-repos .og__card').length === 4, 0, { timeout: 15000 });
+  const after = calls.slice(before).map((c) => c.key);
+  assert.ok(after.includes('GET /repos/acme/demo') && after.includes('GET /orgs/acme/repos') && after.includes('GET /repos/acme/demo/contents/.github/symphony/organization.json'), after.join());
+  assert.deepEqual(errors, []);
+  assert.equal(await page.$eval('#og-chart', (b) => b.hidden), true);
+  assert.equal(await page.$eval('#og-chart', (b) => getComputedStyle(b).display), 'none');
+  await context.close();
+});
+
+await check('P: a person\'s own repositories are listed under the viewer, which lists the private ones too, and another person\'s under that person with type=owner', async () => {
+  async function run(login) {
+    const me = { id: 78, login, type: 'User' };
+    const routes = {
+      'GET /user': { login: 'tester' },
+      ['GET /repos/' + login + '/mine']: { full_name: login + '/mine', default_branch: 'main', private: true, topics: ['symphony'], id: 125, owner: me },
+      ['GET /repos/' + login + '/mine/issues']: [],
+      ['GET /repos/' + login + '/mine/contents/STATE.md']: { encoding: 'base64', content: b64(board) },
+      ['GET /repos/' + login + '/mine/branches/board']: { commit: { commit: { committer: { date: now } } } },
+      ['GET /repos/' + login + '/mine/contents/.github/symphony/workers']: [],
+      ['GET /repos/' + login + '/mine/actions/runs']: { workflow_runs: [] },
+      ['GET /repos/' + login + '/mine/pulls']: [],
+      'GET /user/repos': [Object.assign(record('mine', { private: true, visibility: 'private' }), { full_name: login + '/mine', owner: me })],
+      ['GET /users/' + login + '/repos']: [Object.assign(record('mine', { private: true, visibility: 'private' }), { full_name: login + '/mine', owner: me })],
+    };
+    const { page, context, calls } = await open(routes, { extraRoutes: [stubRoute], path: '/symphony/control/?repo=' + login + '/mine' });
+    await signIn(page);
+    const said = await until(page, 'No map: ' + login + '/mine has no');
+    assert.ok(said.startsWith('1 repository listed for ' + login + ' as you: 0 public, 1 private or internal.'), said);
+    const lists = calls.filter((c) => /\/repos(\?|$)/.test(c.url) && !/\/repos\//.test(c.url)).map((c) => c.url.replace('https://api.github.com', ''));
+    await context.close();
+    return lists;
+  }
+  assert.deepEqual(await run('tester'), ['/user/repos?affiliation=owner&per_page=100&sort=pushed']);
+  assert.deepEqual(await run('other'), ['/users/other/repos?type=owner&per_page=100&sort=pushed']);
+});
+
+await check('Q: a group named constructor, a kind with brackets and a name that folds to nothing are drawn, the kind and the name as entities and a placeholder, with no fault', async () => {
+  const map = {
+    kinds: { 'runs (on) [x]': 'with brackets' },
+    nodes: [{ name: 'constructor', group: 'constructor', visibility: 'public', role: 'r' }, { name: '日本', group: 'toString', visibility: 'private', role: 'folds to nothing' }],
+    edges: [{ from: 'constructor', to: '日本', kind: 'runs (on) [x]', what: 'w', by: 'e' }],
+  };
+  const { page, context, errors } = await open(routesOf(fixture(), { map }), { extraRoutes: [stubRoute] });
+  await signIn(page);
+  await until(page, DONE);
+  await drawn(page, 1);
+  const chart = (await orgCharts(page))[0];
+  assert.deepEqual(chart.split('\n').slice(0, 8), ['flowchart TD', '  subgraph g1["constructor (1)"]', '    i1["constructor"]:::public', '  end', '  subgraph g2["toString (1)"]', '    i2["unnamed"]:::private', '  end', '  i1 -->|runs #40;on#41; #91;x#93;| i2']);
+  assert.deepEqual(await texts(page, '#og-chips button.chip'), ['All', 'constructor1', 'toString1', 'runs (on) [x]1']);
+  await page.click('#og-chips button.chip:nth-child(2)');
+  assert.equal(await heading(page, '#og-repos'), 'Repositories of constructor (1)');
+  // the chip pressed keeps the keyboard, since the chips are flipped in place and never rebuilt
+  assert.equal(await page.evaluate(() => document.activeElement.textContent), 'constructor1');
+  assert.equal(await page.$eval('#og-chips button.chip:nth-child(2)', (b) => b.getAttribute('aria-pressed')), 'true');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('R: under the rate limit\'s reserve before the tab reads, the listing and the map wait and the words say why', async () => {
+  const routes = routesOf(fixture());
+  routes['GET /repos/acme/demo'] = resp(200, { full_name: 'acme/demo', default_branch: 'main', private: false, topics: ['symphony'], id: 123, owner }, { headers: { 'X-RateLimit-Remaining': '50', 'Access-Control-Expose-Headers': EXPOSE } });
+  const { page, context, calls } = await open(routes, { extraRoutes: [stubRoute] });
+  await signIn(page);
+  const said = await until(page, 'The repositories of acme could not be listed (GitHub says this token has 50 calls left this hour');
+  assert.ok(said.includes('The map could not be read: GitHub says this token has 50 calls left this hour'), said);
+  assert.ok(await page.$eval('#og-state', (p) => p.classList.contains('admin__warn')));
+  assert.deepEqual(calls.filter((c) => /\/orgs\/acme\/repos|organization\.json/.test(c.key)), []);
+  await context.close();
+});
+
+await check('S: a tab left and opened again while the listing is still being answered reuses the load, so the listing and the map are read once', async () => {
+  const routes = routesOf(fixture());
+  routes['GET /orgs/acme/repos'] = resp(200, LISTED, { delayMs: 1500 });
+  const { page, context, calls } = await open(routes, { extraRoutes: [stubRoute] });
+  await signIn(page);
+  await sleep(300);
+  await toTab(page, 'dependencies');
+  await toTab(page, 'organization');
+  await until(page, DONE);
+  const reads = calls.map((c) => c.key).filter((k) => /\/orgs\/acme\/repos|organization\.json/.test(k)).sort();
+  assert.deepEqual(reads, ['GET /orgs/acme/repos', 'GET /repos/acme/demo/contents/.github/symphony/organization.json']);
+  await context.close();
+});
+
+await check('T: a repository whose record cannot be read is said so on the tab, in place of Reading', async () => {
+  const routes = routesOf(fixture());
+  routes['GET /repos/acme/demo'] = resp(500, { message: 'Server Error' });
+  const { page, context, calls } = await open(routes, { extraRoutes: [stubRoute] });
+  await signIn(page);
+  const said = await until(page, 'Nothing to show: the record of acme/demo could not be read (');
+  assert.ok(/The console's Refresh reads it again\.$/.test(said), said);
+  assert.ok(await page.$eval('#og-state', (p) => p.classList.contains('admin__warn')));
+  await toTab(page, 'dependencies');
+  await toTab(page, 'organization');
+  assert.ok((await words(page)).startsWith('Nothing to show: the record of acme/demo could not be read ('), await words(page));
+  assert.deepEqual(calls.filter((c) => /\/orgs\/acme\/repos|organization\.json/.test(c.key)), []);
   await context.close();
 });
 
