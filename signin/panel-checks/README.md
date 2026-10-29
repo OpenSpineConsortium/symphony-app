@@ -618,6 +618,28 @@ ghu_TEST or github_pat_X.
   project left never drawn under the next (W9, W13); names as text and run links escaped (W10); and
   the tab fitting a laptop, a phone and a phone held sideways with a run open (W11). Mutants wb01 to
   wb20 (no wb16 or wb18) are killed by them.
+- `e2e2/org.test.mjs`: 14 checks of the console's Organization tab, /symphony/control/#organization
+  (site branch claude/project-thread-kwvrqv, 2026-10-29, the owner's "add a section on the control
+  panel to view my entire organizations repos and how they depend on each other and interact with
+  each other, not just tasks but inferfaces ect"), against a mocked GitHub that lists an
+  organization's four repositories and keeps the open repository's map,
+  .github/symphony/organization.json, on its default branch: A the tab in the rail after
+  Dependencies with its ARIA, the words once the listing, the map and the blockers are read, the
+  reads made (the listing once, the map at the default branch, the blockers of the one blocked issue
+  the Dependencies draw did not read) and no write; B the chart text handed the drawing, byte for
+  byte, grouped by the map's groups, a system as a stadium, the edges labelled by kind, the four
+  classes, drawn once however often the words are rendered meanwhile; C the chips cutting the chart,
+  the table and the cards to one group or one kind, the three agreeing, and a second press showing
+  all; D the table of interfaces, each end linked where GitHub lists it and a system as words; E one
+  card per repository, the map's first, a repository the map does not know, one GitHub does not list,
+  and Open in the panel on every other; F the task links that cross repositories, the draw's and the
+  tab's own; G a node pressed in the drawn chart naming its repository, its role and its degree and
+  marking its card; H Open in the panel switching the console to a repository with no map; I at most
+  40 blockers read a press, the rest behind Read more; J nothing read under the rate limit's reserve,
+  said why; K a map that is not JSON, and one with no nodes and edges, said so; L a hostile name
+  written as entities into the chart and as text into the table; M a listing GitHub refuses, the map
+  still drawn; N Refresh reading again and a tab left and opened again reading nothing. No mutants
+  yet.
 - `e2e2/mutants/`: 671 mutants. Each `.json` is a list of [text, replacement] pairs applied to
   assets/js/symphony-panel.js. Its `.json.only` names the checks that must catch it, and its
   `.json.suite` the check file they are in, signin.test.mjs where there is none.
