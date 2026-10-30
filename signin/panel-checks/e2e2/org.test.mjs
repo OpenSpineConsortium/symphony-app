@@ -273,7 +273,7 @@ await check('A: the Organization tab stands in the rail after Dependencies with 
   assert.ok(!(await page.$eval('#og-state', (p) => p.classList.contains('admin__warn'))));
   assert.deepEqual(tabReads(), READS);
   assert.deepEqual(writes(calls), []);
-  assert.equal(await page.$('#og-more'), null);
+  assert.equal(await page.$eval('#og-more', (b) => b.hidden), true);
   await context.close();
 });
 
@@ -290,21 +290,25 @@ await check('B: the chart text is the organization, byte for byte: a box per rep
   await context.close();
 });
 
-await check('C: the chips cut the chart to one repository with what its issues are joined to, or to one goal or epic with its tasks and their blockers, flipped in place so the chip pressed keeps the keyboard, and a second press shows all again', async () => {
+const SHOW = ['Every repository', 'acme/demo (4)', 'acme/lib (5)', 'acme/secret (1)', 'Goal demo#1: Ship the console', 'Epic demo#20: Draw the board', 'Epic lib#30: Cut the library'];
+await check('C: the Show list in the head, no row of names over the chart, cuts the chart to one repository with what its issues are joined to, or to one goal or epic with its tasks and their blockers, and Every repository shows all again', async () => {
   const { page, context } = await open(routesOf(fixture()), { extraRoutes: [stubRoute] });
   await signIn(page);
   await until(page, DONE);
   await drawn(page, 1);
-  assert.deepEqual(await texts(page, '#og-chips button.chip'), ['All', 'acme/demo4', 'acme/lib5', 'acme/secret1', 'Goal demo#1', 'Epic demo#20', 'Epic lib#30']);
+  assert.equal(await page.$('#og-chips'), null);
+  assert.equal(await page.$eval('#og-show', (b) => b.hidden), false);
+  assert.deepEqual(await texts(page, '#og-show option'), SHOW);
+  assert.deepEqual(await page.$$eval('#og-show option', (os) => os.map((o) => o.value)), ['', 'r:acme/demo', 'r:acme/lib', 'r:acme/secret', 'c:acme/demo#1', 'c:acme/demo#20', 'c:acme/lib#30']);
   assert.equal(await lastChart(page), ALL_TEXT);
-  let chart = await nextChart(page, () => page.click('#og-chips button.chip:nth-child(3)'));
+  let chart = await nextChart(page, () => page.selectOption('#og-show', 'r:acme/lib'));
   assert.deepEqual(chart.split('\n').filter((l) => /^ +i[0-9]+\[|^  i[0-9]+ /.test(l)), ['    i1["#1 Ship the console (1/2)"]', '    i2["#20 Draw the board (1/3)"]', '    i5["#5 Cut the library"]:::todo', '    i6["#9 Release the library"]', '    i7["#30 Cut the library (0/2)"]', '      i8["#31 Split the modules"]:::todo', '      i9["#32 Tag the release"]:::todo', '  i1 ==> i2', '  i1 ==> i7', '  i2 --> i5', '  i6 --> i9', '  i7 --> e7']);
-  assert.equal(await page.evaluate(() => document.activeElement.textContent), 'acme/lib5');
-  assert.equal(await page.$eval('#og-chips button.chip:nth-child(3)', (b) => b.getAttribute('aria-pressed')), 'true');
-  chart = await nextChart(page, () => page.click('#og-chips button.chip:nth-child(7)'));
+  assert.equal(await page.$eval('#og-show', (b) => b.value), 'r:acme/lib');
+  chart = await nextChart(page, () => page.selectOption('#og-show', 'c:acme/demo#20'));
   assert.deepEqual(chart.split('\n').filter((l) => /^ +i[0-9]+\[|^  i[0-9]+ /.test(l)), ['    i2["#20 Draw the board (1/3)"]', '      i3["#21 Read the summary"]:::closed', '      i4["#22 Render the section"]:::todo', '    i5["#5 Cut the library"]:::todo', '    i10["#7 Keep the record"]:::closed', '  i10 -.-> i4', '  i2 --> e2', '  i2 --> i5']);
-  assert.equal(await nextChart(page, () => page.click('#og-chips button.chip:nth-child(7)')), ALL_TEXT);
-  assert.equal(await page.$eval('#og-chips button.chip:nth-child(1)', (b) => b.getAttribute('aria-pressed')), 'true');
+  assert.equal(await page.$eval('#og-show', (b) => b.value), 'c:acme/demo#20');
+  assert.equal(await nextChart(page, () => page.selectOption('#og-show', '')), ALL_TEXT);
+  assert.equal(await page.$eval('#og-show', (b) => b.value), '');
   await context.close();
 });
 
@@ -351,6 +355,34 @@ await check('E: a node pressed in the drawn chart names its issue, its state, wh
   await page.click('#og-chart g.node[id*="-flowchart-i1-"]');
   await page.waitForFunction(() => /Ship the console/.test(document.getElementById('og-said').textContent), null, { timeout: 8000 });
   assert.equal(await page.$eval('#og-said', (p) => p.textContent), 'acme/demo#1 Ship the console, open; 1 of 2 sub-issues closed. Open on GitHub');
+  // the chart is locked into the screen: its box takes the tab under the head down to the folded
+  // tables, nothing scrolls, the tools float at its corner, and the picture is centred whole in it
+  const box = await page.$eval('#og-chart', (b) => { const s = b.closest('.console__scroll'), r = b.getBoundingClientRect(), q = s.getBoundingClientRect(), t = document.getElementById('og-tables').getBoundingClientRect(); return { h: r.height, top: r.top - q.top, gap: t.top - r.bottom, scrolls: getComputedStyle(s).overflowY, tools: getComputedStyle(document.getElementById('og-tools')).position, open: document.getElementById('og-tables').open }; });
+  assert.ok(box.h > 250 && box.top < 2 && box.gap >= 0 && box.gap < 16, JSON.stringify(box));
+  assert.equal(box.scrolls, 'hidden');
+  assert.equal(box.tools, 'absolute');
+  assert.equal(box.open, false);
+  const placed = () => page.$eval('#og-chart > svg', (svg) => { const m = /translate\(([-0-9.]+)px, ([-0-9.]+)px\) scale\(([0-9.]+)\)/.exec(svg.style.transform); return { x: +m[1], y: +m[2], k: +m[3] }; });
+  const at = await page.$eval('#og-chart', (b) => { const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  const whole = await placed();
+  // the mouse's wheel zooms about the pointer, in and back out to the whole view
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.wheel(0, -300);
+  const zoomed = await placed();
+  assert.ok(zoomed.k > whole.k * 1.3, JSON.stringify([whole, zoomed]));
+  await page.mouse.wheel(0, 900);
+  assert.deepEqual(await placed(), whole);
+  // the mouse drags the whole view too, as far as the box's edge, and it stays where it was left
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  await page.mouse.move(at.x + 60, at.y + 40, { steps: 4 });
+  await page.mouse.up();
+  const dragged = await placed();
+  // the picture fills the box's height here, so only its width has room to move
+  assert.ok(dragged.x > whole.x + 20 && dragged.k === whole.k, JSON.stringify([whole, dragged]));
+  await sleep(400);
+  assert.deepEqual(await placed(), dragged);
+  assert.equal(await page.$eval('#og-said', (p) => p.textContent), 'acme/demo#1 Ship the console, open; 1 of 2 sub-issues closed. Open on GitHub');
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -370,12 +402,13 @@ await check('F: at most 120 reads a press, the open repository first, the rest s
   const reads = tabReads();
   assert.equal(reads.length, 121);
   assert.deepEqual(reads.slice(0, 3), ['orgs/acme/repos', 'acme/demo issues', 'acme/r001 issues']);
-  assert.equal(await page.$eval('#og-more', (b) => b.textContent), 'Read more');
-  assert.equal(await page.$eval('#og-more', (b) => b.parentNode.textContent), '6 repositories not read yet. Read more');
+  assert.equal(await page.$eval('#og-more', (b) => b.hidden), false);
+  assert.ok(said.endsWith('Stopped at 120 reads for one press; 6 repositories not read yet. Read more reads on.'), said);
+  assert.equal(await page.$eval('#og-more', (b) => b.closest('.console__head') !== null && b.previousElementSibling.id === 'og-refresh'), true);
   await page.click('#og-more');
   await until(page, 'Read 126 repositories of the 125 listed for acme as you in 126 reads of GitHub:');
   assert.equal(tabReads().length, 127);
-  assert.equal(await page.$('#og-more'), null);
+  assert.equal(await page.$eval('#og-more', (b) => b.hidden), true);
   await context.close();
 });
 
@@ -388,7 +421,7 @@ await check('G: under the rate limit\'s reserve, reached as the listing answers,
   assert.ok(said.startsWith('Read 0 repositories of the 4 listed for acme as you in 0 reads of GitHub:'), said);
   assert.ok(await page.$eval('#og-state', (p) => p.classList.contains('admin__warn')));
   assert.deepEqual(tabReads(), ['orgs/acme/repos']);
-  assert.equal(await page.$eval('#og-more', (b) => b.textContent), 'Read more');
+  assert.equal(await page.$eval('#og-more', (b) => b.hidden), false);
   await context.close();
   routes = routesOf(fixture());
   routes['GET /repos/acme/demo'] = resp(200, { full_name: 'acme/demo', default_branch: 'main', private: false, topics: ['symphony'], id: 123, owner }, { headers: { 'X-RateLimit-Remaining': '50', 'Access-Control-Expose-Headers': EXPOSE } });
@@ -425,8 +458,8 @@ await check('I: a read that fails stops the reads with its reason, Read more car
   assert.ok(said.includes('2 repositories not read yet.'), said);
   assert.ok(await page.$eval('#og-state', (p) => p.classList.contains('admin__warn')));
   await page.click('#og-more');
-  said = await until(page, 'Only the first 500 open issues of acme/lib were read.');
-  assert.ok(said.startsWith('Read 3 repositories of the 4 listed for acme as you in 13 reads of GitHub: 1 goal, 2 epics with sub-issues, 7 tasks, 2 blocked-by links, 3 links crossing repositories.'), said);
+  said = await until(page, 'Read 3 repositories of the 4 listed for acme as you in 13 reads of GitHub: 1 goal, 2 epics with sub-issues, 7 tasks, 2 blocked-by links, 3 links crossing repositories.');
+  assert.ok(said.includes('Only the first 500 open issues of acme/lib were read.'), said);
   assert.equal(tabReads().filter((r) => r === 'acme/lib issues').length, 5);
   assert.deepEqual((await rows(page, '#og-repos'))[0], ['acme/lib', '9', '0', '1', '5', 'read, cut at 9 Open in the panel']);
   await context.close();
@@ -442,10 +475,10 @@ await check('J: a hostile title is written into the chart as entities and into t
   const chart = await lastChart(page);
   assert.ok(chart.includes('\n    i2["#20 x#quot;]; click #lt;b#gt;bold#lt;/b#gt; #37;#37;{init} (1/3)"]\n'), chart);
   assert.ok(chart.includes('\n    subgraph e2["Epic #20: x#quot;]; click #lt;b#gt;bold#lt;/b#gt; #37;#37;{init} (1/3)"]\n'), chart);
-  assert.deepEqual(await texts(page, '#og-chips button.chip'), ['All', 'acme/demo4', 'acme/lib5', 'acme/secret1', 'Goal demo#1', 'Epic demo#20', 'Epic lib#30']);
-  assert.equal(await page.$eval('#og-chips button.chip:nth-child(7)', (b) => b.title), 'x"]; click <b>bold</b...');
+  assert.deepEqual(await texts(page, '#og-show option'), SHOW.map((o) => o.replace('Draw the board', 'x"]; click <b>bold</b...')));
+  assert.equal(await page.$eval('#og-show option:nth-child(6)', (o) => o.title), 'x"]; click <b>bold</b> %%{init}');
   assert.equal((await rows(page, '#og-plans'))[1][2], 'x"]; click <b>bold</b> %%{init}');
-  assert.equal(await page.$$eval('#og-plans b, #og-cross b, #og-chips b', (es) => es.length), 0);
+  assert.equal(await page.$$eval('#og-plans b, #og-cross b, #og-show b', (es) => es.length), 0);
   assert.deepEqual(errors, []);
   await context.close();
 });
