@@ -36,13 +36,19 @@ const ONLY = (process.env.ONLY || '').split(',').filter(Boolean);
 async function check(name, fn) {
   if (ONLY.length && !ONLY.some((o) => name.startsWith(o + ':'))) return;
   try { await fn(); results.push('PASS ' + name); console.log('PASS', name); }
-  catch (e) { results.push('FAIL ' + name + ' :: ' + String(e && e.message || e).split('\n')[0]); console.log('FAIL', name, '\n    ', String(e && e.message || e).split('\n').slice(0, 4).join('\n     ')); }
+  catch (e) { results.push('FAIL ' + name + ' :: ' + String(e && e.message || e).split('\n')[0]); console.log('FAIL', name, '\n    ', String(e && e.message || e).split('\n').slice(0, 40).join('\n     ')); }
 }
 
 // the shipped script with its two sign-in constants emptied, so the page shows the pasted token
 let script = fs.readFileSync(SITE + '/assets/js/symphony-panel.js', 'utf8');
 if (process.env.MUTANT) for (const [a, b] of JSON.parse(fs.readFileSync(process.env.MUTANT, 'utf8'))) { assert.ok(script.includes(a), 'mutant text not found: ' + a.slice(0, 60)); script = script.replace(a, () => b); }
 script = script.replace(/var SIGNIN_SERVICE = '[^']*';/, "var SIGNIN_SERVICE = '';").replace(/var CLIENT_ID = '[^']*';/, "var CLIENT_ID = '';");
+// the assistant's cadence shortened to milliseconds, for the Predict checks
+for (const [name, value] of Object.entries({ ASSISTANT_POLL_MS: 300, ASSISTANT_SLOW_MS: 300, ASSISTANT_AFTER_MS: 1200 })) {
+  const line = new RegExp('var ' + name + ' = [0-9]+;');
+  assert.ok(line.test(script), 'the constant ' + name + ' was not found in the script');
+  script = script.replace(line, 'var ' + name + ' = ' + value + ';');
+}
 
 const resp = (status, body, extra) => Object.assign({ __r: true, status, body }, extra || {});
 const VENDOR = '**/assets/js/vendor/mermaid.min.js*';
@@ -161,7 +167,7 @@ async function open(routes, opts) {
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   await page.goto(BASE + '/symphony/control/', { waitUntil: 'load' });
-  await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
+  await page.evaluate((st) => { localStorage.clear(); sessionStorage.clear(); for (const k in st) localStorage.setItem(k, st[k]); }, opts.storage || {});
   await page.goto(BASE + (opts.path || '/symphony/control/?repo=acme/demo'), { waitUntil: 'load' });
   return { context, page, calls, errors };
 }
@@ -273,7 +279,7 @@ await check('A: the Organization tab stands in the rail after Dependencies with 
   assert.ok(!(await page.$eval('#og-state', (p) => p.classList.contains('admin__warn'))));
   assert.deepEqual(tabReads(), READS);
   assert.deepEqual(writes(calls), []);
-  assert.equal(await page.$('#og-more'), null);
+  assert.equal(await page.$eval('#og-more', (b) => b.hidden), true);
   await context.close();
 });
 
@@ -290,21 +296,25 @@ await check('B: the chart text is the organization, byte for byte: a box per rep
   await context.close();
 });
 
-await check('C: the chips cut the chart to one repository with what its issues are joined to, or to one goal or epic with its tasks and their blockers, flipped in place so the chip pressed keeps the keyboard, and a second press shows all again', async () => {
+const SHOW = ['Every repository', 'acme/demo (4)', 'acme/lib (5)', 'acme/secret (1)', 'Goal demo#1: Ship the console', 'Epic demo#20: Draw the board', 'Epic lib#30: Cut the library'];
+await check('C: the Show list in the head, no row of names over the chart, cuts the chart to one repository with what its issues are joined to, or to one goal or epic with its tasks and their blockers, and Every repository shows all again', async () => {
   const { page, context } = await open(routesOf(fixture()), { extraRoutes: [stubRoute] });
   await signIn(page);
   await until(page, DONE);
   await drawn(page, 1);
-  assert.deepEqual(await texts(page, '#og-chips button.chip'), ['All', 'acme/demo4', 'acme/lib5', 'acme/secret1', 'Goal demo#1', 'Epic demo#20', 'Epic lib#30']);
+  assert.equal(await page.$('#og-chips'), null);
+  assert.equal(await page.$eval('#og-show', (b) => b.hidden), false);
+  assert.deepEqual(await texts(page, '#og-show option'), SHOW);
+  assert.deepEqual(await page.$$eval('#og-show option', (os) => os.map((o) => o.value)), ['', 'r:acme/demo', 'r:acme/lib', 'r:acme/secret', 'c:acme/demo#1', 'c:acme/demo#20', 'c:acme/lib#30']);
   assert.equal(await lastChart(page), ALL_TEXT);
-  let chart = await nextChart(page, () => page.click('#og-chips button.chip:nth-child(3)'));
+  let chart = await nextChart(page, () => page.selectOption('#og-show', 'r:acme/lib'));
   assert.deepEqual(chart.split('\n').filter((l) => /^ +i[0-9]+\[|^  i[0-9]+ /.test(l)), ['    i1["#1 Ship the console (1/2)"]', '    i2["#20 Draw the board (1/3)"]', '    i5["#5 Cut the library"]:::todo', '    i6["#9 Release the library"]', '    i7["#30 Cut the library (0/2)"]', '      i8["#31 Split the modules"]:::todo', '      i9["#32 Tag the release"]:::todo', '  i1 ==> i2', '  i1 ==> i7', '  i2 --> i5', '  i6 --> i9', '  i7 --> e7']);
-  assert.equal(await page.evaluate(() => document.activeElement.textContent), 'acme/lib5');
-  assert.equal(await page.$eval('#og-chips button.chip:nth-child(3)', (b) => b.getAttribute('aria-pressed')), 'true');
-  chart = await nextChart(page, () => page.click('#og-chips button.chip:nth-child(7)'));
+  assert.equal(await page.$eval('#og-show', (b) => b.value), 'r:acme/lib');
+  chart = await nextChart(page, () => page.selectOption('#og-show', 'c:acme/demo#20'));
   assert.deepEqual(chart.split('\n').filter((l) => /^ +i[0-9]+\[|^  i[0-9]+ /.test(l)), ['    i2["#20 Draw the board (1/3)"]', '      i3["#21 Read the summary"]:::closed', '      i4["#22 Render the section"]:::todo', '    i5["#5 Cut the library"]:::todo', '    i10["#7 Keep the record"]:::closed', '  i10 -.-> i4', '  i2 --> e2', '  i2 --> i5']);
-  assert.equal(await nextChart(page, () => page.click('#og-chips button.chip:nth-child(7)')), ALL_TEXT);
-  assert.equal(await page.$eval('#og-chips button.chip:nth-child(1)', (b) => b.getAttribute('aria-pressed')), 'true');
+  assert.equal(await page.$eval('#og-show', (b) => b.value), 'c:acme/demo#20');
+  assert.equal(await nextChart(page, () => page.selectOption('#og-show', '')), ALL_TEXT);
+  assert.equal(await page.$eval('#og-show', (b) => b.value), '');
   await context.close();
 });
 
@@ -351,6 +361,34 @@ await check('E: a node pressed in the drawn chart names its issue, its state, wh
   await page.click('#og-chart g.node[id*="-flowchart-i1-"]');
   await page.waitForFunction(() => /Ship the console/.test(document.getElementById('og-said').textContent), null, { timeout: 8000 });
   assert.equal(await page.$eval('#og-said', (p) => p.textContent), 'acme/demo#1 Ship the console, open; 1 of 2 sub-issues closed. Open on GitHub');
+  // the chart is locked into the screen: its box takes the tab under the head down to the folded
+  // tables, nothing scrolls, the tools float at its corner, and the picture is centred whole in it
+  const box = await page.$eval('#og-chart', (b) => { const s = b.closest('.console__scroll'), r = b.getBoundingClientRect(), q = s.getBoundingClientRect(), t = document.getElementById('og-tables').getBoundingClientRect(); return { h: r.height, top: r.top - q.top, gap: t.top - r.bottom, scrolls: getComputedStyle(s).overflowY, tools: getComputedStyle(document.getElementById('og-tools')).position, open: document.getElementById('og-tables').open }; });
+  assert.ok(box.h > 250 && box.top < 2 && box.gap >= 0 && box.gap < 16, JSON.stringify(box));
+  assert.equal(box.scrolls, 'hidden');
+  assert.equal(box.tools, 'absolute');
+  assert.equal(box.open, false);
+  const placed = () => page.$eval('#og-chart > svg', (svg) => { const m = /translate\(([-0-9.]+)px, ([-0-9.]+)px\) scale\(([0-9.]+)\)/.exec(svg.style.transform); return { x: +m[1], y: +m[2], k: +m[3] }; });
+  const at = await page.$eval('#og-chart', (b) => { const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  const whole = await placed();
+  // the mouse's wheel zooms about the pointer, in and back out to the whole view
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.wheel(0, -300);
+  const zoomed = await placed();
+  assert.ok(zoomed.k > whole.k * 1.3, JSON.stringify([whole, zoomed]));
+  await page.mouse.wheel(0, 900);
+  assert.deepEqual(await placed(), whole);
+  // the mouse drags the whole view too, as far as the box's edge, and it stays where it was left
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  await page.mouse.move(at.x + 60, at.y + 40, { steps: 4 });
+  await page.mouse.up();
+  const dragged = await placed();
+  // the picture fills the box's height here, so only its width has room to move
+  assert.ok(dragged.x > whole.x + 20 && dragged.k === whole.k, JSON.stringify([whole, dragged]));
+  await sleep(400);
+  assert.deepEqual(await placed(), dragged);
+  assert.equal(await page.$eval('#og-said', (p) => p.textContent), 'acme/demo#1 Ship the console, open; 1 of 2 sub-issues closed. Open on GitHub');
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -370,12 +408,13 @@ await check('F: at most 120 reads a press, the open repository first, the rest s
   const reads = tabReads();
   assert.equal(reads.length, 121);
   assert.deepEqual(reads.slice(0, 3), ['orgs/acme/repos', 'acme/demo issues', 'acme/r001 issues']);
-  assert.equal(await page.$eval('#og-more', (b) => b.textContent), 'Read more');
-  assert.equal(await page.$eval('#og-more', (b) => b.parentNode.textContent), '6 repositories not read yet. Read more');
+  assert.equal(await page.$eval('#og-more', (b) => b.hidden), false);
+  assert.ok(said.endsWith('Stopped at 120 reads for one press; 6 repositories not read yet. Read more reads on.'), said);
+  assert.equal(await page.$eval('#og-more', (b) => b.closest('.console__head') !== null && b.previousElementSibling.id === 'og-refresh'), true);
   await page.click('#og-more');
   await until(page, 'Read 126 repositories of the 125 listed for acme as you in 126 reads of GitHub:');
   assert.equal(tabReads().length, 127);
-  assert.equal(await page.$('#og-more'), null);
+  assert.equal(await page.$eval('#og-more', (b) => b.hidden), true);
   await context.close();
 });
 
@@ -388,7 +427,7 @@ await check('G: under the rate limit\'s reserve, reached as the listing answers,
   assert.ok(said.startsWith('Read 0 repositories of the 4 listed for acme as you in 0 reads of GitHub:'), said);
   assert.ok(await page.$eval('#og-state', (p) => p.classList.contains('admin__warn')));
   assert.deepEqual(tabReads(), ['orgs/acme/repos']);
-  assert.equal(await page.$eval('#og-more', (b) => b.textContent), 'Read more');
+  assert.equal(await page.$eval('#og-more', (b) => b.hidden), false);
   await context.close();
   routes = routesOf(fixture());
   routes['GET /repos/acme/demo'] = resp(200, { full_name: 'acme/demo', default_branch: 'main', private: false, topics: ['symphony'], id: 123, owner }, { headers: { 'X-RateLimit-Remaining': '50', 'Access-Control-Expose-Headers': EXPOSE } });
@@ -425,8 +464,8 @@ await check('I: a read that fails stops the reads with its reason, Read more car
   assert.ok(said.includes('2 repositories not read yet.'), said);
   assert.ok(await page.$eval('#og-state', (p) => p.classList.contains('admin__warn')));
   await page.click('#og-more');
-  said = await until(page, 'Only the first 500 open issues of acme/lib were read.');
-  assert.ok(said.startsWith('Read 3 repositories of the 4 listed for acme as you in 13 reads of GitHub: 1 goal, 2 epics with sub-issues, 7 tasks, 2 blocked-by links, 3 links crossing repositories.'), said);
+  said = await until(page, 'Read 3 repositories of the 4 listed for acme as you in 13 reads of GitHub: 1 goal, 2 epics with sub-issues, 7 tasks, 2 blocked-by links, 3 links crossing repositories.');
+  assert.ok(said.includes('Only the first 500 open issues of acme/lib were read.'), said);
   assert.equal(tabReads().filter((r) => r === 'acme/lib issues').length, 5);
   assert.deepEqual((await rows(page, '#og-repos'))[0], ['acme/lib', '9', '0', '1', '5', 'read, cut at 9 Open in the panel']);
   await context.close();
@@ -442,10 +481,10 @@ await check('J: a hostile title is written into the chart as entities and into t
   const chart = await lastChart(page);
   assert.ok(chart.includes('\n    i2["#20 x#quot;]; click #lt;b#gt;bold#lt;/b#gt; #37;#37;{init} (1/3)"]\n'), chart);
   assert.ok(chart.includes('\n    subgraph e2["Epic #20: x#quot;]; click #lt;b#gt;bold#lt;/b#gt; #37;#37;{init} (1/3)"]\n'), chart);
-  assert.deepEqual(await texts(page, '#og-chips button.chip'), ['All', 'acme/demo4', 'acme/lib5', 'acme/secret1', 'Goal demo#1', 'Epic demo#20', 'Epic lib#30']);
-  assert.equal(await page.$eval('#og-chips button.chip:nth-child(7)', (b) => b.title), 'x"]; click <b>bold</b...');
+  assert.deepEqual(await texts(page, '#og-show option'), SHOW.map((o) => o.replace('Draw the board', 'x"]; click <b>bold</b...')));
+  assert.equal(await page.$eval('#og-show option:nth-child(6)', (o) => o.title), 'x"]; click <b>bold</b> %%{init}');
   assert.equal((await rows(page, '#og-plans'))[1][2], 'x"]; click <b>bold</b> %%{init}');
-  assert.equal(await page.$$eval('#og-plans b, #og-cross b, #og-chips b', (es) => es.length), 0);
+  assert.equal(await page.$$eval('#og-plans b, #og-cross b, #og-show b', (es) => es.length), 0);
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -518,6 +557,107 @@ await check('M: a person\'s own repositories are listed under the viewer, which 
   }
   assert.deepEqual(await run('tester'), ['/user/repos?affiliation=owner&per_page=100&sort=pushed']);
   assert.deepEqual(await run('other'), ['/users/other/repos?type=owner&per_page=100&sort=pushed']);
+});
+
+// the assistant of acme/demo: the issue #50 the page remembers, the person's write access, the
+// assistant file and the Claude token, and the answer Claude gives once a question is posted
+const FINISHED = '**Claude finished @tester\'s task in 1m 2s** \u2014\u2014 [View job](https://github.com/acme/demo/actions/runs/9)\n\n---\n\n';
+const PREDICTION = [
+  'node Freeze the frames under acme/demo#20 blocks acme/demo#22 why The overlay needs frozen frames',
+  'link acme/lib#5 blocks acme/demo#22 why The section renders through the library',
+  'node Lost task under acme/nowhere#3 why its epic was never read',
+  'link acme/lib#9 blocks acme/lib#32 why GitHub holds this one already',
+  'node Split the modules under acme/lib#30 why a task of this title is there already',
+];
+function withAssistant(routes) {
+  const asked = [];
+  routes['GET /repos/acme/demo/collaborators/tester/permission'] = { permission: 'write', role_name: 'write', user: { login: 'tester' } };
+  routes['GET /repos/acme/demo/contents/.github/symphony/assistant.md'] = { encoding: 'base64', content: b64('# The assistant\n') };
+  routes['GET /repos/acme/demo/actions/secrets'] = { total_count: 1, secrets: [{ name: 'CLAUDE_CODE_OAUTH_TOKEN', created_at: now, updated_at: now }] };
+  routes['GET /repos/acme/demo/issues/50'] = issueOf('acme/demo', 50, 'Assistant: tester', ['assistant']);
+  routes['GET /repos/acme/demo/labels/assistant'] = { name: 'assistant' };
+  routes['POST /repos/acme/demo/issues/50/comments'] = (url, req, call) => { const body = req.postDataJSON().body; asked.push(body); return { id: 1001, created_at: '2026-10-30T10:00:00Z', updated_at: '2026-10-30T10:00:00Z', user: { login: 'tester', type: 'User' }, body }; };
+  routes['GET /repos/acme/demo/issues/50/comments'] = () => asked.length
+    ? [{ id: 1001, created_at: '2026-10-30T10:00:00Z', updated_at: '2026-10-30T10:00:00Z', user: { login: 'tester', type: 'User' }, body: asked[0] },
+      { id: 2001, created_at: '2026-10-30T10:01:00Z', updated_at: '2026-10-30T10:02:00Z', user: { login: 'claude[bot]', type: 'Bot' }, body: FINISHED + 'Two predictions.\n\n```symphony\n' + PREDICTION.join('\n') + '\n```\n' }]
+    : [];
+  return asked;
+}
+const STORAGE = { symphony_panel_assistant: '{"acme/demo":50}' };
+const ideaLines = (chart) => chart.split('\n').filter((l) => /idea|-\.->|Proposed/.test(l));
+async function predicted(page) {
+  await page.click('#og-predict');
+  await page.waitForFunction(() => /Predicted by Claude \(2\)/.test((document.getElementById('og-ideas') || { textContent: '' }).textContent), null, { timeout: 15000 });
+  if (await page.$eval('#dlg-claude', (d) => d.open)) { await page.click('#dlg-claude .cpdlg__close'); await page.waitForFunction(() => !document.getElementById('dlg-claude').open); }
+  return lastChart(page);
+}
+
+await check('N: Predict with Claude sends the chart as words to the repository\'s assistant with one press and draws its answer as ghosts: a proposed task dashed in its epic\'s box and a proposed dependency a dashed arrow, listed with their reasons; a line under an epic never read, a link GitHub holds and a task already there are not drawn; Dismiss takes one off', async () => {
+  const routes = routesOf(fixture()), asked = withAssistant(routes);
+  const { page, context, calls, errors } = await open(routes, { extraRoutes: [stubRoute], storage: STORAGE });
+  await signIn(page);
+  await until(page, DONE);
+  await drawn(page, 1);
+  assert.equal(await page.$('#og-ideas h3'), null);
+  const chart = await predicted(page);
+  assert.equal(asked.length, 1);
+  const q = asked[0];
+  assert.ok(q.startsWith('@claude Predict what is missing from the task graph of the organization acme:'), q.slice(0, 120));
+  for (const line of ['acme/demo#1 Ship the console [goal]', 'acme/demo#20 Draw the board [epic]', 'acme/demo#22 Render the section [task, todo, unclaimed]', 'acme/demo#21 Read the summary [task, closed]', 'acme/demo#20 has the sub-issue acme/lib#5', 'acme/lib#9 blocks acme/lib#32', '"link owner/name#A blocks owner/name#B why ..."', '"node TITLE under owner/name#E blocks owner/name#X after owner/name#Y why ..."']) assert.ok(q.includes(line), 'the question lacks: ' + line);
+  assert.ok(/```symphony-state\n/.test(q), 'the page\'s state block');
+  assert.deepEqual(ideaLines(chart), ['      i11["Proposed: Freeze the frames"]:::idea', '  i10 -.-> i4', '  i11 -.-> i4', '  i5 -.-> i4', '  classDef idea fill:#ffffff,stroke:#2aa198,color:#000000,stroke-dasharray:6 4'], JSON.stringify(ideaLines(chart)));
+  assert.ok(chart.includes('\n    subgraph e2["Epic #20: Draw the board (1/3)"]\n      i3["#21 Read the summary"]:::closed\n      i4["#22 Render the section"]:::todo\n      i11["Proposed: Freeze the frames"]:::idea\n    end\n'), chart);
+  assert.deepEqual(await rows(page, '#og-ideas'), [
+    ['task', 'New task "Freeze the frames" under acme/demo#20, blocking acme/demo#22', 'The overlay needs frozen frames', 'Launch Dismiss'],
+    ['dependency', 'New dependency: acme/lib#5 blocks acme/demo#22', 'The section renders through the library', 'Launch Dismiss'],
+  ]);
+  assert.equal(await page.$('#og-worker'), null);
+  assert.equal(await page.$eval('#og-ideas p.admin__lead', (p) => p.textContent.trim()), 'Launch all 2 Dismiss all');
+  assert.deepEqual(writes(calls), ['POST /repos/acme/demo/issues/50/comments']);
+  const after = await nextChart(page, () => page.click('#og-ideas tbody tr:nth-child(2) button:text-is("Dismiss")'));
+  assert.deepEqual(ideaLines(after), ['      i11["Proposed: Freeze the frames"]:::idea', '  i10 -.-> i4', '  i11 -.-> i4', '  classDef idea fill:#ffffff,stroke:#2aa198,color:#000000,stroke-dasharray:6 4'], JSON.stringify(ideaLines(after)));
+  assert.equal(await heading(page, '#og-ideas'), 'Predicted by Claude (1)');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('O: Launch writes the predictions to GitHub as the person, in order: the task as an issue titled Task: and labelled todo in its epic\'s repository, under the epic by a sub-issue link, then the blocked-by links by issue id, the ghost then drawn as the real node; Undo closes it and takes the links off, and the tab reads again', async () => {
+  const routes = routesOf(fixture()); withAssistant(routes);
+  const made = [];
+  routes['POST /repos/acme/demo/issues'] = (url, req) => { const b = req.postDataJSON(); made.push(b); return { number: 101, id: 9101, title: b.title, state: 'open', html_url: 'https://github.com/acme/demo/issues/101', labels: b.labels.map((name) => ({ name })) }; };
+  routes['POST /repos/acme/demo/issues/20/sub_issues'] = {};
+  const linked = [];
+  routes['POST /repos/acme/demo/issues/22/dependencies/blocked_by'] = (url, req) => { linked.push(req.postDataJSON().issue_id); return {}; };
+  routes['GET /repos/acme/lib/issues/5'] = Object.assign(issueOf('acme/lib', 5, 'Cut the library', ['todo']), { id: 905 });
+  routes['PATCH /repos/acme/demo/issues/101'] = {};
+  routes['DELETE /repos/acme/demo/issues/20/sub_issue'] = resp(204);
+  routes['DELETE /repos/acme/demo/issues/22/dependencies/blocked_by/9101'] = resp(204);
+  routes['DELETE /repos/acme/demo/issues/22/dependencies/blocked_by/905'] = resp(204);
+  const { page, context, calls, errors } = await open(routes, { extraRoutes: [stubRoute], storage: STORAGE });
+  await signIn(page);
+  await until(page, DONE);
+  await drawn(page, 1);
+  await predicted(page);
+  const before = calls.length;
+  const chart = await nextChart(page, () => page.click('#og-ideas button:text-is("Launch all 2")'));
+  await until(page, 'Launched 3 changes on GitHub as tester: each task is labelled todo, which wakes the repository\'s workers in Actions to claim it under the protocol.');
+  assert.deepEqual(calls.slice(before).filter((c) => !/comments/.test(c.key)).map((c) => c.key), ['POST /repos/acme/demo/issues', 'POST /repos/acme/demo/issues/20/sub_issues', 'GET /repos/acme/lib/issues/5', 'POST /repos/acme/demo/issues/22/dependencies/blocked_by', 'POST /repos/acme/demo/issues/22/dependencies/blocked_by']);
+  assert.deepEqual(made, [{ title: 'Task: Freeze the frames', body: '### Goal\n\nThe overlay needs frozen frames\n\n### Planned\n\nOn the control panel\'s Organization tab, from a prediction of Claude\'s the person launched, under acme/demo#20.\n', labels: ['todo'] }]);
+  assert.deepEqual(linked, [905, 9101]);
+  const now = await lastChart(page);
+  // the new issue takes its place among the real nodes, by repository and number, so the numbers
+  // after it move up by one: secret#7's dotted arrow is now i11's
+  assert.deepEqual(ideaLines(now), ['  i11 -.-> i4'], JSON.stringify(ideaLines(now)));
+  assert.ok(now.includes('\n    subgraph e2["Epic #20: Draw the board (1/4)"]\n      i3["#21 Read the summary"]:::closed\n      i4["#22 Render the section"]:::todo\n      i5["#101 Task: Freeze the frames"]:::todo\n    end\n'), now);
+  assert.ok(now.includes('\n  i5 --> i4\n') && now.includes('\n  i6 --> i4\n'), now);
+  assert.equal(await heading(page, '#og-ideas'), 'Predicted by Claude (0)');
+  assert.equal(await page.$eval('#og-ideas', (b) => /Undo the last launch/.test(b.textContent)), true);
+  const mark2 = calls.length;
+  await page.click('#og-ideas button:text-is("Undo the last launch")');
+  try { await until(page, 'Read 3 repositories of the 4 listed for acme as you in 8 reads of GitHub'); } catch (e) { throw new Error(e.message + ' errors: ' + JSON.stringify(errors)); }
+  assert.deepEqual(calls.slice(mark2).filter((c) => !/^GET /.test(c.key)).map((c) => c.key), ['DELETE /repos/acme/demo/issues/22/dependencies/blocked_by/9101', 'DELETE /repos/acme/demo/issues/22/dependencies/blocked_by/905', 'DELETE /repos/acme/demo/issues/20/sub_issue', 'PATCH /repos/acme/demo/issues/101']);
+  assert.deepEqual(errors, []);
+  await context.close();
 });
 
 await browser.close();

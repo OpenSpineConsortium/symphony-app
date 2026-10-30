@@ -618,8 +618,11 @@ ghu_TEST or github_pat_X.
   project left never drawn under the next (W9, W13); names as text and run links escaped (W10); and
   the tab fitting a laptop, a phone and a phone held sideways with a run open (W11). Mutants wb01 to
   wb20 (no wb16 or wb18) are killed by them.
-- `e2e2/org.test.mjs`: 13 checks of the console's Organization tab, /symphony/control/#organization
-  (site branch claude/project-thread-bg380j, 2026-10-30, the owner's ask of 2026-10-29 read again:
+- `e2e2/org.test.mjs`: 15 checks of the console's Organization tab, /symphony/control/#organization
+  (site #151 and its follow-up of 2026-10-30, which locks the chart into the screen with a Show list in
+  the head in place of the row of names and Read more beside Refresh, and adds Predict with Claude, the
+  chart sent to the assistant and its answer drawn as ghosts, and Launch, which writes a prediction to
+  GitHub as the person, checks N and O; the owner's ask of 2026-10-29 read again:
   "an organizational dependency tab", the Dependencies tab's chart over every repository of the
   organization from GitHub's own sub-issue and blocked-by links, no map file), against a mocked
   GitHub that lists an organization's four repositories with their open issues, sub-issues and
