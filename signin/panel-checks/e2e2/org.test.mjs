@@ -576,8 +576,8 @@ await check('P: a person\'s own repositories are listed under the viewer, which 
 await check('Q: a group named constructor, a kind with brackets and a name that folds to nothing are drawn, the kind and the name as entities and a placeholder, with no fault', async () => {
   const map = {
     kinds: { 'runs (on) [x]': 'with brackets' },
-    nodes: [{ name: 'constructor', group: 'constructor', visibility: 'public', role: 'r' }, { name: '日本', group: 'toString', visibility: 'private', role: 'folds to nothing' }],
-    edges: [{ from: 'constructor', to: '日本', kind: 'runs (on) [x]', what: 'w', by: 'e' }],
+    nodes: [{ name: 'constructor', group: 'constructor', visibility: 'public', role: 'r' }, { name: '\u65e5\u672c', group: 'toString', visibility: 'private', role: 'folds to nothing' }],
+    edges: [{ from: 'constructor', to: '\u65e5\u672c', kind: 'runs (on) [x]', what: 'w', by: 'e' }],
   };
   const { page, context, errors } = await open(routesOf(fixture(), { map }), { extraRoutes: [stubRoute] });
   await signIn(page);
