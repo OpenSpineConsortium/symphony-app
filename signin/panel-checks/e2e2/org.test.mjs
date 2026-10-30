@@ -36,13 +36,19 @@ const ONLY = (process.env.ONLY || '').split(',').filter(Boolean);
 async function check(name, fn) {
   if (ONLY.length && !ONLY.some((o) => name.startsWith(o + ':'))) return;
   try { await fn(); results.push('PASS ' + name); console.log('PASS', name); }
-  catch (e) { results.push('FAIL ' + name + ' :: ' + String(e && e.message || e).split('\n')[0]); console.log('FAIL', name, '\n    ', String(e && e.message || e).split('\n').slice(0, 4).join('\n     ')); }
+  catch (e) { results.push('FAIL ' + name + ' :: ' + String(e && e.message || e).split('\n')[0]); console.log('FAIL', name, '\n    ', String(e && e.message || e).split('\n').slice(0, 40).join('\n     ')); }
 }
 
 // the shipped script with its two sign-in constants emptied, so the page shows the pasted token
 let script = fs.readFileSync(SITE + '/assets/js/symphony-panel.js', 'utf8');
 if (process.env.MUTANT) for (const [a, b] of JSON.parse(fs.readFileSync(process.env.MUTANT, 'utf8'))) { assert.ok(script.includes(a), 'mutant text not found: ' + a.slice(0, 60)); script = script.replace(a, () => b); }
 script = script.replace(/var SIGNIN_SERVICE = '[^']*';/, "var SIGNIN_SERVICE = '';").replace(/var CLIENT_ID = '[^']*';/, "var CLIENT_ID = '';");
+// the assistant's cadence shortened to milliseconds, for the Predict checks
+for (const [name, value] of Object.entries({ ASSISTANT_POLL_MS: 300, ASSISTANT_SLOW_MS: 300, ASSISTANT_AFTER_MS: 1200 })) {
+  const line = new RegExp('var ' + name + ' = [0-9]+;');
+  assert.ok(line.test(script), 'the constant ' + name + ' was not found in the script');
+  script = script.replace(line, 'var ' + name + ' = ' + value + ';');
+}
 
 const resp = (status, body, extra) => Object.assign({ __r: true, status, body }, extra || {});
 const VENDOR = '**/assets/js/vendor/mermaid.min.js*';
@@ -161,7 +167,7 @@ async function open(routes, opts) {
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   await page.goto(BASE + '/symphony/control/', { waitUntil: 'load' });
-  await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
+  await page.evaluate((st) => { localStorage.clear(); sessionStorage.clear(); for (const k in st) localStorage.setItem(k, st[k]); }, opts.storage || {});
   await page.goto(BASE + (opts.path || '/symphony/control/?repo=acme/demo'), { waitUntil: 'load' });
   return { context, page, calls, errors };
 }
@@ -551,6 +557,107 @@ await check('M: a person\'s own repositories are listed under the viewer, which 
   }
   assert.deepEqual(await run('tester'), ['/user/repos?affiliation=owner&per_page=100&sort=pushed']);
   assert.deepEqual(await run('other'), ['/users/other/repos?type=owner&per_page=100&sort=pushed']);
+});
+
+// the assistant of acme/demo: the issue #50 the page remembers, the person's write access, the
+// assistant file and the Claude token, and the answer Claude gives once a question is posted
+const FINISHED = '**Claude finished @tester\'s task in 1m 2s** \u2014\u2014 [View job](https://github.com/acme/demo/actions/runs/9)\n\n---\n\n';
+const PREDICTION = [
+  'node Freeze the frames under acme/demo#20 blocks acme/demo#22 why The overlay needs frozen frames',
+  'link acme/lib#5 blocks acme/demo#22 why The section renders through the library',
+  'node Lost task under acme/nowhere#3 why its epic was never read',
+  'link acme/lib#9 blocks acme/lib#32 why GitHub holds this one already',
+  'node Split the modules under acme/lib#30 why a task of this title is there already',
+];
+function withAssistant(routes) {
+  const asked = [];
+  routes['GET /repos/acme/demo/collaborators/tester/permission'] = { permission: 'write', role_name: 'write', user: { login: 'tester' } };
+  routes['GET /repos/acme/demo/contents/.github/symphony/assistant.md'] = { encoding: 'base64', content: b64('# The assistant\n') };
+  routes['GET /repos/acme/demo/actions/secrets'] = { total_count: 1, secrets: [{ name: 'CLAUDE_CODE_OAUTH_TOKEN', created_at: now, updated_at: now }] };
+  routes['GET /repos/acme/demo/issues/50'] = issueOf('acme/demo', 50, 'Assistant: tester', ['assistant']);
+  routes['GET /repos/acme/demo/labels/assistant'] = { name: 'assistant' };
+  routes['POST /repos/acme/demo/issues/50/comments'] = (url, req, call) => { const body = req.postDataJSON().body; asked.push(body); return { id: 1001, created_at: '2026-10-30T10:00:00Z', updated_at: '2026-10-30T10:00:00Z', user: { login: 'tester', type: 'User' }, body }; };
+  routes['GET /repos/acme/demo/issues/50/comments'] = () => asked.length
+    ? [{ id: 1001, created_at: '2026-10-30T10:00:00Z', updated_at: '2026-10-30T10:00:00Z', user: { login: 'tester', type: 'User' }, body: asked[0] },
+      { id: 2001, created_at: '2026-10-30T10:01:00Z', updated_at: '2026-10-30T10:02:00Z', user: { login: 'claude[bot]', type: 'Bot' }, body: FINISHED + 'Two predictions.\n\n```symphony\n' + PREDICTION.join('\n') + '\n```\n' }]
+    : [];
+  return asked;
+}
+const STORAGE = { symphony_panel_assistant: '{"acme/demo":50}' };
+const ideaLines = (chart) => chart.split('\n').filter((l) => /idea|-\.->|Proposed/.test(l));
+async function predicted(page) {
+  await page.click('#og-predict');
+  await page.waitForFunction(() => /Predicted by Claude \(2\)/.test((document.getElementById('og-ideas') || { textContent: '' }).textContent), null, { timeout: 15000 });
+  if (await page.$eval('#dlg-claude', (d) => d.open)) { await page.click('#dlg-claude .cpdlg__close'); await page.waitForFunction(() => !document.getElementById('dlg-claude').open); }
+  return lastChart(page);
+}
+
+await check('N: Predict with Claude sends the chart as words to the repository\'s assistant with one press and draws its answer as ghosts: a proposed task dashed in its epic\'s box and a proposed dependency a dashed arrow, listed with their reasons; a line under an epic never read, a link GitHub holds and a task already there are not drawn; Dismiss takes one off', async () => {
+  const routes = routesOf(fixture()), asked = withAssistant(routes);
+  const { page, context, calls, errors } = await open(routes, { extraRoutes: [stubRoute], storage: STORAGE });
+  await signIn(page);
+  await until(page, DONE);
+  await drawn(page, 1);
+  assert.equal(await page.$('#og-ideas h3'), null);
+  const chart = await predicted(page);
+  assert.equal(asked.length, 1);
+  const q = asked[0];
+  assert.ok(q.startsWith('@claude Predict what is missing from the task graph of the organization acme:'), q.slice(0, 120));
+  for (const line of ['acme/demo#1 Ship the console [goal]', 'acme/demo#20 Draw the board [epic]', 'acme/demo#22 Render the section [task, todo, unclaimed]', 'acme/demo#21 Read the summary [task, closed]', 'acme/demo#20 has the sub-issue acme/lib#5', 'acme/lib#9 blocks acme/lib#32', '"link owner/name#A blocks owner/name#B why ..."', '"node TITLE under owner/name#E blocks owner/name#X after owner/name#Y why ..."']) assert.ok(q.includes(line), 'the question lacks: ' + line);
+  assert.ok(/```symphony-state\n/.test(q), 'the page\'s state block');
+  assert.deepEqual(ideaLines(chart), ['      i11["Proposed: Freeze the frames"]:::idea', '  i10 -.-> i4', '  i11 -.-> i4', '  i5 -.-> i4', '  classDef idea fill:#ffffff,stroke:#2aa198,color:#000000,stroke-dasharray:6 4'], JSON.stringify(ideaLines(chart)));
+  assert.ok(chart.includes('\n    subgraph e2["Epic #20: Draw the board (1/3)"]\n      i3["#21 Read the summary"]:::closed\n      i4["#22 Render the section"]:::todo\n      i11["Proposed: Freeze the frames"]:::idea\n    end\n'), chart);
+  assert.deepEqual(await rows(page, '#og-ideas'), [
+    ['task', 'New task "Freeze the frames" under acme/demo#20, blocking acme/demo#22', 'The overlay needs frozen frames', 'Launch Dismiss'],
+    ['dependency', 'New dependency: acme/lib#5 blocks acme/demo#22', 'The section renders through the library', 'Launch Dismiss'],
+  ]);
+  assert.equal(await page.$('#og-worker'), null);
+  assert.equal(await page.$eval('#og-ideas p.admin__lead', (p) => p.textContent.trim()), 'Launch all 2 Dismiss all');
+  assert.deepEqual(writes(calls), ['POST /repos/acme/demo/issues/50/comments']);
+  const after = await nextChart(page, () => page.click('#og-ideas tbody tr:nth-child(2) button:text-is("Dismiss")'));
+  assert.deepEqual(ideaLines(after), ['      i11["Proposed: Freeze the frames"]:::idea', '  i10 -.-> i4', '  i11 -.-> i4', '  classDef idea fill:#ffffff,stroke:#2aa198,color:#000000,stroke-dasharray:6 4'], JSON.stringify(ideaLines(after)));
+  assert.equal(await heading(page, '#og-ideas'), 'Predicted by Claude (1)');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('O: Launch writes the predictions to GitHub as the person, in order: the task as an issue titled Task: and labelled todo in its epic\'s repository, under the epic by a sub-issue link, then the blocked-by links by issue id, the ghost then drawn as the real node; Undo closes it and takes the links off, and the tab reads again', async () => {
+  const routes = routesOf(fixture()); withAssistant(routes);
+  const made = [];
+  routes['POST /repos/acme/demo/issues'] = (url, req) => { const b = req.postDataJSON(); made.push(b); return { number: 101, id: 9101, title: b.title, state: 'open', html_url: 'https://github.com/acme/demo/issues/101', labels: b.labels.map((name) => ({ name })) }; };
+  routes['POST /repos/acme/demo/issues/20/sub_issues'] = {};
+  const linked = [];
+  routes['POST /repos/acme/demo/issues/22/dependencies/blocked_by'] = (url, req) => { linked.push(req.postDataJSON().issue_id); return {}; };
+  routes['GET /repos/acme/lib/issues/5'] = Object.assign(issueOf('acme/lib', 5, 'Cut the library', ['todo']), { id: 905 });
+  routes['PATCH /repos/acme/demo/issues/101'] = {};
+  routes['DELETE /repos/acme/demo/issues/20/sub_issue'] = resp(204);
+  routes['DELETE /repos/acme/demo/issues/22/dependencies/blocked_by/9101'] = resp(204);
+  routes['DELETE /repos/acme/demo/issues/22/dependencies/blocked_by/905'] = resp(204);
+  const { page, context, calls, errors } = await open(routes, { extraRoutes: [stubRoute], storage: STORAGE });
+  await signIn(page);
+  await until(page, DONE);
+  await drawn(page, 1);
+  await predicted(page);
+  const before = calls.length;
+  const chart = await nextChart(page, () => page.click('#og-ideas button:text-is("Launch all 2")'));
+  await until(page, 'Launched 3 changes on GitHub as tester: each task is labelled todo, which wakes the repository\'s workers in Actions to claim it under the protocol.');
+  assert.deepEqual(calls.slice(before).filter((c) => !/comments/.test(c.key)).map((c) => c.key), ['POST /repos/acme/demo/issues', 'POST /repos/acme/demo/issues/20/sub_issues', 'GET /repos/acme/lib/issues/5', 'POST /repos/acme/demo/issues/22/dependencies/blocked_by', 'POST /repos/acme/demo/issues/22/dependencies/blocked_by']);
+  assert.deepEqual(made, [{ title: 'Task: Freeze the frames', body: '### Goal\n\nThe overlay needs frozen frames\n\n### Planned\n\nOn the control panel\'s Organization tab, from a prediction of Claude\'s the person launched, under acme/demo#20.\n', labels: ['todo'] }]);
+  assert.deepEqual(linked, [905, 9101]);
+  const now = await lastChart(page);
+  // the new issue takes its place among the real nodes, by repository and number, so the numbers
+  // after it move up by one: secret#7's dotted arrow is now i11's
+  assert.deepEqual(ideaLines(now), ['  i11 -.-> i4'], JSON.stringify(ideaLines(now)));
+  assert.ok(now.includes('\n    subgraph e2["Epic #20: Draw the board (1/4)"]\n      i3["#21 Read the summary"]:::closed\n      i4["#22 Render the section"]:::todo\n      i5["#101 Task: Freeze the frames"]:::todo\n    end\n'), now);
+  assert.ok(now.includes('\n  i5 --> i4\n') && now.includes('\n  i6 --> i4\n'), now);
+  assert.equal(await heading(page, '#og-ideas'), 'Predicted by Claude (0)');
+  assert.equal(await page.$eval('#og-ideas', (b) => /Undo the last launch/.test(b.textContent)), true);
+  const mark2 = calls.length;
+  await page.click('#og-ideas button:text-is("Undo the last launch")');
+  try { await until(page, 'Read 3 repositories of the 4 listed for acme as you in 8 reads of GitHub'); } catch (e) { throw new Error(e.message + ' errors: ' + JSON.stringify(errors)); }
+  assert.deepEqual(calls.slice(mark2).filter((c) => !/^GET /.test(c.key)).map((c) => c.key), ['DELETE /repos/acme/demo/issues/22/dependencies/blocked_by/9101', 'DELETE /repos/acme/demo/issues/22/dependencies/blocked_by/905', 'DELETE /repos/acme/demo/issues/20/sub_issue', 'PATCH /repos/acme/demo/issues/101']);
+  assert.deepEqual(errors, []);
+  await context.close();
 });
 
 await browser.close();
